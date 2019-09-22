@@ -51,9 +51,141 @@ impl IndexMut<isize> for V {
     }
 }
 
+#[derive(Debug)]
+struct Snake {
+    x_start: usize,
+    y_start: usize,
+    x_end: usize,
+    y_end: usize,
+}
+
+impl ::std::fmt::Display for Snake {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        write!(
+            f,
+            "({}, {}) -> ({}, {})",
+            self.x_start, self.y_start, self.x_end, self.y_end
+        )
+    }
+}
+
 struct Myers;
 
 impl Myers {
+    // The divide part of a divide-and-conquer strategy. A D-path has D+1 snakes some of which may
+    // be empty. The divide step requires finding the ceil(D/2) + 1 or middle snake of an optimal
+    // D-path. The idea for doing so is to simultaneously run the basic algorithm in both the
+    // forward and reverse directions until furthest reaching forward and reverse paths starting at
+    // opposing corners 'overlap'.
+    fn find_middle_snake(old: &[u8], new: &[u8]) -> (isize, Snake) {
+        // In the original paper `n = old.len()` and `m = new.len()`
+
+        // Sum of the length of the sequences being compared
+        let max = old.len() + new.len();
+
+        // By Lemma 1 in the paper, the optimal edit script length is odd or even as `delta` is odd
+        // or even.
+        let delta = old.len() as isize - new.len() as isize;
+        let odd = delta & 1 == 1;
+
+        // The array that holds the 'best possible x values' in search from top left to bottom right.
+        let mut vf = V::new(max);
+        // The array that holds the 'best possible x values' in search from bottom right to top left.
+        let mut vb = V::new(max);
+        // The initial point at (0, -1)
+        vf[1] = 0;
+        // The initial point at (N, M+1)
+        vb[1] = 0;
+
+        let d_max = ((max + 1) / 2 + 1) as isize;
+        // We only need to explore ceil(D/2) + 1
+        for d in 0..d_max {
+            // Forward path
+            println!("forward");
+            for k in (-d..=d).step_by(2) {
+                println!("d: {} k: {}", d, k);
+                let mut x = if k == -d || (k != d && vf[k - 1] < vf[k + 1]) {
+                    vf[k + 1]
+                } else {
+                    vf[k - 1] + 1
+                };
+                let mut y = (x as isize - k) as usize;
+
+                // The coordinate of the start of a snake
+                let (x0, y0) = (x, y);
+                //  While these sequences are identical, keep moving through the graph with no cost
+                while x < old.len() && y < new.len() && old[x] == new[y] {
+                    x += 1;
+                    y += 1;
+                }
+
+                // This is the new best x value
+                vf[k] = x;
+                // Only check for connections from the forward search when N - M is odd
+                // and when there is a reciprocal k line coming from the other direction.
+                if odd && (k - delta).abs() <= (d - 1) {
+                    // TODO optimize this so we don't have to compare against old.len()
+                    if vf[k] + vb[-(k - delta)] >= old.len() {
+                        // Return the snake
+                        let snake = Snake {
+                            x_start: x0,
+                            y_start: y0,
+                            x_end: x,
+                            y_end: y,
+                        };
+                        println!("edit distance: {} {}", 2 * d - 1, snake);
+                        return (2 * d - 1, snake);
+                    }
+                }
+            }
+
+            // Backward path
+            println!("backward");
+            for k in (-d..=d).step_by(2) {
+                println!("d: {} k: {}", d, k);
+                let mut x = if k == -d || (k != d && vb[k - 1] < vb[k + 1]) {
+                    vb[k + 1]
+                } else {
+                    vb[k - 1] + 1
+                };
+                let mut y = (x as isize - k) as usize;
+
+                // The coordinate of the start of a snake
+                let (x0, y0) = (x, y);
+                //  While these sequences are identical, keep moving through the graph with no cost
+                while x < old.len()
+                    && y < new.len()
+                    && old[old.len() - x - 1] == new[new.len() - y - 1]
+                {
+                    x += 1;
+                    y += 1;
+                }
+
+                // This is the new best x value
+                vb[k] = x;
+
+                if !odd && (k - delta).abs() <= d {
+                    // TODO optimize this so we don't have to compare against old.len()
+                    if vb[k] + vf[-(k - delta)] >= old.len() {
+                        // Return the snake
+                        let snake = Snake {
+                            x_start: old.len() - x,
+                            y_start: new.len() - y,
+                            x_end: old.len() - x0,
+                            y_end: new.len() - y0,
+                        };
+                        println!("edit distance: {} {}", 2 * d, snake);
+                        return (2 * d, snake);
+                    }
+                }
+            }
+
+            // TODO: Maybe there's an opportunity to optimize and bail early?
+        }
+
+        unreachable!("unable to find a middle snake");
+    }
+
     fn diff(a: &Vec<Line>, b: &Vec<Line>) -> Vec<V> {
         let n = a.len();
         let m = b.len();
@@ -175,4 +307,17 @@ enum Edit<'b, 'a: 'b> {
     Insertion(&'b Line<'a>),
     Deletion(&'b Line<'a>),
     Equal(&'b Line<'a>, &'b Line<'a>),
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::diff::lines;
+    use crate::diff::Myers;
+
+    #[test]
+    fn diff_test1() {
+        let a = b"ABCABBA";
+        let b = b"CBABAC";
+        Myers::find_middle_snake(&a[..], &b[..]);
+    }
 }
