@@ -21,26 +21,55 @@ fn lines(a: &[u8]) -> Vec<Line> {
         .collect()
 }
 
+use std::ops::{Index, IndexMut};
+
+#[derive(Debug, Clone)]
+struct V {
+    max: isize,
+    v: Vec<usize>,
+}
+
+impl V {
+    fn new(max: usize) -> Self {
+        Self {
+            max: max as isize,
+            v: vec![0; 2 * max + 1],
+        }
+    }
+}
+impl Index<isize> for V {
+    type Output = usize;
+
+    fn index(&self, index: isize) -> &Self::Output {
+        &self.v[(index + self.max) as usize]
+    }
+}
+
+impl IndexMut<isize> for V {
+    fn index_mut(&mut self, index: isize) -> &mut Self::Output {
+        &mut self.v[(index + self.max) as usize]
+    }
+}
+
 struct Myers;
 
 impl Myers {
-    fn diff(a: &Vec<Line>, b: &Vec<Line>) -> Vec<Vec<usize>> {
+    fn diff(a: &Vec<Line>, b: &Vec<Line>) -> Vec<V> {
         let n = a.len();
         let m = b.len();
-        let max = (n + m) as isize;
-        let mut v = vec![0; 2 * (n + m) + 1];
+        let max = n + m;
+        let mut v = V::new(max);
         let mut trace = Vec::new();
 
-        for d in 0..max {
+        for d in 0..max as isize {
             trace.push(v.clone());
 
             let mut k = -d;
             while k <= d {
-                let kmapped = (k + max) as usize;
-                let mut x = if k == -d || (k != d && v[kmapped - 1] < v[kmapped + 1]) {
-                    v[kmapped + 1]
+                let mut x = if k == -d || (k != d && v[k - 1] < v[k + 1]) {
+                    v[k + 1]
                 } else {
-                    v[kmapped - 1] + 1
+                    v[k - 1] + 1
                 };
                 let mut y = (x as isize - k) as usize;
                 //println!("x: {} y: {} k: {} kmapped: {} d: {}", x, y, k, kmapped, d);
@@ -50,7 +79,7 @@ impl Myers {
                     y += 1;
                 }
 
-                v[kmapped] = x;
+                v[k] = x;
 
                 if x >= n && y >= m {
                     return trace;
@@ -63,27 +92,21 @@ impl Myers {
         trace
     }
 
-    fn backtrace(
-        trace: Vec<Vec<usize>>,
-        a: &Vec<Line>,
-        b: &Vec<Line>,
-    ) -> Vec<(usize, usize, usize, usize)> {
+    fn backtrace(trace: Vec<V>, a: &Vec<Line>, b: &Vec<Line>) -> Vec<(usize, usize, usize, usize)> {
         let mut x = a.len();
         let mut y = b.len();
-        let max = (x + y) as isize;
         let mut path = Vec::new();
 
         for (d, v) in trace.iter().enumerate().rev() {
             let d = d as isize;
             let k = x as isize - y as isize;
-            let kmapped = (k + max) as usize;
 
-            let prev_k = if k == -d || (k != d && v[kmapped - 1] < v[kmapped + 1]) {
+            let prev_k = if k == -d || (k != d && v[k - 1] < v[k + 1]) {
                 k + 1
             } else {
                 k - 1
             };
-            let prev_x = v[(prev_k + max) as usize];
+            let prev_x = v[prev_k];
             let prev_y = (prev_x as isize - prev_k) as usize;
 
             while x > prev_x && y > prev_y {
