@@ -85,6 +85,18 @@ impl ::std::fmt::Display for Snake {
     }
 }
 
+#[derive(Debug)]
+struct Record<'a> {
+    inner: &'a u8,
+    changed: bool,
+}
+
+impl PartialEq for Record<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
 struct Myers;
 
 impl Myers {
@@ -93,7 +105,7 @@ impl Myers {
     // D-path. The idea for doing so is to simultaneously run the basic algorithm in both the
     // forward and reverse directions until furthest reaching forward and reverse paths starting at
     // opposing corners 'overlap'.
-    fn find_middle_snake(old: &[u8], new: &[u8]) -> (isize, Snake) {
+    fn find_middle_snake<T: PartialEq>(old: &[T], new: &[T]) -> (isize, Snake) {
         // In the original paper `n = old.len()` and `m = new.len()`
 
         // Sum of the length of the sequences being compared
@@ -196,6 +208,105 @@ impl Myers {
         }
 
         unreachable!("unable to find a middle snake");
+    }
+
+    fn conquer(mut old: &mut [Record], mut new: &mut [Record]) {
+        let mut start_old = 0;
+        let mut start_new = 0;
+        let mut end_old = old.len();
+        let mut end_new = new.len();
+
+        while start_old < end_old
+            && start_new < end_new
+            && old[start_old].inner == new[start_new].inner
+        {
+            start_old += 1;
+            start_new += 1;
+        }
+        while start_old < end_old
+            && start_new < end_new
+            && old[end_old - 1].inner == new[end_new - 1].inner
+        {
+            end_old -= 1;
+            end_new -= 1;
+        }
+
+        old = &mut old[start_old..end_old];
+        new = &mut new[start_new..end_new];
+
+        if old.is_empty() {
+            for mut record in new {
+                record.changed = true;
+            }
+        } else if new.is_empty() {
+            for mut record in old {
+                record.changed = true;
+            }
+        } else {
+            // Divide & Conquer
+            let (shortest_edit_script_len, snake) = Self::find_middle_snake(&old, &new);
+
+            let (old_a, old_b) = dbg!(old.split_at_mut(snake.x_start));
+            let (new_a, new_b) = dbg!(new.split_at_mut(snake.y_start));
+
+            Self::conquer(old_a, new_a);
+            Self::conquer(old_b, new_b);
+        }
+    }
+
+    fn do_diff<'a, 'b>(old: &'a [u8], new: &'b [u8]) -> (Vec<Record<'a>>, Vec<Record<'b>>) {
+        let mut old: Vec<Record> = old
+            .into_iter()
+            .map(|a| Record {
+                inner: a,
+                changed: false,
+            })
+            .collect();
+        let mut new: Vec<Record> = new
+            .into_iter()
+            .map(|a| Record {
+                inner: a,
+                changed: false,
+            })
+            .collect();
+
+        Self::conquer(&mut old, &mut new);
+
+        Self::gen_diff1(&old, &new);
+        (old, new)
+    }
+
+    fn gen_diff1(old: &[Record<'_>], new: &[Record<'_>]) {
+        let mut num1 = 0;
+        let mut num2 = 0;
+
+        while num1 < old.len() || num2 < new.len() {
+            //
+            if num1 < old.len() && old[num1].changed {
+                println!(
+                    "\x1b[0;31m- {: <4}      {}\x1b[0m",
+                    num1 + 1,
+                    *old[num1].inner as char,
+                );
+                num1 += 1;
+            } else if num2 < new.len() && new[num2].changed {
+                println!(
+                    "\x1b[0;32m+      {: <4} {}\x1b[0m",
+                    num2 + 1,
+                    *new[num2].inner as char,
+                );
+                num2 += 1;
+            } else {
+                println!(
+                    "  {: <4} {: <4} {}",
+                    num1 + 1,
+                    num2 + 1,
+                    *old[num1].inner as char
+                );
+                num1 += 1;
+                num2 += 1;
+            }
+        }
     }
 
     fn diff(a: &Vec<Line>, b: &Vec<Line>) -> Vec<V> {
@@ -331,5 +442,15 @@ mod tests {
         let a = b"ABCABBA";
         let b = b"CBABAC";
         Myers::find_middle_snake(&a[..], &b[..]);
+    }
+
+    #[test]
+    fn diff_test2() {
+        let a = "ABCABBA";
+        let b = "CBABAC";
+        let (a, b) = Myers::do_diff(a.as_bytes(), b.as_bytes());
+
+        println!("{:?}", a);
+        println!("{:?}", b);
     }
 }
