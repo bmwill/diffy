@@ -102,7 +102,7 @@ impl Myers {
         for d in 0..d_max {
             // Forward path
             println!("forward");
-            for k in (-d..=d).step_by(2) {
+            for k in (-d..=d).rev().step_by(2) {
                 println!("d: {} k: {}", d, k);
                 let mut x = if k == -d || (k != d && vf[k - 1] < vf[k + 1]) {
                     vf[k + 1]
@@ -141,7 +141,7 @@ impl Myers {
 
             // Backward path
             println!("backward");
-            for k in (-d..=d).step_by(2) {
+            for k in (-d..=d).rev().step_by(2) {
                 println!("d: {} k: {}", d, k);
                 let mut x = if k == -d || (k != d && vb[k - 1] < vb[k + 1]) {
                     vb[k + 1]
