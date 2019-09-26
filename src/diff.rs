@@ -23,35 +23,51 @@ fn lines(a: &[u8]) -> Vec<Line> {
 
 use std::ops::{Index, IndexMut};
 
+// A D-path is a path which starts at (0,0) that has exactly D non-diagonal edges. All D-paths
+// consist of a (D - 1)-path followed by a non-diagonal edge and then a possibly empty sequence of
+// diagonal edges called a snake.
+
 #[derive(Debug, Clone)]
+/// `V` contains the endpoints of the furthest reaching `D-paths`. For each recorded endpoint
+/// `(x,y)` in diagonal `k`, we only need to retain `x` because `y` can be computed from `x - k`.
+/// In other words, `V` is an array of integers where `V[k]` contains the row index of the endpoint
+/// of the furthest reaching path in diagonal `k`.
+///
+/// We can't use a traditional Vec to represent `V` since we use `k` as an index and it can take on
+/// negative values. So instead `V` is represented as a light-weight wrapper around a Vec plus an
+/// `offset` which is the maximum value `k` can take on in order to map negative `k`'s back to a
+/// value >= 0.
 struct V {
-    max: isize,
+    offset: isize,
     v: Vec<usize>,
 }
 
 impl V {
     fn new(max: usize) -> Self {
         Self {
-            max: max as isize,
+            offset: max as isize,
             v: vec![0; 2 * max + 1],
         }
     }
 }
+
 impl Index<isize> for V {
     type Output = usize;
 
     fn index(&self, index: isize) -> &Self::Output {
-        &self.v[(index + self.max) as usize]
+        &self.v[(index + self.offset) as usize]
     }
 }
 
 impl IndexMut<isize> for V {
     fn index_mut(&mut self, index: isize) -> &mut Self::Output {
-        &mut self.v[(index + self.max) as usize]
+        &mut self.v[(index + self.offset) as usize]
     }
 }
 
 #[derive(Debug)]
+/// A `Snake` is a sequence of diagonal edges in the edit graph. It is possible for a snake to have
+/// a length of zero, meaning the start and end points are the same.
 struct Snake {
     x_start: usize,
     y_start: usize,
@@ -97,13 +113,11 @@ impl Myers {
         // The initial point at (N, M+1)
         vb[1] = 0;
 
-        let d_max = ((max + 1) / 2 + 1) as isize;
         // We only need to explore ceil(D/2) + 1
+        let d_max = ((max + 1) / 2 + 1) as isize;
         for d in 0..d_max {
             // Forward path
-            println!("forward");
             for k in (-d..=d).rev().step_by(2) {
-                println!("d: {} k: {}", d, k);
                 let mut x = if k == -d || (k != d && vf[k - 1] < vf[k + 1]) {
                     vf[k + 1]
                 } else {
@@ -140,9 +154,7 @@ impl Myers {
             }
 
             // Backward path
-            println!("backward");
             for k in (-d..=d).rev().step_by(2) {
-                println!("d: {} k: {}", d, k);
                 let mut x = if k == -d || (k != d && vb[k - 1] < vb[k + 1]) {
                     vb[k + 1]
                 } else {
