@@ -43,11 +43,15 @@ struct V {
 }
 
 impl V {
-    fn new(max: usize) -> Self {
+    fn new(size: usize, offset: usize) -> Self {
         Self {
-            offset: max as isize,
-            v: vec![0; 2 * max + 1],
+            offset: offset as isize,
+            v: vec![0; size],
         }
+    }
+
+    fn len(&self) -> usize {
+        self.v.len()
     }
 }
 
@@ -105,7 +109,12 @@ impl Myers {
     // D-path. The idea for doing so is to simultaneously run the basic algorithm in both the
     // forward and reverse directions until furthest reaching forward and reverse paths starting at
     // opposing corners 'overlap'.
-    fn find_middle_snake<T: PartialEq>(old: &[T], new: &[T]) -> (isize, Snake) {
+    fn find_middle_snake<T: PartialEq>(
+        old: &[T],
+        new: &[T],
+        vf: &mut V,
+        vb: &mut V,
+    ) -> (isize, Snake) {
         // In the original paper `n = old.len()` and `m = new.len()`
 
         // Sum of the length of the sequences being compared
@@ -116,10 +125,9 @@ impl Myers {
         let delta = old.len() as isize - new.len() as isize;
         let odd = delta & 1 == 1;
 
-        // The array that holds the 'best possible x values' in search from top left to bottom right.
-        let mut vf = V::new(max);
-        // The array that holds the 'best possible x values' in search from bottom right to top left.
-        let mut vb = V::new(max);
+        debug_assert!(vf.len() >= max + 3);
+        debug_assert!(vb.len() >= max + 3);
+
         // The initial point at (0, -1)
         vf[1] = 0;
         // The initial point at (N, M+1)
@@ -210,7 +218,7 @@ impl Myers {
         unreachable!("unable to find a middle snake");
     }
 
-    fn conquer(mut old: &mut [Record], mut new: &mut [Record]) {
+    fn conquer(mut old: &mut [Record], mut new: &mut [Record], vf: &mut V, vb: &mut V) {
         let mut start_old = 0;
         let mut start_new = 0;
         let mut end_old = old.len();
@@ -244,13 +252,13 @@ impl Myers {
             }
         } else {
             // Divide & Conquer
-            let (shortest_edit_script_len, snake) = Self::find_middle_snake(&old, &new);
+            let (shortest_edit_script_len, snake) = Self::find_middle_snake(&old, &new, vf, vb);
 
-            let (old_a, old_b) = dbg!(old.split_at_mut(snake.x_start));
-            let (new_a, new_b) = dbg!(new.split_at_mut(snake.y_start));
+            let (old_a, old_b) = old.split_at_mut(snake.x_start);
+            let (new_a, new_b) = new.split_at_mut(snake.y_start);
 
-            Self::conquer(old_a, new_a);
-            Self::conquer(old_b, new_b);
+            Self::conquer(old_a, new_a, vf, vb);
+            Self::conquer(old_b, new_b, vf, vb);
         }
     }
 
@@ -270,7 +278,13 @@ impl Myers {
             })
             .collect();
 
-        Self::conquer(&mut old, &mut new);
+        let max = old.len() + new.len();
+        // The array that holds the 'best possible x values' in search from top left to bottom right.
+        let mut vf = V::new(max + 3, old.len());
+        // The array that holds the 'best possible x values' in search from bottom right to top left.
+        let mut vb = V::new(max + 3, old.len());
+
+        Self::conquer(&mut old, &mut new, &mut vf, &mut vb);
 
         Self::gen_diff1(&old, &new);
         (old, new)
@@ -313,7 +327,7 @@ impl Myers {
         let n = a.len();
         let m = b.len();
         let max = n + m;
-        let mut v = V::new(max);
+        let mut v = V::new(2 * max + 1, max);
         let mut trace = Vec::new();
 
         for d in 0..max as isize {
@@ -387,7 +401,7 @@ impl Myers {
         let mut diff = Vec::new();
 
         for &(prev_x, prev_y, x, y) in path.iter().rev() {
-            println!("({},{}) -> ({},{})", prev_x, prev_y, x, y);
+            //println!("({},{}) -> ({},{})", prev_x, prev_y, x, y);
 
             if x == prev_x {
                 let b_line = &b[prev_y];
@@ -436,12 +450,18 @@ enum Edit<'b, 'a: 'b> {
 mod tests {
     use crate::diff::lines;
     use crate::diff::Myers;
+    use crate::diff::V;
 
     #[test]
     fn diff_test1() {
         let a = b"ABCABBA";
         let b = b"CBABAC";
-        Myers::find_middle_snake(&a[..], &b[..]);
+        let max = a.len() + b.len();
+        // The array that holds the 'best possible x values' in search from top left to bottom right.
+        let mut vf = V::new(max + 3, a.len());
+        // The array that holds the 'best possible x values' in search from bottom right to top left.
+        let mut vb = V::new(max + 3, a.len());
+        Myers::find_middle_snake(&a[..], &b[..], &mut vf, &mut vb);
     }
 
     #[test]
@@ -450,7 +470,17 @@ mod tests {
         let b = "CBABAC";
         let (a, b) = Myers::do_diff(a.as_bytes(), b.as_bytes());
 
-        println!("{:?}", a);
-        println!("{:?}", b);
+        //println!("{:?}", a);
+        //println!("{:?}", b);
+    }
+
+    #[test]
+    fn diff_test3() {
+        let a = "abgdef";
+        let b = "gh";
+        let (a, b) = Myers::do_diff(a.as_bytes(), b.as_bytes());
+
+        //println!("{:?}", a);
+        //println!("{:?}", b);
     }
 }
