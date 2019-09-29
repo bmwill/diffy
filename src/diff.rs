@@ -262,21 +262,26 @@ impl Myers {
         }
     }
 
-    pub fn diff(old: &[u8], new: &[u8]) {
+    fn do_diff<T: PartialEq>(old: &[T], new: &[T]) -> (Vec<bool>, Vec<bool>) {
         let mut old_changed = vec![false; old.len()];
         let old_recs = Records::new(old, &mut old_changed);
         let mut new_changed = vec![false; new.len()];
         let new_recs = Records::new(new, &mut new_changed);
 
-        let max = old.len() + new.len();
-
         // The arrays that hold the 'best possible x values' in search from:
         // `vf`: top left to bottom right
         // `vb`: bottom right to top left
+        let max = old.len() + new.len();
         let mut vf = V::new(max + 3, old.len());
         let mut vb = V::new(max + 3, old.len());
 
         Self::conquer(old_recs, new_recs, &mut vf, &mut vb);
+
+        (old_changed, new_changed)
+    }
+
+    pub fn diff(old: &[u8], new: &[u8]) {
+        let (mut old_changed, mut new_changed) = Self::do_diff(old, new);
 
         let old_recs = Records::new(old, &mut old_changed);
         let new_recs = Records::new(new, &mut new_changed);
@@ -294,20 +299,7 @@ impl Myers {
             .map(|line| (line, classifier.classify(&line)))
             .unzip();
 
-        let mut old_changed = vec![false; old_ids.len()];
-        let old_recs = Records::new(&old_ids, &mut old_changed);
-        let mut new_changed = vec![false; new_ids.len()];
-        let new_recs = Records::new(&new_ids, &mut new_changed);
-
-        let max = old_recs.len() + new_recs.len();
-
-        // The arrays that hold the 'best possible x values' in search from:
-        // `vf`: top left to bottom right
-        // `vb`: bottom right to top left
-        let mut vf = V::new(max + 3, old_recs.len());
-        let mut vb = V::new(max + 3, old_recs.len());
-
-        Self::conquer(old_recs, new_recs, &mut vf, &mut vb);
+        let (mut old_changed, mut new_changed) = Self::do_diff(&old_ids, &new_ids);
 
         let old_recs = Records::new(&old_lines, &mut old_changed);
         let new_recs = Records::new(&new_lines, &mut new_changed);
