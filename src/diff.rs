@@ -89,15 +89,37 @@ impl ::std::fmt::Display for Snake {
     }
 }
 
-#[derive(Debug)]
-struct Record<'a> {
-    inner: &'a u8,
-    changed: bool,
+struct Records<'a, T> {
+    inner: &'a [T],
+    changed: &'a mut [bool],
 }
 
-impl PartialEq for Record<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner
+impl<'a, T> Records<'a, T> {
+    fn new(inner: &'a [T], changed: &'a mut [bool]) -> Self {
+        debug_assert!(inner.len() == changed.len());
+        Records { inner, changed }
+    }
+
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    fn slice(&mut self, begin: usize, end: usize) -> Records<'_, T> {
+        Records::new(&self.inner[begin..end], &mut self.changed[begin..end])
+    }
+
+    fn split_at_mut(&mut self, mid: usize) -> (Records<'_, T>, Records<'_, T>) {
+        let (left_inner, right_inner) = self.inner.split_at(mid);
+        let (left_changed, right_changed) = self.changed.split_at_mut(mid);
+
+        (
+            Records::new(left_inner, left_changed),
+            Records::new(right_inner, right_changed),
+        )
     }
 }
 
@@ -218,7 +240,7 @@ impl Myers {
         unreachable!("unable to find a middle snake");
     }
 
-    fn conquer(mut old: &mut [Record], mut new: &mut [Record], vf: &mut V, vb: &mut V) {
+    fn conquer<T: PartialEq>(mut old: Records<T>, mut new: Records<T>, vf: &mut V, vb: &mut V) {
         let mut start_old = 0;
         let mut start_new = 0;
         let mut end_old = old.len();
@@ -226,33 +248,34 @@ impl Myers {
 
         while start_old < end_old
             && start_new < end_new
-            && old[start_old].inner == new[start_new].inner
+            && old.inner[start_old] == new.inner[start_new]
         {
             start_old += 1;
             start_new += 1;
         }
         while start_old < end_old
             && start_new < end_new
-            && old[end_old - 1].inner == new[end_new - 1].inner
+            && old.inner[end_old - 1] == new.inner[end_new - 1]
         {
             end_old -= 1;
             end_new -= 1;
         }
 
-        old = &mut old[start_old..end_old];
-        new = &mut new[start_new..end_new];
+        let mut old = old.slice(start_old, end_old);
+        let mut new = new.slice(start_new, end_new);
 
         if old.is_empty() {
-            for mut record in new {
-                record.changed = true;
+            for mut changed in new.changed {
+                *changed = true;
             }
         } else if new.is_empty() {
-            for mut record in old {
-                record.changed = true;
+            for mut changed in old.changed {
+                *changed = true;
             }
         } else {
             // Divide & Conquer
-            let (shortest_edit_script_len, snake) = Self::find_middle_snake(&old, &new, vf, vb);
+            let (shortest_edit_script_len, snake) =
+                Self::find_middle_snake(&old.inner, &new.inner, vf, vb);
 
             let (old_a, old_b) = old.split_at_mut(snake.x_start);
             let (new_a, new_b) = new.split_at_mut(snake.y_start);
@@ -262,21 +285,11 @@ impl Myers {
         }
     }
 
-    fn do_diff<'a, 'b>(old: &'a [u8], new: &'b [u8]) -> (Vec<Record<'a>>, Vec<Record<'b>>) {
-        let mut old: Vec<Record> = old
-            .into_iter()
-            .map(|a| Record {
-                inner: a,
-                changed: false,
-            })
-            .collect();
-        let mut new: Vec<Record> = new
-            .into_iter()
-            .map(|a| Record {
-                inner: a,
-                changed: false,
-            })
-            .collect();
+    fn do_diff(old: &[u8], new: &[u8]) {
+        let mut old_changed = vec![false; old.len()];
+        let old_recs = Records::new(old, &mut old_changed);
+        let mut new_changed = vec![false; new.len()];
+        let new_recs = Records::new(new, &mut new_changed);
 
         let max = old.len() + new.len();
         // The array that holds the 'best possible x values' in search from top left to bottom right.
@@ -284,29 +297,30 @@ impl Myers {
         // The array that holds the 'best possible x values' in search from bottom right to top left.
         let mut vb = V::new(max + 3, old.len());
 
-        Self::conquer(&mut old, &mut new, &mut vf, &mut vb);
+        Self::conquer(old_recs, new_recs, &mut vf, &mut vb);
 
-        Self::gen_diff1(&old, &new);
-        (old, new)
+        let old_recs = Records::new(old, &mut old_changed);
+        let new_recs = Records::new(new, &mut new_changed);
+        Self::gen_diff1(&old_recs, &new_recs);
     }
 
-    fn gen_diff1(old: &[Record<'_>], new: &[Record<'_>]) {
+    fn gen_diff1(old: &Records<u8>, new: &Records<u8>) {
         let mut num1 = 0;
         let mut num2 = 0;
 
         while num1 < old.len() || num2 < new.len() {
-            if num1 < old.len() && old[num1].changed {
+            if num1 < old.len() && old.changed[num1] {
                 println!(
                     "\x1b[0;31m- {: <4}      {}\x1b[0m",
                     num1 + 1,
-                    *old[num1].inner as char,
+                    old.inner[num1] as char,
                 );
                 num1 += 1;
-            } else if num2 < new.len() && new[num2].changed {
+            } else if num2 < new.len() && new.changed[num2] {
                 println!(
                     "\x1b[0;32m+      {: <4} {}\x1b[0m",
                     num2 + 1,
-                    *new[num2].inner as char,
+                    new.inner[num2] as char,
                 );
                 num2 += 1;
             } else {
@@ -314,7 +328,7 @@ impl Myers {
                     "  {: <4} {: <4} {}",
                     num1 + 1,
                     num2 + 1,
-                    *old[num1].inner as char
+                    old.inner[num1] as char
                 );
                 num1 += 1;
                 num2 += 1;
@@ -462,13 +476,13 @@ mod tests {
     fn diff_test2() {
         let a = "ABCABBA";
         let b = "CBABAC";
-        let (a, b) = Myers::do_diff(a.as_bytes(), b.as_bytes());
+        Myers::do_diff(a.as_bytes(), b.as_bytes());
     }
 
     #[test]
     fn diff_test3() {
         let a = "abgdef";
         let b = "gh";
-        let (a, b) = Myers::do_diff(a.as_bytes(), b.as_bytes());
+        Myers::do_diff(a.as_bytes(), b.as_bytes());
     }
 }
