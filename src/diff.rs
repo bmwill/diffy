@@ -167,7 +167,7 @@ impl Myers {
                             x_end: x,
                             y_end: y,
                         };
-                        println!("edit distance: {} {}", 2 * d - 1, snake);
+                        // Edit distance to this snake is `2 * d - 1`
                         return (2 * d - 1, snake);
                     }
                 }
@@ -206,7 +206,7 @@ impl Myers {
                             x_end: old.len() - x0,
                             y_end: new.len() - y0,
                         };
-                        println!("edit distance: {} {}", 2 * d, snake);
+                        // Edit distance to this snake is `2 * d`
                         return (2 * d, snake);
                     }
                 }
@@ -295,7 +295,6 @@ impl Myers {
         let mut num2 = 0;
 
         while num1 < old.len() || num2 < new.len() {
-            //
             if num1 < old.len() && old[num1].changed {
                 println!(
                     "\x1b[0;31m- {: <4}      {}\x1b[0m",
@@ -341,7 +340,6 @@ impl Myers {
                     v[k - 1] + 1
                 };
                 let mut y = (x as isize - k) as usize;
-                //println!("x: {} y: {} k: {} kmapped: {} d: {}", x, y, k, kmapped, d);
 
                 while x < n && y < m && a[x].text == b[y].text {
                     x += 1;
@@ -380,14 +378,12 @@ impl Myers {
 
             while x > prev_x && y > prev_y {
                 path.push((x - 1, y - 1, x, y));
-                //println!("({},{}) -> ({},{})", x - 1, y - 1, x, y);
                 x -= 1;
                 y -= 1;
             }
 
             if d > 0 {
                 path.push((prev_x, prev_y, x, y));
-                //println!("({},{}) -> ({},{})", prev_x, prev_y, x, y);
             }
 
             x = prev_x;
@@ -401,8 +397,6 @@ impl Myers {
         let mut diff = Vec::new();
 
         for &(prev_x, prev_y, x, y) in path.iter().rev() {
-            //println!("({},{}) -> ({},{})", prev_x, prev_y, x, y);
-
             if x == prev_x {
                 let b_line = &b[prev_y];
                 diff.push(Edit::Insertion(b_line));
@@ -469,9 +463,6 @@ mod tests {
         let a = "ABCABBA";
         let b = "CBABAC";
         let (a, b) = Myers::do_diff(a.as_bytes(), b.as_bytes());
-
-        //println!("{:?}", a);
-        //println!("{:?}", b);
     }
 
     #[test]
@@ -479,8 +470,5 @@ mod tests {
         let a = "abgdef";
         let b = "gh";
         let (a, b) = Myers::do_diff(a.as_bytes(), b.as_bytes());
-
-        //println!("{:?}", a);
-        //println!("{:?}", b);
     }
 }
