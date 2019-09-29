@@ -272,8 +272,8 @@ impl Myers {
         // `vf`: top left to bottom right
         // `vb`: bottom right to top left
         let max = old.len() + new.len();
-        let mut vf = V::new(max + 3, old.len());
-        let mut vb = V::new(max + 3, old.len());
+        let mut vf = V::new(max + 3, new.len() + 1);
+        let mut vb = V::new(max + 3, new.len() + 1);
 
         Self::conquer(old_recs, new_recs, &mut vf, &mut vb);
 
