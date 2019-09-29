@@ -1,26 +1,3 @@
-#[derive(Debug)]
-struct Line<'a> {
-    number: usize,
-    text: &'a [u8],
-}
-
-pub fn diff(a: &[u8], b: &[u8]) {
-    let a = lines(a);
-    let b = lines(b);
-
-    Myers::gen_diff(Myers::backtrace(Myers::diff(&a, &b), &a, &b), &a, &b);
-}
-
-fn lines(a: &[u8]) -> Vec<Line> {
-    a.split(|c| *c == b'\n')
-        .enumerate()
-        .map(|(ln, text)| Line {
-            number: ln + 1,
-            text,
-        })
-        .collect()
-}
-
 use std::ops::{Index, IndexMut};
 
 // A D-path is a path which starts at (0,0) that has exactly D non-diagonal edges. All D-paths
@@ -123,7 +100,7 @@ impl<'a, T> Records<'a, T> {
     }
 }
 
-struct Myers;
+pub struct Myers;
 
 impl Myers {
     // The divide part of a divide-and-conquer strategy. A D-path has D+1 snakes some of which may
@@ -265,16 +242,16 @@ impl Myers {
         let mut new = new.slice(start_new, end_new);
 
         if old.is_empty() {
-            for mut changed in new.changed {
+            for changed in new.changed {
                 *changed = true;
             }
         } else if new.is_empty() {
-            for mut changed in old.changed {
+            for changed in old.changed {
                 *changed = true;
             }
         } else {
             // Divide & Conquer
-            let (shortest_edit_script_len, snake) =
+            let (_shortest_edit_script_len, snake) =
                 Self::find_middle_snake(&old.inner, &new.inner, vf, vb);
 
             let (old_a, old_b) = old.split_at_mut(snake.x_start);
@@ -285,26 +262,28 @@ impl Myers {
         }
     }
 
-    fn do_diff(old: &[u8], new: &[u8]) {
+    pub fn diff(old: &[u8], new: &[u8]) {
         let mut old_changed = vec![false; old.len()];
         let old_recs = Records::new(old, &mut old_changed);
         let mut new_changed = vec![false; new.len()];
         let new_recs = Records::new(new, &mut new_changed);
 
         let max = old.len() + new.len();
-        // The array that holds the 'best possible x values' in search from top left to bottom right.
+
+        // The arrays that hold the 'best possible x values' in search from:
+        // `vf`: top left to bottom right
+        // `vb`: bottom right to top left
         let mut vf = V::new(max + 3, old.len());
-        // The array that holds the 'best possible x values' in search from bottom right to top left.
         let mut vb = V::new(max + 3, old.len());
 
         Self::conquer(old_recs, new_recs, &mut vf, &mut vb);
 
         let old_recs = Records::new(old, &mut old_changed);
         let new_recs = Records::new(new, &mut new_changed);
-        Self::gen_diff1(&old_recs, &new_recs);
+        Self::render_diff(&old_recs, &new_recs);
     }
 
-    fn gen_diff1(old: &Records<u8>, new: &Records<u8>) {
+    fn render_diff(old: &Records<u8>, new: &Records<u8>) {
         let mut num1 = 0;
         let mut num2 = 0;
 
@@ -335,139 +314,18 @@ impl Myers {
             }
         }
     }
-
-    fn diff(a: &Vec<Line>, b: &Vec<Line>) -> Vec<V> {
-        let n = a.len();
-        let m = b.len();
-        let max = n + m;
-        let mut v = V::new(2 * max + 1, max);
-        let mut trace = Vec::new();
-
-        for d in 0..max as isize {
-            trace.push(v.clone());
-
-            let mut k = -d;
-            while k <= d {
-                let mut x = if k == -d || (k != d && v[k - 1] < v[k + 1]) {
-                    v[k + 1]
-                } else {
-                    v[k - 1] + 1
-                };
-                let mut y = (x as isize - k) as usize;
-
-                while x < n && y < m && a[x].text == b[y].text {
-                    x += 1;
-                    y += 1;
-                }
-
-                v[k] = x;
-
-                if x >= n && y >= m {
-                    return trace;
-                }
-
-                k += 2;
-            }
-        }
-
-        trace
-    }
-
-    fn backtrace(trace: Vec<V>, a: &Vec<Line>, b: &Vec<Line>) -> Vec<(usize, usize, usize, usize)> {
-        let mut x = a.len();
-        let mut y = b.len();
-        let mut path = Vec::new();
-
-        for (d, v) in trace.iter().enumerate().rev() {
-            let d = d as isize;
-            let k = x as isize - y as isize;
-
-            let prev_k = if k == -d || (k != d && v[k - 1] < v[k + 1]) {
-                k + 1
-            } else {
-                k - 1
-            };
-            let prev_x = v[prev_k];
-            let prev_y = (prev_x as isize - prev_k) as usize;
-
-            while x > prev_x && y > prev_y {
-                path.push((x - 1, y - 1, x, y));
-                x -= 1;
-                y -= 1;
-            }
-
-            if d > 0 {
-                path.push((prev_x, prev_y, x, y));
-            }
-
-            x = prev_x;
-            y = prev_y;
-        }
-
-        path
-    }
-
-    fn gen_diff(path: Vec<(usize, usize, usize, usize)>, a: &Vec<Line>, b: &Vec<Line>) {
-        let mut diff = Vec::new();
-
-        for &(prev_x, prev_y, x, y) in path.iter().rev() {
-            if x == prev_x {
-                let b_line = &b[prev_y];
-                diff.push(Edit::Insertion(b_line));
-            } else if y == prev_y {
-                let a_line = &a[prev_x];
-                diff.push(Edit::Deletion(a_line));
-            } else {
-                let a_line = &a[prev_x];
-                let b_line = &b[prev_y];
-                diff.push(Edit::Equal(a_line, b_line));
-            }
-        }
-
-        // Print Diff
-        for edit in diff {
-            match edit {
-                Edit::Insertion(line) => println!(
-                    "\x1b[0;32m+      {: <4} {}\x1b[0m",
-                    line.number,
-                    String::from_utf8_lossy(line.text)
-                ),
-                Edit::Deletion(line) => println!(
-                    "\x1b[0;31m- {: <4}      {}\x1b[0m",
-                    line.number,
-                    String::from_utf8_lossy(line.text)
-                ),
-                Edit::Equal(a, b) => println!(
-                    "  {: <4} {: <4} {}",
-                    a.number,
-                    b.number,
-                    String::from_utf8_lossy(b.text)
-                ),
-            }
-        }
-    }
-}
-
-enum Edit<'b, 'a: 'b> {
-    Insertion(&'b Line<'a>),
-    Deletion(&'b Line<'a>),
-    Equal(&'b Line<'a>, &'b Line<'a>),
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::diff::lines;
-    use crate::diff::Myers;
-    use crate::diff::V;
+    use crate::diff::{Myers, V};
 
     #[test]
     fn diff_test1() {
         let a = b"ABCABBA";
         let b = b"CBABAC";
         let max = a.len() + b.len();
-        // The array that holds the 'best possible x values' in search from top left to bottom right.
         let mut vf = V::new(max + 3, a.len());
-        // The array that holds the 'best possible x values' in search from bottom right to top left.
         let mut vb = V::new(max + 3, a.len());
         Myers::find_middle_snake(&a[..], &b[..], &mut vf, &mut vb);
     }
@@ -476,13 +334,13 @@ mod tests {
     fn diff_test2() {
         let a = "ABCABBA";
         let b = "CBABAC";
-        Myers::do_diff(a.as_bytes(), b.as_bytes());
+        Myers::diff(a.as_bytes(), b.as_bytes());
     }
 
     #[test]
     fn diff_test3() {
         let a = "abgdef";
         let b = "gh";
-        Myers::do_diff(a.as_bytes(), b.as_bytes());
+        Myers::diff(a.as_bytes(), b.as_bytes());
     }
 }
