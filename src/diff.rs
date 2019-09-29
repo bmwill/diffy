@@ -1,3 +1,5 @@
+use std::collections::{hash_map::Entry, HashMap};
+use std::fmt;
 use std::ops::{Index, IndexMut};
 
 // A D-path is a path which starts at (0,0) that has exactly D non-diagonal edges. All D-paths
@@ -281,7 +283,38 @@ impl Myers {
         Self::render_diff(&old_recs, &new_recs);
     }
 
-    fn render_diff(old: &Records<u8>, new: &Records<u8>) {
+    pub fn diff_str(old: &str, new: &str) {
+        let mut classifier = Classifier::default();
+        let (old_lines, old_ids): (Vec<&str>, Vec<u64>) = old
+            .lines()
+            .map(|line| (line, classifier.classify(&line)))
+            .unzip();
+        let (new_lines, new_ids): (Vec<&str>, Vec<u64>) = new
+            .lines()
+            .map(|line| (line, classifier.classify(&line)))
+            .unzip();
+
+        let mut old_changed = vec![false; old_ids.len()];
+        let old_recs = Records::new(&old_ids, &mut old_changed);
+        let mut new_changed = vec![false; new_ids.len()];
+        let new_recs = Records::new(&new_ids, &mut new_changed);
+
+        let max = old_recs.len() + new_recs.len();
+
+        // The arrays that hold the 'best possible x values' in search from:
+        // `vf`: top left to bottom right
+        // `vb`: bottom right to top left
+        let mut vf = V::new(max + 3, old_recs.len());
+        let mut vb = V::new(max + 3, old_recs.len());
+
+        Self::conquer(old_recs, new_recs, &mut vf, &mut vb);
+
+        let old_recs = Records::new(&old_lines, &mut old_changed);
+        let new_recs = Records::new(&new_lines, &mut new_changed);
+        Self::render_diff(&old_recs, &new_recs);
+    }
+
+    fn render_diff<T: fmt::Display>(old: &Records<T>, new: &Records<T>) {
         let mut num1 = 0;
         let mut num2 = 0;
 
@@ -290,25 +323,39 @@ impl Myers {
                 println!(
                     "\x1b[0;31m- {: <4}      {}\x1b[0m",
                     num1 + 1,
-                    old.inner[num1] as char,
+                    old.inner[num1],
                 );
                 num1 += 1;
             } else if num2 < new.len() && new.changed[num2] {
                 println!(
                     "\x1b[0;32m+      {: <4} {}\x1b[0m",
                     num2 + 1,
-                    new.inner[num2] as char,
+                    new.inner[num2],
                 );
                 num2 += 1;
             } else {
-                println!(
-                    "  {: <4} {: <4} {}",
-                    num1 + 1,
-                    num2 + 1,
-                    old.inner[num1] as char
-                );
+                println!("  {: <4} {: <4} {}", num1 + 1, num2 + 1, old.inner[num1],);
                 num1 += 1;
                 num2 += 1;
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+struct Classifier<'a> {
+    next_id: u64,
+    unique_ids: HashMap<&'a str, u64>,
+}
+
+impl<'a> Classifier<'a> {
+    fn classify(&mut self, record: &'a str) -> u64 {
+        match self.unique_ids.entry(record) {
+            Entry::Occupied(o) => *o.get(),
+            Entry::Vacant(v) => {
+                let id = self.next_id;
+                self.next_id += 1;
+                *v.insert(id)
             }
         }
     }
@@ -340,5 +387,12 @@ mod tests {
         let a = "abgdef";
         let b = "gh";
         Myers::diff(a.as_bytes(), b.as_bytes());
+    }
+
+    #[test]
+    fn diff_str() {
+        let a = "A\nB\nC\nA\nB\nB\nA";
+        let b = "C\nB\nA\nB\nA\nC";
+        Myers::diff_str(a, b);
     }
 }
