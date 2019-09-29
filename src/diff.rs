@@ -114,14 +114,15 @@ impl Myers {
         vf: &mut V,
         vb: &mut V,
     ) -> (isize, Snake) {
-        // In the original paper `n = old.len()` and `m = new.len()`
+        let n = old.len();
+        let m = new.len();
 
         // Sum of the length of the sequences being compared
-        let max = old.len() + new.len();
+        let max = n + m;
 
         // By Lemma 1 in the paper, the optimal edit script length is odd or even as `delta` is odd
         // or even.
-        let delta = old.len() as isize - new.len() as isize;
+        let delta = n as isize - m as isize;
         let odd = delta & 1 == 1;
 
         debug_assert!(vf.len() >= max + 3);
@@ -147,7 +148,7 @@ impl Myers {
                 // The coordinate of the start of a snake
                 let (x0, y0) = (x, y);
                 //  While these sequences are identical, keep moving through the graph with no cost
-                while x < old.len() && y < new.len() && old[x] == new[y] {
+                while x < n && y < m && old[x] == new[y] {
                     x += 1;
                     y += 1;
                 }
@@ -157,8 +158,8 @@ impl Myers {
                 // Only check for connections from the forward search when N - M is odd
                 // and when there is a reciprocal k line coming from the other direction.
                 if odd && (k - delta).abs() <= (d - 1) {
-                    // TODO optimize this so we don't have to compare against old.len()
-                    if vf[k] + vb[-(k - delta)] >= old.len() {
+                    // TODO optimize this so we don't have to compare against n
+                    if vf[k] + vb[-(k - delta)] >= n {
                         // Return the snake
                         let snake = Snake {
                             x_start: x0,
@@ -184,10 +185,7 @@ impl Myers {
                 // The coordinate of the start of a snake
                 let (x0, y0) = (x, y);
                 //  While these sequences are identical, keep moving through the graph with no cost
-                while x < old.len()
-                    && y < new.len()
-                    && old[old.len() - x - 1] == new[new.len() - y - 1]
-                {
+                while x < n && y < m && old[n - x - 1] == new[m - y - 1] {
                     x += 1;
                     y += 1;
                 }
@@ -196,14 +194,14 @@ impl Myers {
                 vb[k] = x;
 
                 if !odd && (k - delta).abs() <= d {
-                    // TODO optimize this so we don't have to compare against old.len()
-                    if vb[k] + vf[-(k - delta)] >= old.len() {
+                    // TODO optimize this so we don't have to compare against n
+                    if vb[k] + vf[-(k - delta)] >= n {
                         // Return the snake
                         let snake = Snake {
-                            x_start: old.len() - x,
-                            y_start: new.len() - y,
-                            x_end: old.len() - x0,
-                            y_end: new.len() - y0,
+                            x_start: n - x,
+                            y_start: m - y,
+                            x_end: n - x0,
+                            y_end: m - y0,
                         };
                         // Edit distance to this snake is `2 * d`
                         return (2 * d, snake);
