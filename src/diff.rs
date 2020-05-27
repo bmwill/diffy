@@ -384,6 +384,20 @@ mod tests {
     }
 
     #[test]
+    fn diff_test4() {
+        let a = "bat";
+        let b = "map";
+        Myers::diff(a.as_bytes(), b.as_bytes());
+    }
+
+    #[test]
+    fn diff_test5() {
+        let a = "abc";
+        let b = "def";
+        Myers::diff(a.as_bytes(), b.as_bytes());
+    }
+
+    #[test]
     fn diff_str() {
         let a = "A\nB\nC\nA\nB\nB\nA";
         let b = "C\nB\nA\nB\nA\nC";
