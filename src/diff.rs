@@ -1,12 +1,13 @@
-use std::collections::{hash_map::Entry, HashMap};
-use std::fmt;
-use std::ops::{Index, IndexMut};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    fmt,
+    ops::{Index, IndexMut},
+};
 
 // A D-path is a path which starts at (0,0) that has exactly D non-diagonal edges. All D-paths
 // consist of a (D - 1)-path followed by a non-diagonal edge and then a possibly empty sequence of
 // diagonal edges called a snake.
 
-#[derive(Debug, Clone)]
 /// `V` contains the endpoints of the furthest reaching `D-paths`. For each recorded endpoint
 /// `(x,y)` in diagonal `k`, we only need to retain `x` because `y` can be computed from `x - k`.
 /// In other words, `V` is an array of integers where `V[k]` contains the row index of the endpoint
@@ -16,6 +17,7 @@ use std::ops::{Index, IndexMut};
 /// negative values. So instead `V` is represented as a light-weight wrapper around a Vec plus an
 /// `offset` which is the maximum value `k` can take on in order to map negative `k`'s back to a
 /// value >= 0.
+#[derive(Debug, Clone)]
 struct V {
     offset: isize,
     v: Vec<usize>,
@@ -48,9 +50,9 @@ impl IndexMut<isize> for V {
     }
 }
 
-#[derive(Debug)]
 /// A `Snake` is a sequence of diagonal edges in the edit graph. It is possible for a snake to have
 /// a length of zero, meaning the start and end points are the same.
+#[derive(Debug)]
 struct Snake {
     x_start: usize,
     y_start: usize,
