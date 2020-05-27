@@ -24,10 +24,10 @@ struct V {
 }
 
 impl V {
-    fn new(size: usize, offset: usize) -> Self {
+    fn new(max_d: usize) -> Self {
         Self {
-            offset: offset as isize,
-            v: vec![0; size],
+            offset: max_d as isize,
+            v: vec![0; 2 * max_d],
         }
     }
 
@@ -107,6 +107,10 @@ impl<'a, T> Records<'a, T> {
 pub struct Myers;
 
 impl Myers {
+    fn max_d(len1: usize, len2: usize) -> usize {
+        (len1 + len2 + 1) / 2 + 1
+    }
+
     // The divide part of a divide-and-conquer strategy. A D-path has D+1 snakes some of which may
     // be empty. The divide step requires finding the ceil(D/2) + 1 or middle snake of an optimal
     // D-path. The idea for doing so is to simultaneously run the basic algorithm in both the
@@ -121,16 +125,10 @@ impl Myers {
         let n = old.len();
         let m = new.len();
 
-        // Sum of the length of the sequences being compared
-        let max = n + m;
-
         // By Lemma 1 in the paper, the optimal edit script length is odd or even as `delta` is odd
         // or even.
         let delta = n as isize - m as isize;
         let odd = delta & 1 == 1;
-
-        debug_assert!(vf.len() >= max + 3);
-        debug_assert!(vb.len() >= max + 3);
 
         // The initial point at (0, -1)
         vf[1] = 0;
@@ -138,7 +136,7 @@ impl Myers {
         vb[1] = 0;
 
         // We only need to explore ceil(D/2) + 1
-        let d_max = ((max + 1) / 2 + 1) as isize;
+        let d_max = Self::max_d(n, m) as isize;
         for d in 0..d_max {
             // Forward path
             for k in (-d..=d).rev().step_by(2) {
@@ -273,9 +271,9 @@ impl Myers {
         // The arrays that hold the 'best possible x values' in search from:
         // `vf`: top left to bottom right
         // `vb`: bottom right to top left
-        let max = old.len() + new.len();
-        let mut vf = V::new(max + 3, new.len() + 1);
-        let mut vb = V::new(max + 3, new.len() + 1);
+        let max_d = Self::max_d(old.len(), new.len());
+        let mut vf = V::new(max_d);
+        let mut vb = V::new(max_d);
 
         Self::conquer(old_recs, new_recs, &mut vf, &mut vb);
 
@@ -409,9 +407,9 @@ mod tests {
     fn diff_test1() {
         let a = b"ABCABBA";
         let b = b"CBABAC";
-        let max = a.len() + b.len();
-        let mut vf = V::new(max + 3, a.len());
-        let mut vb = V::new(max + 3, a.len());
+        let max_d = Myers::max_d(a.len(), b.len());
+        let mut vf = V::new(max_d);
+        let mut vb = V::new(max_d);
         Myers::find_middle_snake(&a[..], &b[..], &mut vf, &mut vb);
     }
 
