@@ -20,7 +20,7 @@ use std::{
 #[derive(Debug, Clone)]
 struct V {
     offset: isize,
-    v: Vec<usize>,
+    v: Vec<usize>, // Look into initializing this to -1 and storing isize
 }
 
 impl V {
@@ -108,6 +108,7 @@ pub struct Myers;
 
 impl Myers {
     fn max_d(len1: usize, len2: usize) -> usize {
+        // XXX look into reducing the need to have the additional '+ 1'
         (len1 + len2 + 1) / 2 + 1
     }
 
