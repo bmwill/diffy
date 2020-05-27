@@ -279,6 +279,9 @@ impl Myers {
 
         Self::conquer(old_recs, new_recs, &mut vf, &mut vb);
 
+        let script = build_edit_script(&old_changed, &new_changed);
+        println!("{:#?}", script);
+
         (old_changed, new_changed)
     }
 
@@ -353,6 +356,49 @@ impl<'a> Classifier<'a> {
             }
         }
     }
+}
+
+#[derive(Debug)]
+struct EditRange {
+    a_start: usize,
+    a_end: usize,
+    b_start: usize,
+    b_end: usize,
+}
+
+fn build_edit_script(changed_a: &[bool], changed_b: &[bool]) -> Vec<EditRange> {
+    let mut idx_a = 0;
+    let mut idx_b = 0;
+
+    let mut edit_scrpt = Vec::new();
+
+    while idx_a < changed_a.len() || idx_b < changed_b.len() {
+        match (changed_a.get(idx_a), changed_b.get(idx_b)) {
+            (Some(true), _) | (_, Some(true)) => {
+                let a_start = idx_a;
+                let b_start = idx_b;
+                while let Some(true) = changed_a.get(idx_a) {
+                    idx_a += 1;
+                }
+                while let Some(true) = changed_b.get(idx_b) {
+                    idx_b += 1;
+                }
+
+                edit_scrpt.push(EditRange {
+                    a_start,
+                    a_end: idx_a,
+                    b_start,
+                    b_end: idx_b,
+                });
+            }
+            _ => {}
+        }
+
+        idx_a += 1;
+        idx_b += 1;
+    }
+
+    edit_scrpt
 }
 
 #[cfg(test)]
