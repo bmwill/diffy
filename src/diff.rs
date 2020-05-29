@@ -1,7 +1,8 @@
+use crate::patch::{Hunk, HunkRange, Line, Patch};
 use std::{
     collections::{hash_map::Entry, HashMap},
     fmt,
-    ops::{Index, IndexMut},
+    ops::{Index, IndexMut, Range},
 };
 
 // A D-path is a path which starts at (0,0) that has exactly D non-diagonal edges. All D-paths
@@ -29,10 +30,6 @@ impl V {
             offset: max_d as isize,
             v: vec![0; 2 * max_d],
         }
-    }
-
-    fn len(&self) -> usize {
-        self.v.len()
     }
 }
 
@@ -278,9 +275,6 @@ impl Myers {
 
         Self::conquer(old_recs, new_recs, &mut vf, &mut vb);
 
-        let script = build_edit_script(&old_changed, &new_changed);
-        println!("{:#?}", script);
-
         (old_changed, new_changed)
     }
 
@@ -292,7 +286,7 @@ impl Myers {
         Self::render_diff(&old_recs, &new_recs);
     }
 
-    pub fn diff_str(old: &str, new: &str) {
+    pub fn diff_str<'a>(old: &'a str, new: &'a str) -> DiffLines<'a> {
         let mut classifier = Classifier::default();
         let (old_lines, old_ids): (Vec<&str>, Vec<u64>) = old
             .lines()
@@ -303,11 +297,10 @@ impl Myers {
             .map(|line| (line, classifier.classify(&line)))
             .unzip();
 
-        let (mut old_changed, mut new_changed) = Self::do_diff(&old_ids, &new_ids);
+        let (old_changed, new_changed) = Self::do_diff(&old_ids, &new_ids);
 
-        let old_recs = Records::new(&old_lines, &mut old_changed);
-        let new_recs = Records::new(&new_lines, &mut new_changed);
-        Self::render_diff(&old_recs, &new_recs);
+        let script = build_edit_script(&old_changed, &new_changed);
+        DiffLines::new(old_lines, new_lines, script)
     }
 
     fn render_diff<T: fmt::Display>(old: &Records<T>, new: &Records<T>) {
@@ -358,11 +351,98 @@ impl<'a> Classifier<'a> {
 }
 
 #[derive(Debug)]
+pub struct DiffLines<'a> {
+    a_text: Vec<&'a str>,
+    b_text: Vec<&'a str>,
+    edit_script: Vec<EditRange>,
+}
+
+impl<'a> DiffLines<'a> {
+    fn new(a_text: Vec<&'a str>, b_text: Vec<&'a str>, edit_script: Vec<EditRange>) -> Self {
+        Self {
+            a_text,
+            b_text,
+            edit_script,
+        }
+    }
+
+    pub fn to_patch(&self) -> Patch {
+        let context_len = 3;
+        let mut hunks = Vec::new();
+
+        let mut idx = 0;
+        while let Some(script) = self.edit_script.get(idx) {
+            let start1 = script.old.start.saturating_sub(context_len);
+            let start2 = script.new.start.saturating_sub(context_len);
+
+            let end1 = script.old.end
+                + std::cmp::min(
+                    context_len,
+                    self.a_text.len().saturating_sub(script.old.end),
+                );
+            let end2 = script.new.end
+                + std::cmp::min(
+                    context_len,
+                    self.b_text.len().saturating_sub(script.new.end),
+                );
+
+            let a_len = script.old_len();
+            let a_start = if a_len > 0 {
+                script.old.start + 1
+            } else {
+                script.old.start
+            };
+            let old_range = HunkRange::new(a_start, a_len);
+
+            let b_len = script.new_len();
+            let b_start = if b_len > 0 {
+                script.new.start + 1
+            } else {
+                script.new.start
+            };
+            let new_range = HunkRange::new(b_start, b_len);
+
+            let lines = self
+                .a_text
+                .get(script.old.clone())
+                .into_iter()
+                .flatten()
+                .map(|&line| Line::Delete(line))
+                .chain(
+                    self.b_text
+                        .get(script.new.clone())
+                        .into_iter()
+                        .flatten()
+                        .map(|&line| Line::Insert(line)),
+                )
+                .collect();
+
+            hunks.push(Hunk::new(old_range, new_range, lines));
+            idx += 1;
+        }
+
+        Patch::new(None, None, hunks)
+    }
+}
+
+#[derive(Debug)]
 struct EditRange {
-    a_start: usize,
-    a_end: usize,
-    b_start: usize,
-    b_end: usize,
+    old: Range<usize>,
+    new: Range<usize>,
+}
+
+impl EditRange {
+    fn new(old: Range<usize>, new: Range<usize>) -> Self {
+        Self { old, new }
+    }
+
+    fn old_len(&self) -> usize {
+        self.old.end - self.old.start
+    }
+
+    fn new_len(&self) -> usize {
+        self.new.end - self.new.start
+    }
 }
 
 fn build_edit_script(changed_a: &[bool], changed_b: &[bool]) -> Vec<EditRange> {
@@ -383,12 +463,7 @@ fn build_edit_script(changed_a: &[bool], changed_b: &[bool]) -> Vec<EditRange> {
                     idx_b += 1;
                 }
 
-                edit_scrpt.push(EditRange {
-                    a_start,
-                    a_end: idx_a,
-                    b_start,
-                    b_end: idx_b,
-                });
+                edit_scrpt.push(EditRange::new(a_start..idx_a, b_start..idx_b));
             }
             _ => {}
         }
@@ -446,6 +521,39 @@ mod tests {
     fn diff_str() {
         let a = "A\nB\nC\nA\nB\nB\nA";
         let b = "C\nB\nA\nB\nA\nC";
-        Myers::diff_str(a, b);
+        let diff = Myers::diff_str(a, b);
+        println!("{}", diff.to_patch());
+    }
+
+    #[test]
+    fn sample() {
+        let lao = "The Way that can be told of is not the eternal Way;
+The name that can be named is not the eternal name.
+The Nameless is the origin of Heaven and Earth;
+The Named is the mother of all things.
+Therefore let there always be non-being,
+  so we may see their subtlety,
+And let there always be being,
+  so we may see their outcome.
+The two are the same,
+But after they are produced,
+  they have different names.";
+
+        let tzu = "The Nameless is the origin of Heaven and Earth;
+The named is the mother of all things.
+
+Therefore let there always be non-being,
+  so we may see their subtlety,
+And let there always be being,
+  so we may see their outcome.
+The two are the same,
+But after they are produced,
+  they have different names.
+They both may be called deep and profound.
+Deeper and more profound,
+The door of all subtleties!";
+
+        let diff = Myers::diff_str(lao, tzu);
+        println!("{}", diff.to_patch());
     }
 }
