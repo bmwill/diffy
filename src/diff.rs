@@ -440,8 +440,9 @@ impl<'a> DiffLines<'a> {
 
                 if let Some(s) = self.edit_script.get(idx + 1) {
                     // Check to see if we can merge the hunks
-                    let start1_next = cmp::min(s.old.start, self.a_text.len() - 1) - context_len;
-                    if start1_next <= end1 {
+                    let start1_next =
+                        cmp::min(s.old.start, self.a_text.len() - 1).saturating_sub(context_len);
+                    if start1_next < end1 {
                         // Context lines between hunks
                         for (_i1, i2) in (script.old.end..s.old.start)
                             .into_iter()
