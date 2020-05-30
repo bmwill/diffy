@@ -367,7 +367,7 @@ impl<'a> DiffLines<'a> {
         }
     }
 
-    pub fn to_patch(&self) -> Patch {
+    pub fn to_patch(&self, context_len: usize) -> Patch {
         fn calc_end(
             context_len: usize,
             text1_len: usize,
@@ -389,7 +389,6 @@ impl<'a> DiffLines<'a> {
             (end1, end2)
         }
 
-        let context_len = 3;
         let mut hunks = Vec::new();
 
         let mut idx = 0;
@@ -581,12 +580,13 @@ mod tests {
         let a = "A\nB\nC\nA\nB\nB\nA";
         let b = "C\nB\nA\nB\nA\nC";
         let diff = Myers::diff_str(a, b);
-        println!("{}", diff.to_patch());
+        println!("{}", diff.to_patch(3));
     }
 
     #[test]
     fn sample() {
-        let lao = "The Way that can be told of is not the eternal Way;
+        let lao = "\
+The Way that can be told of is not the eternal Way;
 The name that can be named is not the eternal name.
 The Nameless is the origin of Heaven and Earth;
 The Named is the mother of all things.
@@ -596,9 +596,11 @@ And let there always be being,
   so we may see their outcome.
 The two are the same,
 But after they are produced,
-  they have different names.";
+  they have different names.
+";
 
-        let tzu = "The Nameless is the origin of Heaven and Earth;
+        let tzu = "\
+The Nameless is the origin of Heaven and Earth;
 The named is the mother of all things.
 
 Therefore let there always be non-being,
@@ -610,9 +612,68 @@ But after they are produced,
   they have different names.
 They both may be called deep and profound.
 Deeper and more profound,
-The door of all subtleties!";
+The door of all subtleties!
+";
+
+        let expected = "\
+--- a
++++ b
+@@ -1,7 +1,6 @@
+-The Way that can be told of is not the eternal Way;
+-The name that can be named is not the eternal name.
+ The Nameless is the origin of Heaven and Earth;
+-The Named is the mother of all things.
++The named is the mother of all things.
++
+ Therefore let there always be non-being,
+   so we may see their subtlety,
+ And let there always be being,
+@@ -9,3 +8,6 @@
+ The two are the same,
+ But after they are produced,
+   they have different names.
++They both may be called deep and profound.
++Deeper and more profound,
++The door of all subtleties!
+";
 
         let diff = Myers::diff_str(lao, tzu);
-        println!("{}", diff.to_patch());
+        assert_eq!(diff.to_patch(3).to_string(), expected);
+
+        let expected = "\
+--- a
++++ b
+@@ -1,2 +0,0 @@
+-The Way that can be told of is not the eternal Way;
+-The name that can be named is not the eternal name.
+@@ -4 +2,2 @@
+-The Named is the mother of all things.
++The named is the mother of all things.
++
+@@ -11,0 +11,3 @@
++They both may be called deep and profound.
++Deeper and more profound,
++The door of all subtleties!
+";
+        assert_eq!(diff.to_patch(0).to_string(), expected);
+
+        let expected = "\
+--- a
++++ b
+@@ -1,5 +1,4 @@
+-The Way that can be told of is not the eternal Way;
+-The name that can be named is not the eternal name.
+ The Nameless is the origin of Heaven and Earth;
+-The Named is the mother of all things.
++The named is the mother of all things.
++
+ Therefore let there always be non-being,
+@@ -11 +10,4 @@
+   they have different names.
++They both may be called deep and profound.
++Deeper and more profound,
++The door of all subtleties!
+";
+        assert_eq!(diff.to_patch(1).to_string(), expected);
     }
 }
