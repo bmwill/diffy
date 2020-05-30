@@ -1,5 +1,6 @@
 use crate::patch::{Hunk, HunkRange, Line, Patch};
 use std::{
+    cmp,
     collections::{hash_map::Entry, HashMap},
     fmt,
     ops::{Index, IndexMut, Range},
@@ -367,55 +368,120 @@ impl<'a> DiffLines<'a> {
     }
 
     pub fn to_patch(&self) -> Patch {
+        fn calc_end(
+            context_len: usize,
+            text1_len: usize,
+            text2_len: usize,
+            script1_end: usize,
+            script2_end: usize,
+        ) -> (usize, usize) {
+            let post_context_len = cmp::min(
+                context_len,
+                cmp::min(
+                    text1_len.saturating_sub(script1_end),
+                    text2_len.saturating_sub(script2_end),
+                ),
+            );
+
+            let end1 = script1_end + post_context_len;
+            let end2 = script2_end + post_context_len;
+
+            (end1, end2)
+        }
+
         let context_len = 3;
         let mut hunks = Vec::new();
 
         let mut idx = 0;
-        while let Some(script) = self.edit_script.get(idx) {
+        while let Some(mut script) = self.edit_script.get(idx) {
             let start1 = script.old.start.saturating_sub(context_len);
             let start2 = script.new.start.saturating_sub(context_len);
 
-            let end1 = script.old.end
-                + std::cmp::min(
-                    context_len,
-                    self.a_text.len().saturating_sub(script.old.end),
-                );
-            let end2 = script.new.end
-                + std::cmp::min(
-                    context_len,
-                    self.b_text.len().saturating_sub(script.new.end),
-                );
+            let (mut end1, mut end2) = calc_end(
+                context_len,
+                self.a_text.len(),
+                self.b_text.len(),
+                script.old.end,
+                script.new.end,
+            );
 
-            let a_len = script.old_len();
-            let a_start = if a_len > 0 {
-                script.old.start + 1
-            } else {
-                script.old.start
-            };
-            let old_range = HunkRange::new(a_start, a_len);
+            let mut lines = Vec::new();
 
-            let b_len = script.new_len();
-            let b_start = if b_len > 0 {
-                script.new.start + 1
-            } else {
-                script.new.start
-            };
-            let new_range = HunkRange::new(b_start, b_len);
-
-            let lines = self
-                .a_text
-                .get(script.old.clone())
+            // Pre-context
+            for line in self
+                .b_text
+                .get(start2..script.new.start)
                 .into_iter()
                 .flatten()
-                .map(|&line| Line::Delete(line))
-                .chain(
-                    self.b_text
-                        .get(script.new.clone())
-                        .into_iter()
-                        .flatten()
-                        .map(|&line| Line::Insert(line)),
-                )
-                .collect();
+            {
+                lines.push(Line::Context(line));
+            }
+
+            loop {
+                // Delete lines from text1
+                for line in self
+                    .a_text
+                    .get(script.old.start..script.old.end)
+                    .into_iter()
+                    .flatten()
+                {
+                    lines.push(Line::Delete(line));
+                }
+
+                // Insert lines from text2
+                for line in self
+                    .b_text
+                    .get(script.new.start..script.new.end)
+                    .into_iter()
+                    .flatten()
+                {
+                    lines.push(Line::Insert(line));
+                }
+
+                if let Some(s) = self.edit_script.get(idx + 1) {
+                    // Check to see if we can merge the hunks
+                    let start1_next = cmp::min(s.old.start, self.a_text.len() - 1) - context_len;
+                    if start1_next <= end1 {
+                        // Context lines between hunks
+                        for (_i1, i2) in (script.old.end..s.old.start)
+                            .into_iter()
+                            .zip(script.new.end..s.new.start)
+                        {
+                            if let Some(line) = self.b_text.get(i2) {
+                                lines.push(Line::Context(line));
+                            }
+                        }
+
+                        // Calc the new end
+                        let (e1, e2) = calc_end(
+                            context_len,
+                            self.a_text.len(),
+                            self.b_text.len(),
+                            s.old.end,
+                            s.new.end,
+                        );
+
+                        end1 = e1;
+                        end2 = e2;
+                        script = s;
+                        idx += 1;
+                        continue;
+                    }
+                }
+
+                break;
+            }
+
+            // Post-context
+            for line in self.b_text.get(script.new.end..end2).into_iter().flatten() {
+                lines.push(Line::Context(line));
+            }
+
+            let len1 = end1 - start1;
+            let old_range = HunkRange::new(if len1 > 0 { start1 + 1 } else { start1 }, len1);
+
+            let len2 = end2 - start2;
+            let new_range = HunkRange::new(if len2 > 0 { start2 + 1 } else { start2 }, len2);
 
             hunks.push(Hunk::new(old_range, new_range, lines));
             idx += 1;
@@ -434,14 +500,6 @@ struct EditRange {
 impl EditRange {
     fn new(old: Range<usize>, new: Range<usize>) -> Self {
         Self { old, new }
-    }
-
-    fn old_len(&self) -> usize {
-        self.old.end - self.old.start
-    }
-
-    fn new_len(&self) -> usize {
-        self.new.end - self.new.start
     }
 }
 
