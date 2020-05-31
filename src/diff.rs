@@ -32,6 +32,10 @@ impl V {
             v: vec![0; 2 * max_d],
         }
     }
+
+    fn len(&self) -> usize {
+        self.v.len()
+    }
 }
 
 impl Index<isize> for V {
@@ -135,8 +139,11 @@ impl Myers {
         vb[1] = 0;
 
         // We only need to explore ceil(D/2) + 1
-        let d_max = Self::max_d(n, m) as isize;
-        for d in 0..d_max {
+        let d_max = Self::max_d(n, m);
+        assert!(vf.len() >= d_max);
+        assert!(vb.len() >= d_max);
+
+        for d in 0..d_max as isize {
             // Forward path
             for k in (-d..=d).rev().step_by(2) {
                 let mut x = if k == -d || (k != d && vf[k - 1] < vf[k + 1]) {
