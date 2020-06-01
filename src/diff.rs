@@ -112,34 +112,6 @@ impl<'a, T> From<DiffRange<'a, 'a, T>> for Diff<'a, [T]> {
     }
 }
 
-struct Records<'a, T> {
-    inner: Range<'a, T>,
-}
-
-impl<'a, T> Records<'a, T> {
-    fn new(inner: Range<'a, T>) -> Self {
-        Records { inner }
-    }
-
-    fn len(&self) -> usize {
-        self.inner.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.inner.is_empty()
-    }
-
-    fn slice(&mut self, begin: usize, end: usize) -> Records<'a, T> {
-        Records::new(self.inner.slice(begin..end))
-    }
-
-    fn split_at_mut(&mut self, mid: usize) -> (Records<'a, T>, Records<'a, T>) {
-        let (left_inner, right_inner) = self.inner.split_at(mid);
-
-        (Records::new(left_inner), Records::new(right_inner))
-    }
-}
-
 use crate::range::Range;
 
 pub struct Myers;
@@ -267,47 +239,46 @@ impl Myers {
     }
 
     fn conquer<'a, 'b, T: PartialEq>(
-        mut old: Records<'a, T>,
-        mut new: Records<'b, T>,
+        mut old: Range<'a, T>,
+        mut new: Range<'b, T>,
         vf: &mut V,
         vb: &mut V,
         solution: &mut Vec<DiffRange<'a, 'b, T>>,
     ) {
         // Check for common prefix
-        let common_prefix_len = old.inner.common_prefix_len(new.inner);
+        let common_prefix_len = old.common_prefix_len(new);
         if common_prefix_len > 0 {
             let common_prefix = DiffRange::Equal(
-                old.inner.slice(..common_prefix_len),
-                new.inner.slice(..common_prefix_len),
+                old.slice(..common_prefix_len),
+                new.slice(..common_prefix_len),
             );
             solution.push(common_prefix);
         }
 
-        old = old.slice(common_prefix_len, old.len());
-        new = new.slice(common_prefix_len, new.len());
+        old = old.slice(common_prefix_len..old.len());
+        new = new.slice(common_prefix_len..new.len());
 
         // Check for common suffix
-        let common_suffix_len = old.inner.common_suffix_len(new.inner);
+        let common_suffix_len = old.common_suffix_len(new);
         let common_suffix = DiffRange::Equal(
-            old.inner.slice(old.len() - common_suffix_len..),
-            new.inner.slice(new.len() - common_suffix_len..),
+            old.slice(old.len() - common_suffix_len..),
+            new.slice(new.len() - common_suffix_len..),
         );
-        old = old.slice(0, old.len() - common_suffix_len);
-        new = new.slice(0, new.len() - common_suffix_len);
+        old = old.slice(..old.len() - common_suffix_len);
+        new = new.slice(..new.len() - common_suffix_len);
 
         if old.is_empty() {
             // Inserts
-            solution.push(DiffRange::Insert(new.inner));
+            solution.push(DiffRange::Insert(new));
         } else if new.is_empty() {
             // Deletes
-            solution.push(DiffRange::Delete(old.inner));
+            solution.push(DiffRange::Delete(old));
         } else {
             // Divide & Conquer
-            let (_shortest_edit_script_len, snake) =
-                Self::find_middle_snake(old.inner, new.inner, vf, vb);
+            let (_shortest_edit_script_len, snake) = Self::find_middle_snake(old, new, vf, vb);
 
-            let (old_a, old_b) = old.split_at_mut(snake.x_start);
-            let (new_a, new_b) = new.split_at_mut(snake.y_start);
+            let (old_a, old_b) = old.split_at(snake.x_start);
+            let (new_a, new_b) = new.split_at(snake.y_start);
 
             Self::conquer(old_a, new_a, vf, vb, solution);
             Self::conquer(old_b, new_b, vf, vb, solution);
@@ -319,8 +290,8 @@ impl Myers {
     }
 
     fn do_diff<'a, 'b, T: PartialEq>(old: &'a [T], new: &'b [T]) -> Vec<DiffRange<'a, 'b, T>> {
-        let old_recs = Records::new(Range::new(old, ..));
-        let new_recs = Records::new(Range::new(new, ..));
+        let old_recs = Range::new(old, ..);
+        let new_recs = Range::new(new, ..);
 
         let mut solution = Vec::new();
 
