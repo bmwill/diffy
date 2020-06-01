@@ -73,41 +73,41 @@ impl ::std::fmt::Display for Snake {
 }
 
 #[derive(Debug)]
-pub enum Diff<'a, 'b, T> {
+pub enum DiffRange<'a, 'b, T> {
     Equal(Range<'a, T>, Range<'b, T>),
     Delete(Range<'a, T>),
     Insert(Range<'b, T>),
 }
 
-impl<T> Copy for Diff<'_, '_, T> {}
+impl<T> Copy for DiffRange<'_, '_, T> {}
 
-impl<T> Clone for Diff<'_, '_, T> {
+impl<T> Clone for DiffRange<'_, '_, T> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum Chunk<'a, T: ?Sized> {
+pub enum Diff<'a, T: ?Sized> {
     Equal(&'a T),
     Delete(&'a T),
     Insert(&'a T),
 }
 
-impl<T> Copy for Chunk<'_, T> {}
+impl<T> Copy for Diff<'_, T> {}
 
-impl<T> Clone for Chunk<'_, T> {
+impl<T> Clone for Diff<'_, T> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, T> From<Diff<'a, 'a, T>> for Chunk<'a, [T]> {
-    fn from(diff: Diff<'a, 'a, T>) -> Self {
+impl<'a, T> From<DiffRange<'a, 'a, T>> for Diff<'a, [T]> {
+    fn from(diff: DiffRange<'a, 'a, T>) -> Self {
         match diff {
-            Diff::Equal(range, _) => Chunk::Equal(range.as_slice()),
-            Diff::Delete(range) => Chunk::Delete(range.as_slice()),
-            Diff::Insert(range) => Chunk::Insert(range.as_slice()),
+            DiffRange::Equal(range, _) => Diff::Equal(range.as_slice()),
+            DiffRange::Delete(range) => Diff::Delete(range.as_slice()),
+            DiffRange::Insert(range) => Diff::Insert(range.as_slice()),
         }
     }
 }
@@ -271,12 +271,12 @@ impl Myers {
         mut new: Records<'b, T>,
         vf: &mut V,
         vb: &mut V,
-        solution: &mut Vec<Diff<'a, 'b, T>>,
+        solution: &mut Vec<DiffRange<'a, 'b, T>>,
     ) {
         // Check for common prefix
         let common_prefix_len = old.inner.common_prefix_len(new.inner);
         if common_prefix_len > 0 {
-            let common_prefix = Diff::Equal(
+            let common_prefix = DiffRange::Equal(
                 old.inner.slice(..common_prefix_len),
                 new.inner.slice(..common_prefix_len),
             );
@@ -288,7 +288,7 @@ impl Myers {
 
         // Check for common suffix
         let common_suffix_len = old.inner.common_suffix_len(new.inner);
-        let common_suffix = Diff::Equal(
+        let common_suffix = DiffRange::Equal(
             old.inner.slice(old.len() - common_suffix_len..),
             new.inner.slice(new.len() - common_suffix_len..),
         );
@@ -297,10 +297,10 @@ impl Myers {
 
         if old.is_empty() {
             // Inserts
-            solution.push(Diff::Insert(new.inner));
+            solution.push(DiffRange::Insert(new.inner));
         } else if new.is_empty() {
             // Deletes
-            solution.push(Diff::Delete(old.inner));
+            solution.push(DiffRange::Delete(old.inner));
         } else {
             // Divide & Conquer
             let (_shortest_edit_script_len, snake) =
@@ -318,7 +318,7 @@ impl Myers {
         }
     }
 
-    fn do_diff<'a, 'b, T: PartialEq>(old: &'a [T], new: &'b [T]) -> Vec<Diff<'a, 'b, T>> {
+    fn do_diff<'a, 'b, T: PartialEq>(old: &'a [T], new: &'b [T]) -> Vec<DiffRange<'a, 'b, T>> {
         let old_recs = Records::new(Range::new(old, ..));
         let new_recs = Records::new(Range::new(new, ..));
 
@@ -336,27 +336,27 @@ impl Myers {
         solution
     }
 
-    pub fn diff<'a>(old: &'a [u8], new: &'a [u8]) -> Vec<Chunk<'a, [u8]>> {
+    pub fn diff<'a>(old: &'a [u8], new: &'a [u8]) -> Vec<Diff<'a, [u8]>> {
         let solution = Self::do_diff(old, new);
 
-        solution.into_iter().map(Chunk::from).collect()
+        solution.into_iter().map(Diff::from).collect()
     }
 
     // XXX Currently only works with ASCII strings
-    pub fn diff_str<'a>(old: &'a str, new: &'a str) -> Vec<Chunk<'a, str>> {
+    pub fn diff_str<'a>(old: &'a str, new: &'a str) -> Vec<Diff<'a, str>> {
         let solution = Self::do_diff(old.as_bytes(), new.as_bytes());
 
         solution
             .into_iter()
             .map(|diff| match diff {
-                Diff::Equal(range, _) => {
-                    Chunk::Equal(&old[range.offset()..range.offset() + range.len()])
+                DiffRange::Equal(range, _) => {
+                    Diff::Equal(&old[range.offset()..range.offset() + range.len()])
                 }
-                Diff::Delete(range) => {
-                    Chunk::Delete(&old[range.offset()..range.offset() + range.len()])
+                DiffRange::Delete(range) => {
+                    Diff::Delete(&old[range.offset()..range.offset() + range.len()])
                 }
-                Diff::Insert(range) => {
-                    Chunk::Insert(&new[range.offset()..range.offset() + range.len()])
+                DiffRange::Insert(range) => {
+                    Diff::Insert(&new[range.offset()..range.offset() + range.len()])
                 }
             })
             .collect()
@@ -551,7 +551,7 @@ impl EditRange {
     }
 }
 
-fn build_edit_script<T>(solution: &[Diff<T>]) -> Vec<EditRange> {
+fn build_edit_script<T>(solution: &[DiffRange<T>]) -> Vec<EditRange> {
     let mut idx_a = 0;
     let mut idx_b = 0;
 
@@ -560,14 +560,14 @@ fn build_edit_script<T>(solution: &[Diff<T>]) -> Vec<EditRange> {
 
     for diff in solution {
         match diff {
-            Diff::Equal(range1, range2) => {
+            DiffRange::Equal(range1, range2) => {
                 idx_a += range1.len();
                 idx_b += range2.len();
                 if let Some(script) = script.take() {
                     edit_script.push(script);
                 }
             }
-            Diff::Delete(range) => {
+            DiffRange::Delete(range) => {
                 match &mut script {
                     Some(s) => s.old.end += range.len(),
                     None => {
@@ -576,7 +576,7 @@ fn build_edit_script<T>(solution: &[Diff<T>]) -> Vec<EditRange> {
                 }
                 idx_a += range.len();
             }
-            Diff::Insert(range) => {
+            DiffRange::Insert(range) => {
                 match &mut script {
                     Some(s) => s.new.end += range.len(),
                     None => {
@@ -598,7 +598,7 @@ fn build_edit_script<T>(solution: &[Diff<T>]) -> Vec<EditRange> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        diff::{Chunk, Myers, V},
+        diff::{Diff, Myers, V},
         range::Range,
     };
 
@@ -620,13 +620,13 @@ mod tests {
         assert_eq!(
             solution,
             vec![
-                Chunk::Delete("AB"),
-                Chunk::Equal("C"),
-                Chunk::Delete("A"),
-                Chunk::Equal("B"),
-                Chunk::Insert("A"),
-                Chunk::Equal("BA"),
-                Chunk::Insert("C"),
+                Diff::Delete("AB"),
+                Diff::Equal("C"),
+                Diff::Delete("A"),
+                Diff::Equal("B"),
+                Diff::Insert("A"),
+                Diff::Equal("BA"),
+                Diff::Insert("C"),
             ]
         );
     }
@@ -639,10 +639,10 @@ mod tests {
         assert_eq!(
             solution,
             vec![
-                Chunk::Delete("ab"),
-                Chunk::Equal("g"),
-                Chunk::Insert("h"),
-                Chunk::Delete("def"),
+                Diff::Delete("ab"),
+                Diff::Equal("g"),
+                Diff::Insert("h"),
+                Diff::Delete("def"),
             ]
         );
     }
@@ -652,12 +652,12 @@ mod tests {
         let a = "bat";
         let b = "map";
         let solution = Myers::diff(a.as_bytes(), b.as_bytes());
-        let expected: Vec<Chunk<[u8]>> = vec![
-            Chunk::Insert(b"m"),
-            Chunk::Delete(b"b"),
-            Chunk::Equal(b"a"),
-            Chunk::Insert(b"p"),
-            Chunk::Delete(b"t"),
+        let expected: Vec<Diff<[u8]>> = vec![
+            Diff::Insert(b"m"),
+            Diff::Delete(b"b"),
+            Diff::Equal(b"a"),
+            Diff::Insert(b"p"),
+            Diff::Delete(b"t"),
         ];
         assert_eq!(solution, expected);
 
@@ -665,11 +665,11 @@ mod tests {
         assert_eq!(
             solution,
             vec![
-                Chunk::Insert("m"),
-                Chunk::Delete("b"),
-                Chunk::Equal("a"),
-                Chunk::Insert("p"),
-                Chunk::Delete("t"),
+                Diff::Insert("m"),
+                Diff::Delete("b"),
+                Diff::Equal("a"),
+                Diff::Insert("p"),
+                Diff::Delete("t"),
             ]
         );
     }
@@ -679,7 +679,7 @@ mod tests {
         let a = "abc";
         let b = "def";
         let solution = Myers::diff_str(a, b);
-        assert_eq!(solution, vec![Chunk::Insert("def"), Chunk::Delete("abc"),]);
+        assert_eq!(solution, vec![Diff::Insert("def"), Diff::Delete("abc"),]);
     }
 
     #[test]
