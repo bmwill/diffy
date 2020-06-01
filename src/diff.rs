@@ -668,15 +668,35 @@ mod tests {
     fn diff_test2() {
         let a = "ABCABBA";
         let b = "CBABAC";
-        let solution = Myers::diff(a.as_bytes(), b.as_bytes());
-        println!("{:#?}", solution);
+        let solution = Myers::diff_str(a, b);
+        assert_eq!(
+            solution,
+            vec![
+                Chunk::Delete("AB"),
+                Chunk::Equal("C"),
+                Chunk::Delete("A"),
+                Chunk::Equal("B"),
+                Chunk::Insert("A"),
+                Chunk::Equal("BA"),
+                Chunk::Insert("C"),
+            ]
+        );
     }
 
     #[test]
     fn diff_test3() {
         let a = "abgdef";
         let b = "gh";
-        Myers::diff(a.as_bytes(), b.as_bytes());
+        let solution = Myers::diff_str(a, b);
+        assert_eq!(
+            solution,
+            vec![
+                Chunk::Delete("ab"),
+                Chunk::Equal("g"),
+                Chunk::Insert("h"),
+                Chunk::Delete("def"),
+            ]
+        );
     }
 
     #[test]
@@ -710,7 +730,8 @@ mod tests {
     fn diff_test5() {
         let a = "abc";
         let b = "def";
-        Myers::diff(a.as_bytes(), b.as_bytes());
+        let solution = Myers::diff_str(a, b);
+        assert_eq!(solution, vec![Chunk::Insert("def"), Chunk::Delete("abc"),]);
     }
 
     #[test]
@@ -718,7 +739,22 @@ mod tests {
         let a = "A\nB\nC\nA\nB\nB\nA";
         let b = "C\nB\nA\nB\nA\nC";
         let diff = Myers::diff_str_lines(a, b);
-        println!("{}", diff.to_patch(3));
+        let expected = "\
+--- a
++++ b
+@@ -1,7 +1,6 @@
+-A
+-B
+ C
+-A
+ B
++A
+ B
+ A
++C
+";
+
+        assert_eq!(diff.to_patch(3).to_string(), expected);
     }
 
     #[test]
