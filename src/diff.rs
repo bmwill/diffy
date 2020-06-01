@@ -523,9 +523,8 @@ impl<'a> DiffLines<'a> {
                         cmp::min(s.old.start, self.a_text.len() - 1).saturating_sub(context_len);
                     if start1_next < end1 {
                         // Context lines between hunks
-                        for (_i1, i2) in (script.old.end..s.old.start)
-                            .into_iter()
-                            .zip(script.new.end..s.new.start)
+                        for (_i1, i2) in
+                            (script.old.end..s.old.start).zip(script.new.end..s.new.start)
                         {
                             if let Some(line) = self.b_text.get(i2) {
                                 lines.push(Line::Context(line));
