@@ -378,13 +378,13 @@ impl Myers {
         solution
     }
 
-    pub fn diff<'a>(old: &'a [u8], new: &'a [u8]) -> Vec<Diff<'a, [u8]>> {
+    pub fn diff_slice<'a, T: PartialEq>(old: &'a [T], new: &'a [T]) -> Vec<Diff<'a, [T]>> {
         let solution = Self::do_diff(old, new);
 
         solution.into_iter().map(Diff::from).collect()
     }
 
-    pub fn diff_str<'a>(old: &'a str, new: &'a str) -> Vec<Diff<'a, str>> {
+    pub fn diff<'a>(old: &'a str, new: &'a str) -> Vec<Diff<'a, str>> {
         let solution = Self::do_diff(old.as_bytes(), new.as_bytes());
 
         solution
@@ -394,7 +394,7 @@ impl Myers {
             .collect()
     }
 
-    pub fn diff_str_lines<'a>(old: &'a str, new: &'a str) -> DiffLines<'a> {
+    pub fn diff_lines<'a>(old: &'a str, new: &'a str) -> DiffLines<'a> {
         let mut classifier = Classifier::default();
         let (old_lines, old_ids): (Vec<&str>, Vec<u64>) = old
             .lines()
@@ -648,7 +648,7 @@ mod tests {
     fn diff_test2() {
         let a = "ABCABBA";
         let b = "CBABAC";
-        let solution = Myers::diff_str(a, b);
+        let solution = Myers::diff(a, b);
         assert_eq!(
             solution,
             vec![
@@ -667,7 +667,7 @@ mod tests {
     fn diff_test3() {
         let a = "abgdef";
         let b = "gh";
-        let solution = Myers::diff_str(a, b);
+        let solution = Myers::diff(a, b);
         assert_eq!(
             solution,
             vec![
@@ -683,7 +683,7 @@ mod tests {
     fn diff_test4() {
         let a = "bat";
         let b = "map";
-        let solution = Myers::diff(a.as_bytes(), b.as_bytes());
+        let solution = Myers::diff_slice(a.as_bytes(), b.as_bytes());
         let expected: Vec<Diff<[u8]>> = vec![
             Diff::Insert(b"m"),
             Diff::Delete(b"b"),
@@ -693,7 +693,7 @@ mod tests {
         ];
         assert_eq!(solution, expected);
 
-        let solution = Myers::diff_str(a, b);
+        let solution = Myers::diff(a, b);
         assert_eq!(
             solution,
             vec![
@@ -710,7 +710,7 @@ mod tests {
     fn diff_test5() {
         let a = "abc";
         let b = "def";
-        let solution = Myers::diff_str(a, b);
+        let solution = Myers::diff(a, b);
         assert_eq!(solution, vec![Diff::Insert("def"), Diff::Delete("abc"),]);
     }
 
@@ -718,7 +718,7 @@ mod tests {
     fn diff_str() {
         let a = "A\nB\nC\nA\nB\nB\nA";
         let b = "C\nB\nA\nB\nA\nC";
-        let diff = Myers::diff_str_lines(a, b);
+        let diff = Myers::diff_lines(a, b);
         let expected = "\
 --- a
 +++ b
@@ -791,7 +791,7 @@ The door of all subtleties!
 +The door of all subtleties!
 ";
 
-        let diff = Myers::diff_str_lines(lao, tzu);
+        let diff = Myers::diff_lines(lao, tzu);
         assert_eq!(diff.to_patch(3).to_string(), expected);
 
         let expected = "\
@@ -842,7 +842,7 @@ The door of all subtleties!
         let comet = "\u{2604}";
         assert_eq!(snowman.as_bytes()[..2], comet.as_bytes()[..2]);
 
-        let d = Myers::diff_str(snowman, comet);
+        let d = Myers::diff(snowman, comet);
         assert_eq!(
             d,
             vec![Diff::Equal(""), Diff::Insert(comet), Diff::Delete(snowman)]
