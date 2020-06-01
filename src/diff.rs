@@ -2,7 +2,7 @@ use crate::patch::{Hunk, HunkRange, Line, Patch};
 use std::{
     cmp,
     collections::{hash_map::Entry, HashMap},
-    fmt, ops,
+    ops,
     ops::{Index, IndexMut},
 };
 
@@ -112,15 +112,13 @@ impl<'a, T> From<Diff<'a, 'a, T>> for Chunk<'a, [T]> {
     }
 }
 
-struct Records<'a, 'b, T> {
+struct Records<'a, T> {
     inner: Range<'a, T>,
-    changed: &'b mut [bool],
 }
 
-impl<'a, 'b, T> Records<'a, 'b, T> {
-    fn new(inner: Range<'a, T>, changed: &'b mut [bool]) -> Self {
-        debug_assert!(inner.len() == changed.len());
-        Records { inner, changed }
+impl<'a, T> Records<'a, T> {
+    fn new(inner: Range<'a, T>) -> Self {
+        Records { inner }
     }
 
     fn len(&self) -> usize {
@@ -131,18 +129,14 @@ impl<'a, 'b, T> Records<'a, 'b, T> {
         self.inner.is_empty()
     }
 
-    fn slice(&mut self, begin: usize, end: usize) -> Records<'a, '_, T> {
-        Records::new(self.inner.slice(begin..end), &mut self.changed[begin..end])
+    fn slice(&mut self, begin: usize, end: usize) -> Records<'a, T> {
+        Records::new(self.inner.slice(begin..end))
     }
 
-    fn split_at_mut(&mut self, mid: usize) -> (Records<'a, '_, T>, Records<'a, '_, T>) {
+    fn split_at_mut(&mut self, mid: usize) -> (Records<'a, T>, Records<'a, T>) {
         let (left_inner, right_inner) = self.inner.split_at(mid);
-        let (left_changed, right_changed) = self.changed.split_at_mut(mid);
 
-        (
-            Records::new(left_inner, left_changed),
-            Records::new(right_inner, right_changed),
-        )
+        (Records::new(left_inner), Records::new(right_inner))
     }
 }
 
@@ -273,8 +267,8 @@ impl Myers {
     }
 
     fn conquer<'a, 'b, T: PartialEq>(
-        mut old: Records<'a, '_, T>,
-        mut new: Records<'b, '_, T>,
+        mut old: Records<'a, T>,
+        mut new: Records<'b, T>,
         vf: &mut V,
         vb: &mut V,
         solution: &mut Vec<Diff<'a, 'b, T>>,
@@ -289,8 +283,8 @@ impl Myers {
             solution.push(common_prefix);
         }
 
-        let mut old = old.slice(common_prefix_len, old.len());
-        let mut new = new.slice(common_prefix_len, new.len());
+        old = old.slice(common_prefix_len, old.len());
+        new = new.slice(common_prefix_len, new.len());
 
         // Check for common suffix
         let common_suffix_len = old.inner.common_suffix_len(new.inner);
@@ -298,20 +292,14 @@ impl Myers {
             old.inner.slice(old.len() - common_suffix_len..),
             new.inner.slice(new.len() - common_suffix_len..),
         );
-        let mut old = old.slice(0, old.len() - common_suffix_len);
-        let mut new = new.slice(0, new.len() - common_suffix_len);
+        old = old.slice(0, old.len() - common_suffix_len);
+        new = new.slice(0, new.len() - common_suffix_len);
 
         if old.is_empty() {
             // Inserts
-            for changed in new.changed {
-                *changed = true;
-            }
             solution.push(Diff::Insert(new.inner));
         } else if new.is_empty() {
             // Deletes
-            for changed in old.changed {
-                *changed = true;
-            }
             solution.push(Diff::Delete(old.inner));
         } else {
             // Divide & Conquer
@@ -330,14 +318,9 @@ impl Myers {
         }
     }
 
-    fn do_diff<'a, 'b, T: PartialEq>(
-        old: &'a [T],
-        new: &'b [T],
-    ) -> (Vec<bool>, Vec<bool>, Vec<Diff<'a, 'b, T>>) {
-        let mut old_changed = vec![false; old.len()];
-        let old_recs = Records::new(Range::new(old, ..), &mut old_changed);
-        let mut new_changed = vec![false; new.len()];
-        let new_recs = Records::new(Range::new(new, ..), &mut new_changed);
+    fn do_diff<'a, 'b, T: PartialEq>(old: &'a [T], new: &'b [T]) -> Vec<Diff<'a, 'b, T>> {
+        let old_recs = Records::new(Range::new(old, ..));
+        let new_recs = Records::new(Range::new(new, ..));
 
         let mut solution = Vec::new();
 
@@ -350,21 +333,18 @@ impl Myers {
 
         Self::conquer(old_recs, new_recs, &mut vf, &mut vb, &mut solution);
 
-        (old_changed, new_changed, solution)
+        solution
     }
 
     pub fn diff<'a>(old: &'a [u8], new: &'a [u8]) -> Vec<Chunk<'a, [u8]>> {
-        let (mut old_changed, mut new_changed, solution) = Self::do_diff(old, new);
+        let solution = Self::do_diff(old, new);
 
-        let old_recs = Records::new(Range::new(old, ..), &mut old_changed);
-        let new_recs = Records::new(Range::new(new, ..), &mut new_changed);
-        Self::render_diff(&old_recs, &new_recs);
         solution.into_iter().map(Chunk::from).collect()
     }
 
     // XXX Currently only works with ASCII strings
     pub fn diff_str<'a>(old: &'a str, new: &'a str) -> Vec<Chunk<'a, str>> {
-        let (_old_changed, _new_changed, solution) = Self::do_diff(old.as_bytes(), new.as_bytes());
+        let solution = Self::do_diff(old.as_bytes(), new.as_bytes());
 
         solution
             .into_iter()
@@ -393,42 +373,10 @@ impl Myers {
             .map(|line| (line, classifier.classify(&line)))
             .unzip();
 
-        let (_old_changed, _new_changed, solution) = Self::do_diff(&old_ids, &new_ids);
+        let solution = Self::do_diff(&old_ids, &new_ids);
 
         let script = build_edit_script(&solution);
         DiffLines::new(old_lines, new_lines, script)
-    }
-
-    fn render_diff<T: fmt::Display>(old: &Records<T>, new: &Records<T>) {
-        let mut num1 = 0;
-        let mut num2 = 0;
-
-        while num1 < old.len() || num2 < new.len() {
-            if num1 < old.len() && old.changed[num1] {
-                println!(
-                    "\x1b[0;31m- {: <4}      {}\x1b[0m",
-                    num1 + 1,
-                    old.inner.as_slice()[num1],
-                );
-                num1 += 1;
-            } else if num2 < new.len() && new.changed[num2] {
-                println!(
-                    "\x1b[0;32m+      {: <4} {}\x1b[0m",
-                    num2 + 1,
-                    new.inner.as_slice()[num2],
-                );
-                num2 += 1;
-            } else {
-                println!(
-                    "  {: <4} {: <4} {}",
-                    num1 + 1,
-                    num2 + 1,
-                    old.inner.as_slice()[num1],
-                );
-                num1 += 1;
-                num2 += 1;
-            }
-        }
     }
 }
 
