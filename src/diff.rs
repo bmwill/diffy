@@ -2,8 +2,8 @@ use crate::patch::{Hunk, HunkRange, Line, Patch};
 use std::{
     cmp,
     collections::{hash_map::Entry, HashMap},
-    fmt,
-    ops::{Index, IndexMut, Range},
+    fmt, ops,
+    ops::{Index, IndexMut},
 };
 
 // A D-path is a path which starts at (0,0) that has exactly D non-diagonal edges. All D-paths
@@ -72,13 +72,53 @@ impl ::std::fmt::Display for Snake {
     }
 }
 
-struct Records<'a, T> {
-    inner: &'a [T],
-    changed: &'a mut [bool],
+#[derive(Debug)]
+pub enum Diff<'a, 'b, T> {
+    Equal(Range<'a, T>, Range<'b, T>),
+    Delete(Range<'a, T>),
+    Insert(Range<'b, T>),
 }
 
-impl<'a, T> Records<'a, T> {
-    fn new(inner: &'a [T], changed: &'a mut [bool]) -> Self {
+impl<T> Copy for Diff<'_, '_, T> {}
+
+impl<T> Clone for Diff<'_, '_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Chunk<'a, T: ?Sized> {
+    Equal(&'a T),
+    Delete(&'a T),
+    Insert(&'a T),
+}
+
+impl<T> Copy for Chunk<'_, T> {}
+
+impl<T> Clone for Chunk<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T> From<Diff<'a, 'a, T>> for Chunk<'a, [T]> {
+    fn from(diff: Diff<'a, 'a, T>) -> Self {
+        match diff {
+            Diff::Equal(range, _) => Chunk::Equal(range.as_slice()),
+            Diff::Delete(range) => Chunk::Delete(range.as_slice()),
+            Diff::Insert(range) => Chunk::Insert(range.as_slice()),
+        }
+    }
+}
+
+struct Records<'a, 'b, T> {
+    inner: Range<'a, T>,
+    changed: &'b mut [bool],
+}
+
+impl<'a, 'b, T> Records<'a, 'b, T> {
+    fn new(inner: Range<'a, T>, changed: &'b mut [bool]) -> Self {
         debug_assert!(inner.len() == changed.len());
         Records { inner, changed }
     }
@@ -91,11 +131,11 @@ impl<'a, T> Records<'a, T> {
         self.inner.is_empty()
     }
 
-    fn slice(&mut self, begin: usize, end: usize) -> Records<'_, T> {
-        Records::new(&self.inner[begin..end], &mut self.changed[begin..end])
+    fn slice(&mut self, begin: usize, end: usize) -> Records<'a, '_, T> {
+        Records::new(self.inner.slice(begin..end), &mut self.changed[begin..end])
     }
 
-    fn split_at_mut(&mut self, mid: usize) -> (Records<'_, T>, Records<'_, T>) {
+    fn split_at_mut(&mut self, mid: usize) -> (Records<'a, '_, T>, Records<'a, '_, T>) {
         let (left_inner, right_inner) = self.inner.split_at(mid);
         let (left_changed, right_changed) = self.changed.split_at_mut(mid);
 
@@ -105,6 +145,8 @@ impl<'a, T> Records<'a, T> {
         )
     }
 }
+
+use crate::range::Range;
 
 pub struct Myers;
 
@@ -120,8 +162,8 @@ impl Myers {
     // forward and reverse directions until furthest reaching forward and reverse paths starting at
     // opposing corners 'overlap'.
     fn find_middle_snake<T: PartialEq>(
-        old: &[T],
-        new: &[T],
+        old: Range<'_, T>,
+        new: Range<'_, T>,
         vf: &mut V,
         vb: &mut V,
     ) -> (isize, Snake) {
@@ -156,9 +198,10 @@ impl Myers {
                 // The coordinate of the start of a snake
                 let (x0, y0) = (x, y);
                 //  While these sequences are identical, keep moving through the graph with no cost
-                while x < n && y < m && old[x] == new[y] {
-                    x += 1;
-                    y += 1;
+                if let (Some(s1), Some(s2)) = (old.get(x..), new.get(y..)) {
+                    let advance = s1.common_prefix_len(s2);
+                    x += advance;
+                    y += advance;
                 }
 
                 // This is the new best x value
@@ -193,9 +236,15 @@ impl Myers {
                 // The coordinate of the start of a snake
                 let (x0, y0) = (x, y);
                 //  While these sequences are identical, keep moving through the graph with no cost
-                while x < n && y < m && old[n - x - 1] == new[m - y - 1] {
-                    x += 1;
-                    y += 1;
+                // if let (Some(s1), Some(s2)) = (
+                //     old.get(..n.saturating_sub(x)),
+                //     new.get(..m.saturating_sub(y)),
+                // ) {
+                //     let advance = s1.common_suffix_len(s2);
+                if x < n && y < m {
+                    let advance = old.slice(..n - x).common_suffix_len(new.slice(..m - y));
+                    x += advance;
+                    y += advance;
                 }
 
                 // This is the new best x value
@@ -223,56 +272,74 @@ impl Myers {
         unreachable!("unable to find a middle snake");
     }
 
-    fn conquer<T: PartialEq>(mut old: Records<T>, mut new: Records<T>, vf: &mut V, vb: &mut V) {
-        let mut start_old = 0;
-        let mut start_new = 0;
-        let mut end_old = old.len();
-        let mut end_new = new.len();
-
-        while start_old < end_old
-            && start_new < end_new
-            && old.inner[start_old] == new.inner[start_new]
-        {
-            start_old += 1;
-            start_new += 1;
-        }
-        while start_old < end_old
-            && start_new < end_new
-            && old.inner[end_old - 1] == new.inner[end_new - 1]
-        {
-            end_old -= 1;
-            end_new -= 1;
+    fn conquer<'a, 'b, T: PartialEq>(
+        mut old: Records<'a, '_, T>,
+        mut new: Records<'b, '_, T>,
+        vf: &mut V,
+        vb: &mut V,
+        solution: &mut Vec<Diff<'a, 'b, T>>,
+    ) {
+        // Check for common prefix
+        let common_prefix_len = old.inner.common_prefix_len(new.inner);
+        if common_prefix_len > 0 {
+            let common_prefix = Diff::Equal(
+                old.inner.slice(..common_prefix_len),
+                new.inner.slice(..common_prefix_len),
+            );
+            solution.push(common_prefix);
         }
 
-        let mut old = old.slice(start_old, end_old);
-        let mut new = new.slice(start_new, end_new);
+        let mut old = old.slice(common_prefix_len, old.len());
+        let mut new = new.slice(common_prefix_len, new.len());
+
+        // Check for common suffix
+        let common_suffix_len = old.inner.common_suffix_len(new.inner);
+        let common_suffix = Diff::Equal(
+            old.inner.slice(old.len() - common_suffix_len..),
+            new.inner.slice(new.len() - common_suffix_len..),
+        );
+        let mut old = old.slice(0, old.len() - common_suffix_len);
+        let mut new = new.slice(0, new.len() - common_suffix_len);
 
         if old.is_empty() {
+            // Inserts
             for changed in new.changed {
                 *changed = true;
             }
+            solution.push(Diff::Insert(new.inner));
         } else if new.is_empty() {
+            // Deletes
             for changed in old.changed {
                 *changed = true;
             }
+            solution.push(Diff::Delete(old.inner));
         } else {
             // Divide & Conquer
             let (_shortest_edit_script_len, snake) =
-                Self::find_middle_snake(&old.inner, &new.inner, vf, vb);
+                Self::find_middle_snake(old.inner, new.inner, vf, vb);
 
             let (old_a, old_b) = old.split_at_mut(snake.x_start);
             let (new_a, new_b) = new.split_at_mut(snake.y_start);
 
-            Self::conquer(old_a, new_a, vf, vb);
-            Self::conquer(old_b, new_b, vf, vb);
+            Self::conquer(old_a, new_a, vf, vb, solution);
+            Self::conquer(old_b, new_b, vf, vb, solution);
+        }
+
+        if common_suffix_len > 0 {
+            solution.push(common_suffix);
         }
     }
 
-    fn do_diff<T: PartialEq>(old: &[T], new: &[T]) -> (Vec<bool>, Vec<bool>) {
+    fn do_diff<'a, 'b, T: PartialEq>(
+        old: &'a [T],
+        new: &'b [T],
+    ) -> (Vec<bool>, Vec<bool>, Vec<Diff<'a, 'b, T>>) {
         let mut old_changed = vec![false; old.len()];
-        let old_recs = Records::new(old, &mut old_changed);
+        let old_recs = Records::new(Range::new(old, ..), &mut old_changed);
         let mut new_changed = vec![false; new.len()];
-        let new_recs = Records::new(new, &mut new_changed);
+        let new_recs = Records::new(Range::new(new, ..), &mut new_changed);
+
+        let mut solution = Vec::new();
 
         // The arrays that hold the 'best possible x values' in search from:
         // `vf`: top left to bottom right
@@ -281,20 +348,41 @@ impl Myers {
         let mut vf = V::new(max_d);
         let mut vb = V::new(max_d);
 
-        Self::conquer(old_recs, new_recs, &mut vf, &mut vb);
+        Self::conquer(old_recs, new_recs, &mut vf, &mut vb, &mut solution);
 
-        (old_changed, new_changed)
+        (old_changed, new_changed, solution)
     }
 
-    pub fn diff(old: &[u8], new: &[u8]) {
-        let (mut old_changed, mut new_changed) = Self::do_diff(old, new);
+    pub fn diff<'a>(old: &'a [u8], new: &'a [u8]) -> Vec<Chunk<'a, [u8]>> {
+        let (mut old_changed, mut new_changed, solution) = Self::do_diff(old, new);
 
-        let old_recs = Records::new(old, &mut old_changed);
-        let new_recs = Records::new(new, &mut new_changed);
+        let old_recs = Records::new(Range::new(old, ..), &mut old_changed);
+        let new_recs = Records::new(Range::new(new, ..), &mut new_changed);
         Self::render_diff(&old_recs, &new_recs);
+        solution.into_iter().map(Chunk::from).collect()
     }
 
-    pub fn diff_str<'a>(old: &'a str, new: &'a str) -> DiffLines<'a> {
+    // XXX Currently only works with ASCII strings
+    pub fn diff_str<'a>(old: &'a str, new: &'a str) -> Vec<Chunk<'a, str>> {
+        let (_old_changed, _new_changed, solution) = Self::do_diff(old.as_bytes(), new.as_bytes());
+
+        solution
+            .into_iter()
+            .map(|diff| match diff {
+                Diff::Equal(range, _) => {
+                    Chunk::Equal(&old[range.offset()..range.offset() + range.len()])
+                }
+                Diff::Delete(range) => {
+                    Chunk::Delete(&old[range.offset()..range.offset() + range.len()])
+                }
+                Diff::Insert(range) => {
+                    Chunk::Insert(&new[range.offset()..range.offset() + range.len()])
+                }
+            })
+            .collect()
+    }
+
+    pub fn diff_str_lines<'a>(old: &'a str, new: &'a str) -> DiffLines<'a> {
         let mut classifier = Classifier::default();
         let (old_lines, old_ids): (Vec<&str>, Vec<u64>) = old
             .lines()
@@ -305,9 +393,9 @@ impl Myers {
             .map(|line| (line, classifier.classify(&line)))
             .unzip();
 
-        let (old_changed, new_changed) = Self::do_diff(&old_ids, &new_ids);
+        let (_old_changed, _new_changed, solution) = Self::do_diff(&old_ids, &new_ids);
 
-        let script = build_edit_script(&old_changed, &new_changed);
+        let script = build_edit_script(&solution);
         DiffLines::new(old_lines, new_lines, script)
     }
 
@@ -320,18 +408,23 @@ impl Myers {
                 println!(
                     "\x1b[0;31m- {: <4}      {}\x1b[0m",
                     num1 + 1,
-                    old.inner[num1],
+                    old.inner.as_slice()[num1],
                 );
                 num1 += 1;
             } else if num2 < new.len() && new.changed[num2] {
                 println!(
                     "\x1b[0;32m+      {: <4} {}\x1b[0m",
                     num2 + 1,
-                    new.inner[num2],
+                    new.inner.as_slice()[num2],
                 );
                 num2 += 1;
             } else {
-                println!("  {: <4} {: <4} {}", num1 + 1, num2 + 1, old.inner[num1],);
+                println!(
+                    "  {: <4} {: <4} {}",
+                    num1 + 1,
+                    num2 + 1,
+                    old.inner.as_slice()[num1],
+                );
                 num1 += 1;
                 num2 += 1;
             }
@@ -500,65 +593,83 @@ impl<'a> DiffLines<'a> {
 
 #[derive(Debug)]
 struct EditRange {
-    old: Range<usize>,
-    new: Range<usize>,
+    old: ops::Range<usize>,
+    new: ops::Range<usize>,
 }
 
 impl EditRange {
-    fn new(old: Range<usize>, new: Range<usize>) -> Self {
+    fn new(old: ops::Range<usize>, new: ops::Range<usize>) -> Self {
         Self { old, new }
     }
 }
 
-fn build_edit_script(changed_a: &[bool], changed_b: &[bool]) -> Vec<EditRange> {
+fn build_edit_script<T>(solution: &[Diff<T>]) -> Vec<EditRange> {
     let mut idx_a = 0;
     let mut idx_b = 0;
 
-    let mut edit_scrpt = Vec::new();
+    let mut edit_script: Vec<EditRange> = Vec::new();
+    let mut script = None;
 
-    while idx_a < changed_a.len() || idx_b < changed_b.len() {
-        match (changed_a.get(idx_a), changed_b.get(idx_b)) {
-            (Some(true), _) | (_, Some(true)) => {
-                let a_start = idx_a;
-                let b_start = idx_b;
-                while let Some(true) = changed_a.get(idx_a) {
-                    idx_a += 1;
+    for diff in solution {
+        match diff {
+            Diff::Equal(range1, range2) => {
+                idx_a += range1.len();
+                idx_b += range2.len();
+                if let Some(script) = script.take() {
+                    edit_script.push(script);
                 }
-                while let Some(true) = changed_b.get(idx_b) {
-                    idx_b += 1;
-                }
-
-                edit_scrpt.push(EditRange::new(a_start..idx_a, b_start..idx_b));
             }
-            _ => {}
+            Diff::Delete(range) => {
+                match &mut script {
+                    Some(s) => s.old.end += range.len(),
+                    None => {
+                        script = Some(EditRange::new(idx_a..idx_a + range.len(), idx_b..idx_b));
+                    }
+                }
+                idx_a += range.len();
+            }
+            Diff::Insert(range) => {
+                match &mut script {
+                    Some(s) => s.new.end += range.len(),
+                    None => {
+                        script = Some(EditRange::new(idx_a..idx_a, idx_b..idx_b + range.len()));
+                    }
+                }
+                idx_b += range.len();
+            }
         }
-
-        idx_a += 1;
-        idx_b += 1;
     }
 
-    edit_scrpt
+    if let Some(script) = script.take() {
+        edit_script.push(script);
+    }
+
+    edit_script
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::diff::{Myers, V};
+    use crate::{
+        diff::{Chunk, Myers, V},
+        range::Range,
+    };
 
     #[test]
     fn diff_test1() {
-        let a = b"ABCABBA";
-        let b = b"CBABAC";
+        let a = Range::new(b"ABCABBA", ..);
+        let b = Range::new(b"CBABAC", ..);
         let max_d = Myers::max_d(a.len(), b.len());
         let mut vf = V::new(max_d);
         let mut vb = V::new(max_d);
-        Myers::find_middle_snake(&a[..], &b[..], &mut vf, &mut vb);
+        Myers::find_middle_snake(a, b, &mut vf, &mut vb);
     }
 
     #[test]
     fn diff_test2() {
         let a = "ABCABBA";
         let b = "CBABAC";
-        Myers::diff(a.as_bytes(), b.as_bytes());
+        let solution = Myers::diff(a.as_bytes(), b.as_bytes());
+        println!("{:#?}", solution);
     }
 
     #[test]
@@ -572,7 +683,27 @@ mod tests {
     fn diff_test4() {
         let a = "bat";
         let b = "map";
-        Myers::diff(a.as_bytes(), b.as_bytes());
+        let solution = Myers::diff(a.as_bytes(), b.as_bytes());
+        let expected: Vec<Chunk<[u8]>> = vec![
+            Chunk::Insert(b"m"),
+            Chunk::Delete(b"b"),
+            Chunk::Equal(b"a"),
+            Chunk::Insert(b"p"),
+            Chunk::Delete(b"t"),
+        ];
+        assert_eq!(solution, expected);
+
+        let solution = Myers::diff_str(a, b);
+        assert_eq!(
+            solution,
+            vec![
+                Chunk::Insert("m"),
+                Chunk::Delete("b"),
+                Chunk::Equal("a"),
+                Chunk::Insert("p"),
+                Chunk::Delete("t"),
+            ]
+        );
     }
 
     #[test]
@@ -586,7 +717,7 @@ mod tests {
     fn diff_str() {
         let a = "A\nB\nC\nA\nB\nB\nA";
         let b = "C\nB\nA\nB\nA\nC";
-        let diff = Myers::diff_str(a, b);
+        let diff = Myers::diff_str_lines(a, b);
         println!("{}", diff.to_patch(3));
     }
 
@@ -644,7 +775,7 @@ The door of all subtleties!
 +The door of all subtleties!
 ";
 
-        let diff = Myers::diff_str(lao, tzu);
+        let diff = Myers::diff_str_lines(lao, tzu);
         assert_eq!(diff.to_patch(3).to_string(), expected);
 
         let expected = "\
