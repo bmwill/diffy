@@ -87,6 +87,73 @@ impl<T: ?Sized> Clone for DiffRange<'_, '_, T> {
     }
 }
 
+impl<'a, 'b> DiffRange<'a, 'b, [u8]> {
+    fn to_str(&self, text1: &'a str, text2: &'b str) -> DiffRange<'a, 'b, str> {
+        fn boundary_down(text: &str, pos: usize) -> usize {
+            let mut adjust = 0;
+            while !text.is_char_boundary(pos - adjust) {
+                adjust += 1;
+            }
+            adjust
+        }
+
+        fn boundary_up(text: &str, pos: usize) -> usize {
+            let mut adjust = 0;
+            while !text.is_char_boundary(pos + adjust) {
+                adjust += 1;
+            }
+            adjust
+        }
+
+        match self {
+            DiffRange::Equal(range1, range2) => {
+                debug_assert_eq!(range1.inner().as_ptr(), text1.as_ptr());
+                debug_assert_eq!(range2.inner().as_ptr(), text2.as_ptr());
+                let mut offset1 = range1.offset();
+                let mut len1 = range1.len();
+                let mut offset2 = range2.offset();
+                let mut len2 = range2.len();
+
+                let adjust = boundary_up(text1, offset1);
+                offset1 += adjust;
+                len1 -= adjust;
+                offset2 += adjust;
+                len2 -= adjust;
+                let adjust = boundary_down(text1, offset1 + len1);
+                len1 -= adjust;
+                len2 -= adjust;
+
+                DiffRange::Equal(
+                    Range::new_str(text1, offset1..offset1 + len1),
+                    Range::new_str(text2, offset2..offset2 + len2),
+                )
+            }
+            DiffRange::Delete(range) => {
+                debug_assert_eq!(range.inner().as_ptr(), text1.as_ptr());
+                let mut offset = range.offset();
+                let mut len = range.len();
+                let adjust = boundary_down(text1, offset);
+                offset -= adjust;
+                len += adjust;
+                let adjust = boundary_up(text1, offset + len);
+                len += adjust;
+                DiffRange::Delete(Range::new_str(text1, offset..offset + len))
+            }
+            DiffRange::Insert(range) => {
+                debug_assert_eq!(range.inner().as_ptr(), text2.as_ptr());
+                let mut offset = range.offset();
+                let mut len = range.len();
+                let adjust = boundary_down(text2, offset);
+                offset -= adjust;
+                len += adjust;
+                let adjust = boundary_up(text2, offset + len);
+                len += adjust;
+                DiffRange::Insert(Range::new_str(text2, offset..offset + len))
+            }
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Diff<'a, T: ?Sized> {
     Equal(&'a T),
@@ -108,6 +175,16 @@ impl<'a, T> From<DiffRange<'a, 'a, [T]>> for Diff<'a, [T]> {
             DiffRange::Equal(range, _) => Diff::Equal(range.as_slice()),
             DiffRange::Delete(range) => Diff::Delete(range.as_slice()),
             DiffRange::Insert(range) => Diff::Insert(range.as_slice()),
+        }
+    }
+}
+
+impl<'a> From<DiffRange<'a, 'a, str>> for Diff<'a, str> {
+    fn from(diff: DiffRange<'a, 'a, str>) -> Self {
+        match diff {
+            DiffRange::Equal(range, _) => Diff::Equal(range.as_str()),
+            DiffRange::Delete(range) => Diff::Delete(range.as_str()),
+            DiffRange::Insert(range) => Diff::Insert(range.as_str()),
         }
     }
 }
@@ -313,23 +390,13 @@ impl Myers {
         solution.into_iter().map(Diff::from).collect()
     }
 
-    // XXX Currently only works with ASCII strings
     pub fn diff_str<'a>(old: &'a str, new: &'a str) -> Vec<Diff<'a, str>> {
         let solution = Self::do_diff(old.as_bytes(), new.as_bytes());
 
         solution
             .into_iter()
-            .map(|diff| match diff {
-                DiffRange::Equal(range, _) => {
-                    Diff::Equal(&old[range.offset()..range.offset() + range.len()])
-                }
-                DiffRange::Delete(range) => {
-                    Diff::Delete(&old[range.offset()..range.offset() + range.len()])
-                }
-                DiffRange::Insert(range) => {
-                    Diff::Insert(&new[range.offset()..range.offset() + range.len()])
-                }
-            })
+            .map(|diff_range| diff_range.to_str(old, new))
+            .map(Diff::from)
             .collect()
     }
 
@@ -768,5 +835,23 @@ The door of all subtleties!
 +The door of all subtleties!
 ";
         assert_eq!(diff.to_patch(1).to_string(), expected);
+    }
+
+    // XXX Fix this test once we implement a cleanup pass to remove the empty Equality
+    // XXX Fix this test once we have a cleanup pass to reorder Deletions before Insertions
+    #[test]
+    fn test_unicode() {
+        // Unicode snowman and unicode comet have the same first two bytes. A
+        // byte-based diff would produce a 2-byte Equal followed by 1-byte Delete
+        // and Insert.
+        let snowman = "\u{2603}";
+        let comet = "\u{2604}";
+        assert_eq!(snowman.as_bytes()[..2], comet.as_bytes()[..2]);
+
+        let d = Myers::diff_str(snowman, comet);
+        assert_eq!(
+            d,
+            vec![Diff::Equal(""), Diff::Insert(comet), Diff::Delete(snowman)]
+        );
     }
 }

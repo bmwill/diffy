@@ -12,7 +12,7 @@ use std::{cmp, fmt::Debug, ops};
 // Range type inspired by the Range type used in [dissimilar](https://docs.rs/dissimilar)
 #[derive(Debug)]
 pub struct Range<'a, T: ?Sized> {
-    text: &'a T,
+    inner: &'a T,
     offset: usize,
     len: usize,
 }
@@ -30,6 +30,10 @@ impl<T: ?Sized> Range<'_, T> {
         self.len == 0
     }
 
+    pub fn inner(&self) -> &T {
+        self.inner
+    }
+
     pub fn len(&self) -> usize {
         self.len
     }
@@ -40,7 +44,7 @@ impl<T: ?Sized> Range<'_, T> {
     pub fn slice(&self, bounds: impl RangeBounds) -> Self {
         let (offset, len) = bounds.index(self.len);
         Range {
-            text: self.text,
+            inner: self.inner,
             offset: self.offset + offset,
             len,
         }
@@ -49,7 +53,7 @@ impl<T: ?Sized> Range<'_, T> {
     pub fn get(&self, bounds: impl RangeBounds) -> Option<Self> {
         let (offset, len) = bounds.try_index(self.len)?;
         Some(Range {
-            text: self.text,
+            inner: self.inner,
             offset: self.offset + offset,
             len,
         })
@@ -61,21 +65,21 @@ impl<T: ?Sized> Range<'_, T> {
 }
 
 impl<'a, T> Range<'a, [T]> {
-    pub fn new(text: &'a [T], bounds: impl RangeBounds) -> Self {
-        let (offset, len) = bounds.index(text.len());
-        Range { text, offset, len }
+    pub fn new(inner: &'a [T], bounds: impl RangeBounds) -> Self {
+        let (offset, len) = bounds.index(inner.len());
+        Range { inner, offset, len }
     }
 
     pub fn empty() -> Self {
         Range {
-            text: &[],
+            inner: &[],
             offset: 0,
             len: 0,
         }
     }
 
     pub fn as_slice(&self) -> &'a [T] {
-        &self.text[self.offset..self.offset + self.len]
+        &self.inner[self.offset..self.offset + self.len]
     }
 
     pub fn iter(&self) -> std::slice::Iter<'a, T> {
@@ -103,6 +107,25 @@ where
             }
         }
         cmp::min(self.len, other.len)
+    }
+}
+
+impl<'a> Range<'a, str> {
+    pub fn new_str(inner: &'a str, bounds: impl RangeBounds) -> Self {
+        let (offset, len) = bounds.index(inner.len());
+        Range { inner, offset, len }
+    }
+
+    pub fn empty_str() -> Self {
+        Range {
+            inner: "",
+            offset: 0,
+            len: 0,
+        }
+    }
+
+    pub fn as_str(&self) -> &'a str {
+        &self.inner[self.offset..self.offset + self.len]
     }
 }
 
