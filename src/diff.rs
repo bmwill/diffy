@@ -73,15 +73,15 @@ impl ::std::fmt::Display for Snake {
 }
 
 #[derive(Debug)]
-pub enum DiffRange<'a, 'b, T> {
+pub enum DiffRange<'a, 'b, T: ?Sized> {
     Equal(Range<'a, T>, Range<'b, T>),
     Delete(Range<'a, T>),
     Insert(Range<'b, T>),
 }
 
-impl<T> Copy for DiffRange<'_, '_, T> {}
+impl<T: ?Sized> Copy for DiffRange<'_, '_, T> {}
 
-impl<T> Clone for DiffRange<'_, '_, T> {
+impl<T: ?Sized> Clone for DiffRange<'_, '_, T> {
     fn clone(&self) -> Self {
         *self
     }
@@ -94,16 +94,16 @@ pub enum Diff<'a, T: ?Sized> {
     Insert(&'a T),
 }
 
-impl<T> Copy for Diff<'_, T> {}
+impl<T: ?Sized> Copy for Diff<'_, T> {}
 
-impl<T> Clone for Diff<'_, T> {
+impl<T: ?Sized> Clone for Diff<'_, T> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, T> From<DiffRange<'a, 'a, T>> for Diff<'a, [T]> {
-    fn from(diff: DiffRange<'a, 'a, T>) -> Self {
+impl<'a, T> From<DiffRange<'a, 'a, [T]>> for Diff<'a, [T]> {
+    fn from(diff: DiffRange<'a, 'a, [T]>) -> Self {
         match diff {
             DiffRange::Equal(range, _) => Diff::Equal(range.as_slice()),
             DiffRange::Delete(range) => Diff::Delete(range.as_slice()),
@@ -128,8 +128,8 @@ impl Myers {
     // forward and reverse directions until furthest reaching forward and reverse paths starting at
     // opposing corners 'overlap'.
     fn find_middle_snake<T: PartialEq>(
-        old: Range<'_, T>,
-        new: Range<'_, T>,
+        old: Range<'_, [T]>,
+        new: Range<'_, [T]>,
         vf: &mut V,
         vb: &mut V,
     ) -> (isize, Snake) {
@@ -239,11 +239,11 @@ impl Myers {
     }
 
     fn conquer<'a, 'b, T: PartialEq>(
-        mut old: Range<'a, T>,
-        mut new: Range<'b, T>,
+        mut old: Range<'a, [T]>,
+        mut new: Range<'b, [T]>,
         vf: &mut V,
         vb: &mut V,
-        solution: &mut Vec<DiffRange<'a, 'b, T>>,
+        solution: &mut Vec<DiffRange<'a, 'b, [T]>>,
     ) {
         // Check for common prefix
         let common_prefix_len = old.common_prefix_len(new);
@@ -289,7 +289,7 @@ impl Myers {
         }
     }
 
-    fn do_diff<'a, 'b, T: PartialEq>(old: &'a [T], new: &'b [T]) -> Vec<DiffRange<'a, 'b, T>> {
+    fn do_diff<'a, 'b, T: PartialEq>(old: &'a [T], new: &'b [T]) -> Vec<DiffRange<'a, 'b, [T]>> {
         let old_recs = Range::new(old, ..);
         let new_recs = Range::new(new, ..);
 
@@ -522,7 +522,7 @@ impl EditRange {
     }
 }
 
-fn build_edit_script<T>(solution: &[DiffRange<T>]) -> Vec<EditRange> {
+fn build_edit_script<T>(solution: &[DiffRange<[T]>]) -> Vec<EditRange> {
     let mut idx_a = 0;
     let mut idx_b = 0;
 

@@ -11,34 +11,21 @@ use std::{cmp, fmt::Debug, ops};
 
 // Range type inspired by the Range type used in [dissimilar](https://docs.rs/dissimilar)
 #[derive(Debug)]
-pub struct Range<'a, T> {
-    text: &'a [T],
+pub struct Range<'a, T: ?Sized> {
+    text: &'a T,
     offset: usize,
     len: usize,
 }
 
-impl<T> Copy for Range<'_, T> {}
+impl<T: ?Sized> Copy for Range<'_, T> {}
 
-impl<T> Clone for Range<'_, T> {
+impl<T: ?Sized> Clone for Range<'_, T> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, T> Range<'a, T> {
-    pub fn new(text: &'a [T], bounds: impl RangeBounds) -> Self {
-        let (offset, len) = bounds.index(text.len());
-        Range { text, offset, len }
-    }
-
-    pub fn empty() -> Self {
-        Range {
-            text: &[],
-            offset: 0,
-            len: 0,
-        }
-    }
-
+impl<T: ?Sized> Range<'_, T> {
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
@@ -71,6 +58,21 @@ impl<'a, T> Range<'a, T> {
     pub fn split_at(&self, mid: usize) -> (Self, Self) {
         (self.slice(..mid), self.slice(mid..))
     }
+}
+
+impl<'a, T> Range<'a, [T]> {
+    pub fn new(text: &'a [T], bounds: impl RangeBounds) -> Self {
+        let (offset, len) = bounds.index(text.len());
+        Range { text, offset, len }
+    }
+
+    pub fn empty() -> Self {
+        Range {
+            text: &[],
+            offset: 0,
+            len: 0,
+        }
+    }
 
     pub fn as_slice(&self) -> &'a [T] {
         &self.text[self.offset..self.offset + self.len]
@@ -81,11 +83,11 @@ impl<'a, T> Range<'a, T> {
     }
 }
 
-impl<'a, T> Range<'a, T>
+impl<'a, T> Range<'a, [T]>
 where
     T: PartialEq,
 {
-    pub fn common_prefix_len(&self, other: Range<'_, T>) -> usize {
+    pub fn common_prefix_len(&self, other: Range<'_, [T]>) -> usize {
         for (i, (item1, item2)) in self.iter().zip(other.iter()).enumerate() {
             if item1 != item2 {
                 return i;
@@ -94,7 +96,7 @@ where
         cmp::min(self.len, other.len)
     }
 
-    pub fn common_suffix_len(&self, other: Range<'_, T>) -> usize {
+    pub fn common_suffix_len(&self, other: Range<'_, [T]>) -> usize {
         for (i, (item1, item2)) in self.iter().rev().zip(other.iter().rev()).enumerate() {
             if item1 != item2 {
                 return i;
