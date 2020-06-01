@@ -124,8 +124,8 @@ impl<'a, 'b> DiffRange<'a, 'b, [u8]> {
                 len2 -= adjust;
 
                 DiffRange::Equal(
-                    Range::new_str(text1, offset1..offset1 + len1),
-                    Range::new_str(text2, offset2..offset2 + len2),
+                    Range::new(text1, offset1..offset1 + len1),
+                    Range::new(text2, offset2..offset2 + len2),
                 )
             }
             DiffRange::Delete(range) => {
@@ -137,7 +137,7 @@ impl<'a, 'b> DiffRange<'a, 'b, [u8]> {
                 len += adjust;
                 let adjust = boundary_up(text1, offset + len);
                 len += adjust;
-                DiffRange::Delete(Range::new_str(text1, offset..offset + len))
+                DiffRange::Delete(Range::new(text1, offset..offset + len))
             }
             DiffRange::Insert(range) => {
                 debug_assert_eq!(range.inner().as_ptr(), text2.as_ptr());
@@ -148,7 +148,7 @@ impl<'a, 'b> DiffRange<'a, 'b, [u8]> {
                 len += adjust;
                 let adjust = boundary_up(text2, offset + len);
                 len += adjust;
-                DiffRange::Insert(Range::new_str(text2, offset..offset + len))
+                DiffRange::Insert(Range::new(text2, offset..offset + len))
             }
         }
     }
@@ -278,12 +278,6 @@ impl Myers {
 
                 // The coordinate of the start of a snake
                 let (x0, y0) = (x, y);
-                //  While these sequences are identical, keep moving through the graph with no cost
-                // if let (Some(s1), Some(s2)) = (
-                //     old.get(..n.saturating_sub(x)),
-                //     new.get(..m.saturating_sub(y)),
-                // ) {
-                //     let advance = s1.common_suffix_len(s2);
                 if x < n && y < m {
                     let advance = old.slice(..n - x).common_suffix_len(new.slice(..m - y));
                     x += advance;
@@ -642,8 +636,8 @@ mod tests {
 
     #[test]
     fn diff_test1() {
-        let a = Range::new(b"ABCABBA", ..);
-        let b = Range::new(b"CBABAC", ..);
+        let a = Range::new(&b"ABCABBA"[..], ..);
+        let b = Range::new(&b"CBABAC"[..], ..);
         let max_d = Myers::max_d(a.len(), b.len());
         let mut vf = V::new(max_d);
         let mut vb = V::new(max_d);

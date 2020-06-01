@@ -1,14 +1,5 @@
 use std::{cmp, fmt::Debug, ops};
 
-// TODO try and have range be generic across &[T] and &str
-// impl<'a, T> Range<'a, [T]> {
-//     //
-// }
-
-// impl<'a> Range<'a, str> {
-//     //
-// }
-
 // Range type inspired by the Range type used in [dissimilar](https://docs.rs/dissimilar)
 #[derive(Debug)]
 pub struct Range<'a, T: ?Sized> {
@@ -65,19 +56,6 @@ impl<T: ?Sized> Range<'_, T> {
 }
 
 impl<'a, T> Range<'a, [T]> {
-    pub fn new(inner: &'a [T], bounds: impl RangeBounds) -> Self {
-        let (offset, len) = bounds.index(inner.len());
-        Range { inner, offset, len }
-    }
-
-    pub fn empty() -> Self {
-        Range {
-            inner: &[],
-            offset: 0,
-            len: 0,
-        }
-    }
-
     pub fn as_slice(&self) -> &'a [T] {
         &self.inner[self.offset..self.offset + self.len]
     }
@@ -111,21 +89,26 @@ where
 }
 
 impl<'a> Range<'a, str> {
-    pub fn new_str(inner: &'a str, bounds: impl RangeBounds) -> Self {
+    pub fn as_str(&self) -> &'a str {
+        &self.inner[self.offset..self.offset + self.len]
+    }
+}
+
+impl<'a, T> Range<'a, T>
+where
+    T: ?Sized + SliceLike,
+{
+    pub fn new(inner: &'a T, bounds: impl RangeBounds) -> Self {
         let (offset, len) = bounds.index(inner.len());
         Range { inner, offset, len }
     }
 
-    pub fn empty_str() -> Self {
+    pub fn empty() -> Range<'a, T> {
         Range {
-            inner: "",
+            inner: T::empty(),
             offset: 0,
             len: 0,
         }
-    }
-
-    pub fn as_str(&self) -> &'a str {
-        &self.inner[self.offset..self.offset + self.len]
     }
 }
 
@@ -174,5 +157,30 @@ impl RangeBounds for ops::RangeTo<usize> {
 impl RangeBounds for ops::RangeFull {
     fn try_index(self, len: usize) -> Option<(usize, usize)> {
         Some((0, len))
+    }
+}
+
+pub trait SliceLike {
+    fn len(&self) -> usize;
+    fn empty<'a>() -> &'a Self;
+}
+
+impl SliceLike for str {
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn empty<'a>() -> &'a str {
+        ""
+    }
+}
+
+impl<T> SliceLike for [T] {
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn empty<'a>() -> &'a [T] {
+        &[]
     }
 }
