@@ -169,22 +169,15 @@ impl<T: ?Sized> Clone for Diff<'_, T> {
     }
 }
 
-impl<'a, T> From<DiffRange<'a, 'a, [T]>> for Diff<'a, [T]> {
-    fn from(diff: DiffRange<'a, 'a, [T]>) -> Self {
+impl<'a, T> From<DiffRange<'a, 'a, T>> for Diff<'a, T>
+where
+    T: ?Sized + crate::range::SliceLike,
+{
+    fn from(diff: DiffRange<'a, 'a, T>) -> Self {
         match diff {
             DiffRange::Equal(range, _) => Diff::Equal(range.as_slice()),
             DiffRange::Delete(range) => Diff::Delete(range.as_slice()),
             DiffRange::Insert(range) => Diff::Insert(range.as_slice()),
-        }
-    }
-}
-
-impl<'a> From<DiffRange<'a, 'a, str>> for Diff<'a, str> {
-    fn from(diff: DiffRange<'a, 'a, str>) -> Self {
-        match diff {
-            DiffRange::Equal(range, _) => Diff::Equal(range.as_str()),
-            DiffRange::Delete(range) => Diff::Delete(range.as_str()),
-            DiffRange::Insert(range) => Diff::Insert(range.as_str()),
         }
     }
 }
