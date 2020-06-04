@@ -1,79 +1,14 @@
 use crate::{
     patch::{Hunk, HunkRange, Line, Patch},
-    range::{DiffRange, Range, SliceLike},
+    range::{DiffRange, SliceLike},
 };
 use std::{
     cmp,
     collections::{hash_map::Entry, HashMap},
     ops,
-    ops::{Index, IndexMut},
 };
 
-// A D-path is a path which starts at (0,0) that has exactly D non-diagonal edges. All D-paths
-// consist of a (D - 1)-path followed by a non-diagonal edge and then a possibly empty sequence of
-// diagonal edges called a snake.
-
-/// `V` contains the endpoints of the furthest reaching `D-paths`. For each recorded endpoint
-/// `(x,y)` in diagonal `k`, we only need to retain `x` because `y` can be computed from `x - k`.
-/// In other words, `V` is an array of integers where `V[k]` contains the row index of the endpoint
-/// of the furthest reaching path in diagonal `k`.
-///
-/// We can't use a traditional Vec to represent `V` since we use `k` as an index and it can take on
-/// negative values. So instead `V` is represented as a light-weight wrapper around a Vec plus an
-/// `offset` which is the maximum value `k` can take on in order to map negative `k`'s back to a
-/// value >= 0.
-#[derive(Debug, Clone)]
-struct V {
-    offset: isize,
-    v: Vec<usize>, // Look into initializing this to -1 and storing isize
-}
-
-impl V {
-    fn new(max_d: usize) -> Self {
-        Self {
-            offset: max_d as isize,
-            v: vec![0; 2 * max_d],
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.v.len()
-    }
-}
-
-impl Index<isize> for V {
-    type Output = usize;
-
-    fn index(&self, index: isize) -> &Self::Output {
-        &self.v[(index + self.offset) as usize]
-    }
-}
-
-impl IndexMut<isize> for V {
-    fn index_mut(&mut self, index: isize) -> &mut Self::Output {
-        &mut self.v[(index + self.offset) as usize]
-    }
-}
-
-/// A `Snake` is a sequence of diagonal edges in the edit graph. It is possible for a snake to have
-/// a length of zero, meaning the start and end points are the same.
-#[derive(Debug)]
-struct Snake {
-    x_start: usize,
-    y_start: usize,
-    x_end: usize,
-    y_end: usize,
-}
-
-impl ::std::fmt::Display for Snake {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        write!(
-            f,
-            "({}, {}) -> ({}, {})",
-            self.x_start, self.y_start, self.x_end, self.y_end
-        )
-    }
-}
+mod myers;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Diff<'a, T: ?Sized> {
@@ -103,230 +38,42 @@ where
     }
 }
 
-pub struct Myers;
+pub fn diff_slice<'a, T: PartialEq>(old: &'a [T], new: &'a [T]) -> Vec<Diff<'a, [T]>> {
+    let mut solution = myers::diff(old, new);
+    compact(&mut solution);
 
-impl Myers {
-    fn max_d(len1: usize, len2: usize) -> usize {
-        // XXX look into reducing the need to have the additional '+ 1'
-        (len1 + len2 + 1) / 2 + 1
-    }
+    solution.into_iter().map(Diff::from).collect()
+}
 
-    // The divide part of a divide-and-conquer strategy. A D-path has D+1 snakes some of which may
-    // be empty. The divide step requires finding the ceil(D/2) + 1 or middle snake of an optimal
-    // D-path. The idea for doing so is to simultaneously run the basic algorithm in both the
-    // forward and reverse directions until furthest reaching forward and reverse paths starting at
-    // opposing corners 'overlap'.
-    fn find_middle_snake<T: PartialEq>(
-        old: Range<'_, [T]>,
-        new: Range<'_, [T]>,
-        vf: &mut V,
-        vb: &mut V,
-    ) -> (isize, Snake) {
-        let n = old.len();
-        let m = new.len();
+pub fn diff<'a>(old: &'a str, new: &'a str) -> Vec<Diff<'a, str>> {
+    let solution = myers::diff(old.as_bytes(), new.as_bytes());
 
-        // By Lemma 1 in the paper, the optimal edit script length is odd or even as `delta` is odd
-        // or even.
-        let delta = n as isize - m as isize;
-        let odd = delta & 1 == 1;
+    let mut solution = solution
+        .into_iter()
+        .map(|diff_range| diff_range.to_str(old, new))
+        .collect();
 
-        // The initial point at (0, -1)
-        vf[1] = 0;
-        // The initial point at (N, M+1)
-        vb[1] = 0;
+    compact(&mut solution);
 
-        // We only need to explore ceil(D/2) + 1
-        let d_max = Self::max_d(n, m);
-        assert!(vf.len() >= d_max);
-        assert!(vb.len() >= d_max);
+    solution.into_iter().map(Diff::from).collect()
+}
 
-        for d in 0..d_max as isize {
-            // Forward path
-            for k in (-d..=d).rev().step_by(2) {
-                let mut x = if k == -d || (k != d && vf[k - 1] < vf[k + 1]) {
-                    vf[k + 1]
-                } else {
-                    vf[k - 1] + 1
-                };
-                let mut y = (x as isize - k) as usize;
+pub fn diff_lines<'a>(old: &'a str, new: &'a str) -> DiffLines<'a> {
+    let mut classifier = Classifier::default();
+    let (old_lines, old_ids): (Vec<&str>, Vec<u64>) = old
+        .lines()
+        .map(|line| (line, classifier.classify(&line)))
+        .unzip();
+    let (new_lines, new_ids): (Vec<&str>, Vec<u64>) = new
+        .lines()
+        .map(|line| (line, classifier.classify(&line)))
+        .unzip();
 
-                // The coordinate of the start of a snake
-                let (x0, y0) = (x, y);
-                //  While these sequences are identical, keep moving through the graph with no cost
-                if let (Some(s1), Some(s2)) = (old.get(x..), new.get(y..)) {
-                    let advance = s1.common_prefix_len(s2);
-                    x += advance;
-                    y += advance;
-                }
+    let mut solution = myers::diff(&old_ids, &new_ids);
+    compact(&mut solution);
 
-                // This is the new best x value
-                vf[k] = x;
-                // Only check for connections from the forward search when N - M is odd
-                // and when there is a reciprocal k line coming from the other direction.
-                if odd && (k - delta).abs() <= (d - 1) {
-                    // TODO optimize this so we don't have to compare against n
-                    if vf[k] + vb[-(k - delta)] >= n {
-                        // Return the snake
-                        let snake = Snake {
-                            x_start: x0,
-                            y_start: y0,
-                            x_end: x,
-                            y_end: y,
-                        };
-                        // Edit distance to this snake is `2 * d - 1`
-                        return (2 * d - 1, snake);
-                    }
-                }
-            }
-
-            // Backward path
-            for k in (-d..=d).rev().step_by(2) {
-                let mut x = if k == -d || (k != d && vb[k - 1] < vb[k + 1]) {
-                    vb[k + 1]
-                } else {
-                    vb[k - 1] + 1
-                };
-                let mut y = (x as isize - k) as usize;
-
-                // The coordinate of the start of a snake
-                let (x0, y0) = (x, y);
-                if x < n && y < m {
-                    let advance = old.slice(..n - x).common_suffix_len(new.slice(..m - y));
-                    x += advance;
-                    y += advance;
-                }
-
-                // This is the new best x value
-                vb[k] = x;
-
-                if !odd && (k - delta).abs() <= d {
-                    // TODO optimize this so we don't have to compare against n
-                    if vb[k] + vf[-(k - delta)] >= n {
-                        // Return the snake
-                        let snake = Snake {
-                            x_start: n - x,
-                            y_start: m - y,
-                            x_end: n - x0,
-                            y_end: m - y0,
-                        };
-                        // Edit distance to this snake is `2 * d`
-                        return (2 * d, snake);
-                    }
-                }
-            }
-
-            // TODO: Maybe there's an opportunity to optimize and bail early?
-        }
-
-        unreachable!("unable to find a middle snake");
-    }
-
-    fn conquer<'a, 'b, T: PartialEq>(
-        mut old: Range<'a, [T]>,
-        mut new: Range<'b, [T]>,
-        vf: &mut V,
-        vb: &mut V,
-        solution: &mut Vec<DiffRange<'a, 'b, [T]>>,
-    ) {
-        // Check for common prefix
-        let common_prefix_len = old.common_prefix_len(new);
-        if common_prefix_len > 0 {
-            let common_prefix = DiffRange::Equal(
-                old.slice(..common_prefix_len),
-                new.slice(..common_prefix_len),
-            );
-            solution.push(common_prefix);
-        }
-
-        old = old.slice(common_prefix_len..old.len());
-        new = new.slice(common_prefix_len..new.len());
-
-        // Check for common suffix
-        let common_suffix_len = old.common_suffix_len(new);
-        let common_suffix = DiffRange::Equal(
-            old.slice(old.len() - common_suffix_len..),
-            new.slice(new.len() - common_suffix_len..),
-        );
-        old = old.slice(..old.len() - common_suffix_len);
-        new = new.slice(..new.len() - common_suffix_len);
-
-        if old.is_empty() {
-            // Inserts
-            solution.push(DiffRange::Insert(new));
-        } else if new.is_empty() {
-            // Deletes
-            solution.push(DiffRange::Delete(old));
-        } else {
-            // Divide & Conquer
-            let (_shortest_edit_script_len, snake) = Self::find_middle_snake(old, new, vf, vb);
-
-            let (old_a, old_b) = old.split_at(snake.x_start);
-            let (new_a, new_b) = new.split_at(snake.y_start);
-
-            Self::conquer(old_a, new_a, vf, vb, solution);
-            Self::conquer(old_b, new_b, vf, vb, solution);
-        }
-
-        if common_suffix_len > 0 {
-            solution.push(common_suffix);
-        }
-    }
-
-    fn do_diff<'a, 'b, T: PartialEq>(old: &'a [T], new: &'b [T]) -> Vec<DiffRange<'a, 'b, [T]>> {
-        let old_recs = Range::new(old, ..);
-        let new_recs = Range::new(new, ..);
-
-        let mut solution = Vec::new();
-
-        // The arrays that hold the 'best possible x values' in search from:
-        // `vf`: top left to bottom right
-        // `vb`: bottom right to top left
-        let max_d = Self::max_d(old.len(), new.len());
-        let mut vf = V::new(max_d);
-        let mut vb = V::new(max_d);
-
-        Self::conquer(old_recs, new_recs, &mut vf, &mut vb, &mut solution);
-
-        solution
-    }
-
-    pub fn diff_slice<'a, T: PartialEq>(old: &'a [T], new: &'a [T]) -> Vec<Diff<'a, [T]>> {
-        let mut solution = Self::do_diff(old, new);
-        compact(&mut solution);
-
-        solution.into_iter().map(Diff::from).collect()
-    }
-
-    pub fn diff<'a>(old: &'a str, new: &'a str) -> Vec<Diff<'a, str>> {
-        let solution = Self::do_diff(old.as_bytes(), new.as_bytes());
-
-        let mut solution = solution
-            .into_iter()
-            .map(|diff_range| diff_range.to_str(old, new))
-            .collect();
-
-        compact(&mut solution);
-
-        solution.into_iter().map(Diff::from).collect()
-    }
-
-    pub fn diff_lines<'a>(old: &'a str, new: &'a str) -> DiffLines<'a> {
-        let mut classifier = Classifier::default();
-        let (old_lines, old_ids): (Vec<&str>, Vec<u64>) = old
-            .lines()
-            .map(|line| (line, classifier.classify(&line)))
-            .unzip();
-        let (new_lines, new_ids): (Vec<&str>, Vec<u64>) = new
-            .lines()
-            .map(|line| (line, classifier.classify(&line)))
-            .unzip();
-
-        let mut solution = Self::do_diff(&old_ids, &new_ids);
-        compact(&mut solution);
-
-        let script = build_edit_script(&solution);
-        DiffLines::new(old_lines, new_lines, script)
-    }
+    let script = build_edit_script(&solution);
+    DiffLines::new(old_lines, new_lines, script)
 }
 
 // Walks through all edits and shifts them up and then down, trying to see if they run into similar
@@ -777,25 +524,15 @@ fn build_edit_script<T>(solution: &[DiffRange<[T]>]) -> Vec<EditRange> {
 mod tests {
     use super::*;
     use crate::{
-        diff::{Diff, DiffRange, Myers, V},
+        diff::{Diff, DiffRange},
         range::Range,
     };
-
-    #[test]
-    fn diff_test1() {
-        let a = Range::new(&b"ABCABBA"[..], ..);
-        let b = Range::new(&b"CBABAC"[..], ..);
-        let max_d = Myers::max_d(a.len(), b.len());
-        let mut vf = V::new(max_d);
-        let mut vb = V::new(max_d);
-        Myers::find_middle_snake(a, b, &mut vf, &mut vb);
-    }
 
     #[test]
     fn diff_test2() {
         let a = "ABCABBA";
         let b = "CBABAC";
-        let solution = Myers::diff(a, b);
+        let solution = diff(a, b);
         assert_eq!(
             solution,
             vec![
@@ -814,7 +551,7 @@ mod tests {
     fn diff_test3() {
         let a = "abgdef";
         let b = "gh";
-        let solution = Myers::diff(a, b);
+        let solution = diff(a, b);
         assert_eq!(
             solution,
             vec![
@@ -830,7 +567,7 @@ mod tests {
     fn diff_test4() {
         let a = "bat";
         let b = "map";
-        let solution = Myers::diff_slice(a.as_bytes(), b.as_bytes());
+        let solution = diff_slice(a.as_bytes(), b.as_bytes());
         let expected: Vec<Diff<[u8]>> = vec![
             Diff::Delete(b"b"),
             Diff::Insert(b"m"),
@@ -840,7 +577,7 @@ mod tests {
         ];
         assert_eq!(solution, expected);
 
-        let solution = Myers::diff(a, b);
+        let solution = diff(a, b);
         assert_eq!(
             solution,
             vec![
@@ -857,7 +594,7 @@ mod tests {
     fn diff_test5() {
         let a = "abc";
         let b = "def";
-        let solution = Myers::diff(a, b);
+        let solution = diff(a, b);
         assert_eq!(solution, vec![Diff::Delete("abc"), Diff::Insert("def")]);
     }
 
@@ -865,7 +602,7 @@ mod tests {
     fn diff_test6() {
         let a = "ACZBDZ";
         let b = "ACBCBDEFD";
-        let solution = Myers::diff(a, b);
+        let solution = diff(a, b);
         assert_eq!(
             solution,
             vec![
@@ -883,7 +620,7 @@ mod tests {
     fn diff_str() {
         let a = "A\nB\nC\nA\nB\nB\nA";
         let b = "C\nB\nA\nB\nA\nC";
-        let diff = Myers::diff_lines(a, b);
+        let diff = diff_lines(a, b);
         let expected = "\
 --- a
 +++ b
@@ -956,7 +693,7 @@ The door of all subtleties!
 +The door of all subtleties!
 ";
 
-        let diff = Myers::diff_lines(lao, tzu);
+        let diff = diff_lines(lao, tzu);
         assert_eq!(diff.to_patch(3).to_string(), expected);
 
         let expected = "\
@@ -1005,7 +742,7 @@ The door of all subtleties!
         let comet = "\u{2604}";
         assert_eq!(snowman.as_bytes()[..2], comet.as_bytes()[..2]);
 
-        let d = Myers::diff(snowman, comet);
+        let d = diff(snowman, comet);
         assert_eq!(d, vec![Diff::Delete(snowman), Diff::Insert(comet)]);
     }
 
@@ -1013,7 +750,7 @@ The door of all subtleties!
     fn test_compact() {
         let a = "1A ";
         let b = "1A B A 2";
-        let solution = Myers::diff(a, b);
+        let solution = diff(a, b);
         let expected = vec![Diff::Equal("1A "), Diff::Insert("B A 2")];
         assert_eq!(solution, expected);
 
@@ -1030,7 +767,7 @@ The door of all subtleties!
 
         let a = "ACBD";
         let b = "ACBCBDEFD";
-        let solution = Myers::diff(a, b);
+        let solution = diff(a, b);
         let expected = vec![Diff::Equal("ACB"), Diff::Insert("CBDEF"), Diff::Equal("D")];
         assert_eq!(solution, expected);
 
