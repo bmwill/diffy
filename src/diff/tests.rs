@@ -237,7 +237,7 @@ fn test_compact() {
         DiffRange::Insert(Range::new(b, 7..)),
     ];
 
-    compact(&mut to_comact);
+    cleanup::compact(&mut to_comact);
     let compacted: Vec<_> = to_comact.into_iter().map(Diff::from).collect();
     assert_eq!(compacted, expected);
 
@@ -254,7 +254,7 @@ fn test_compact() {
         DiffRange::Insert(Range::new(b, 6..)),
     ];
 
-    compact(&mut to_comact);
+    cleanup::compact(&mut to_comact);
     let compacted: Vec<_> = to_comact.into_iter().map(Diff::from).collect();
     assert_eq!(compacted, expected);
 
@@ -283,7 +283,7 @@ fn compact_new() {
         DiffRange::Insert(Range::new(b, 6..)),
     ];
 
-    compact(&mut to_comact);
+    cleanup::compact(&mut to_comact);
     let compacted: Vec<_> = to_comact.iter().cloned().map(Diff::from).collect();
     assert_eq!(compacted, expected);
 
@@ -305,7 +305,7 @@ fn compact_new() {
         DiffRange::Delete(Range::new(b, 6..)),
     ];
 
-    compact(&mut to_comact);
+    cleanup::compact(&mut to_comact);
     let compacted: Vec<_> = to_comact.iter().cloned().map(Diff::from).collect();
     assert_eq!(compacted, expected);
 }
