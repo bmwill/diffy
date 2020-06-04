@@ -1,4 +1,7 @@
-use crate::patch::{Hunk, HunkRange, Line, Patch};
+use crate::{
+    patch::{Hunk, HunkRange, Line, Patch},
+    range::{Range, SliceLike},
+};
 use std::{
     cmp,
     collections::{hash_map::Entry, HashMap},
@@ -87,6 +90,62 @@ impl<T: ?Sized> Clone for DiffRange<'_, '_, T> {
     }
 }
 
+impl<'tmp, 'a: 'tmp, 'b: 'tmp, T> DiffRange<'a, 'b, T>
+where
+    T: ?Sized + SliceLike,
+{
+    fn inner(&self) -> Range<'tmp, T> {
+        match *self {
+            DiffRange::Equal(range, _) | DiffRange::Delete(range) | DiffRange::Insert(range) => {
+                range
+            }
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.inner().is_empty()
+    }
+
+    fn len(&self) -> usize {
+        self.inner().len()
+    }
+
+    fn grow_up(&mut self, adjust: usize) {
+        self.for_each(|range| range.grow_up(adjust));
+    }
+
+    fn grow_down(&mut self, adjust: usize) {
+        self.for_each(|range| range.grow_down(adjust));
+    }
+
+    pub fn shrink_front(&mut self, adjust: usize) {
+        self.for_each(|range| range.shrink_front(adjust));
+    }
+
+    pub fn shrink_back(&mut self, adjust: usize) {
+        self.for_each(|range| range.shrink_back(adjust));
+    }
+
+    fn shift_up(&mut self, adjust: usize) {
+        self.for_each(|range| range.shift_up(adjust));
+    }
+
+    fn shift_down(&mut self, adjust: usize) {
+        self.for_each(|range| range.shift_down(adjust));
+    }
+
+    fn for_each(&mut self, f: impl Fn(&mut Range<'_, T>)) {
+        match self {
+            DiffRange::Equal(range1, range2) => {
+                f(range1);
+                f(range2);
+            }
+            DiffRange::Delete(range) => f(range),
+            DiffRange::Insert(range) => f(range),
+        }
+    }
+}
+
 impl<'a, 'b> DiffRange<'a, 'b, [u8]> {
     fn to_str(&self, text1: &'a str, text2: &'b str) -> DiffRange<'a, 'b, str> {
         fn boundary_down(text: &str, pos: usize) -> usize {
@@ -171,7 +230,7 @@ impl<T: ?Sized> Clone for Diff<'_, T> {
 
 impl<'a, T> From<DiffRange<'a, 'a, T>> for Diff<'a, T>
 where
-    T: ?Sized + crate::range::SliceLike,
+    T: ?Sized + SliceLike,
 {
     fn from(diff: DiffRange<'a, 'a, T>) -> Self {
         match diff {
@@ -181,8 +240,6 @@ where
         }
     }
 }
-
-use crate::range::Range;
 
 pub struct Myers;
 
