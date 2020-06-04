@@ -429,7 +429,8 @@ impl Myers {
     }
 
     pub fn diff_slice<'a, T: PartialEq>(old: &'a [T], new: &'a [T]) -> Vec<Diff<'a, [T]>> {
-        let solution = Self::do_diff(old, new);
+        let mut solution = Self::do_diff(old, new);
+        compact(&mut solution);
 
         solution.into_iter().map(Diff::from).collect()
     }
@@ -437,11 +438,14 @@ impl Myers {
     pub fn diff<'a>(old: &'a str, new: &'a str) -> Vec<Diff<'a, str>> {
         let solution = Self::do_diff(old.as_bytes(), new.as_bytes());
 
-        solution
+        let mut solution = solution
             .into_iter()
             .map(|diff_range| diff_range.to_str(old, new))
-            .map(Diff::from)
-            .collect()
+            .collect();
+
+        compact(&mut solution);
+
+        solution.into_iter().map(Diff::from).collect()
     }
 
     pub fn diff_lines<'a>(old: &'a str, new: &'a str) -> DiffLines<'a> {
@@ -455,11 +459,242 @@ impl Myers {
             .map(|line| (line, classifier.classify(&line)))
             .unzip();
 
-        let solution = Self::do_diff(&old_ids, &new_ids);
+        let mut solution = Self::do_diff(&old_ids, &new_ids);
+        compact(&mut solution);
 
         let script = build_edit_script(&solution);
         DiffLines::new(old_lines, new_lines, script)
     }
+}
+
+// Walks through all edits and shifts them up and then down, trying to see if they run into similar
+// edits which can be merged
+fn compact<'a, 'b, T: ?Sized + SliceLike>(diffs: &mut Vec<DiffRange<'a, 'b, T>>) {
+    // First attempt to compact all Deletions
+    let mut pointer = 0;
+    while let Some(&diff) = diffs.get(pointer) {
+        if let DiffRange::Delete(_) = diff {
+            pointer = shift_diff_up(diffs, pointer);
+            pointer = shift_diff_down(diffs, pointer);
+        }
+        pointer += 1;
+    }
+
+    // TODO maybe able to merge these and do them in the same pass?
+    // Then attempt to compact all Deletions
+    let mut pointer = 0;
+    while let Some(&diff) = diffs.get(pointer) {
+        if let DiffRange::Insert(_) = diff {
+            pointer = shift_diff_up(diffs, pointer);
+            pointer = shift_diff_down(diffs, pointer);
+        }
+        pointer += 1;
+    }
+}
+
+// Attempts to shift the Insertion or Deletion at location `pointer` as far upwards as possible.
+fn shift_diff_up<'a, 'b, T: ?Sized + SliceLike>(
+    diffs: &mut Vec<DiffRange<'a, 'b, T>>,
+    mut pointer: usize,
+) -> usize {
+    while let Some(&prev_diff) = pointer.checked_sub(1).and_then(|idx| diffs.get(idx)) {
+        match (diffs[pointer], prev_diff) {
+            //
+            // Shift Inserts Upwards
+            //
+            (DiffRange::Insert(this_diff), DiffRange::Equal(prev_diff1, _)) => {
+                // check common suffix for the amount we can shift
+                let suffix_len = this_diff.common_suffix_len(prev_diff1);
+                if suffix_len != 0 {
+                    if let Some(DiffRange::Equal(..)) = diffs.get(pointer + 1) {
+                        diffs[pointer + 1].grow_up(suffix_len);
+                    } else {
+                        diffs.insert(
+                            pointer + 1,
+                            DiffRange::Equal(
+                                prev_diff1.slice(prev_diff1.len() - suffix_len..),
+                                this_diff.slice(this_diff.len() - suffix_len..),
+                            ),
+                        );
+                    }
+                    diffs[pointer].shift_up(suffix_len);
+                    diffs[pointer - 1].shrink_back(suffix_len);
+
+                    if diffs[pointer - 1].is_empty() {
+                        diffs.remove(pointer - 1);
+                        pointer -= 1;
+                    }
+                } else if diffs[pointer - 1].is_empty() {
+                    diffs.remove(pointer - 1);
+                    pointer -= 1;
+                } else {
+                    // We can't shift upwards anymore
+                    break;
+                }
+            }
+
+            //
+            // Shift Deletions Upwards
+            //
+            (DiffRange::Delete(this_diff), DiffRange::Equal(_, prev_diff2)) => {
+                // check common suffix for the amount we can shift
+                let suffix_len = this_diff.common_suffix_len(prev_diff2);
+                if suffix_len != 0 {
+                    if let Some(DiffRange::Equal(..)) = diffs.get(pointer + 1) {
+                        diffs[pointer + 1].grow_up(suffix_len);
+                    } else {
+                        diffs.insert(
+                            pointer + 1,
+                            DiffRange::Equal(
+                                this_diff.slice(this_diff.len() - suffix_len..),
+                                prev_diff2.slice(prev_diff2.len() - suffix_len..),
+                            ),
+                        );
+                    }
+                    diffs[pointer].shift_up(suffix_len);
+                    diffs[pointer - 1].shrink_back(suffix_len);
+
+                    if diffs[pointer - 1].is_empty() {
+                        diffs.remove(pointer - 1);
+                        pointer -= 1;
+                    }
+                } else if diffs[pointer - 1].is_empty() {
+                    diffs.remove(pointer - 1);
+                    pointer -= 1;
+                } else {
+                    // We can't shift upwards anymore
+                    break;
+                }
+            }
+
+            //
+            // Swap the Delete and Insert
+            //
+            (DiffRange::Insert(_), DiffRange::Delete(_))
+            | (DiffRange::Delete(_), DiffRange::Insert(_)) => {
+                diffs.swap(pointer - 1, pointer);
+                pointer -= 1;
+            }
+
+            //
+            // Merge the two ranges
+            //
+            (this_diff @ DiffRange::Insert(_), DiffRange::Insert(_))
+            | (this_diff @ DiffRange::Delete(_), DiffRange::Delete(_)) => {
+                diffs[pointer - 1].grow_down(this_diff.len());
+                diffs.remove(pointer);
+                pointer -= 1;
+            }
+
+            _ => panic!("range to shift must be either Insert or Delete"),
+        }
+    }
+
+    pointer
+}
+
+// Attempts to shift the Insertion or Deletion at location `pointer` as far downwards as possible.
+fn shift_diff_down<'a, 'b, T: ?Sized + SliceLike>(
+    diffs: &mut Vec<DiffRange<'a, 'b, T>>,
+    mut pointer: usize,
+) -> usize {
+    while let Some(&next_diff) = pointer.checked_add(1).and_then(|idx| diffs.get(idx)) {
+        match (diffs[pointer], next_diff) {
+            //
+            // Shift Insert Downward
+            //
+            (DiffRange::Insert(this_diff), DiffRange::Equal(next_diff1, _)) => {
+                // check common prefix for the amoutn we can shift
+                let prefix_len = this_diff.common_prefix_len(next_diff1);
+                if prefix_len != 0 {
+                    if let Some(DiffRange::Equal(..)) =
+                        pointer.checked_sub(1).and_then(|idx| diffs.get(idx))
+                    {
+                        diffs[pointer - 1].grow_down(prefix_len);
+                    } else {
+                        diffs.insert(
+                            pointer,
+                            DiffRange::Equal(
+                                next_diff1.slice(..prefix_len),
+                                this_diff.slice(..prefix_len),
+                            ),
+                        );
+                        pointer += 1;
+                    }
+
+                    diffs[pointer].shift_down(prefix_len);
+                    diffs[pointer + 1].shrink_front(prefix_len);
+
+                    if diffs[pointer + 1].is_empty() {
+                        diffs.remove(pointer + 1);
+                    }
+                } else if diffs[pointer + 1].is_empty() {
+                    diffs.remove(pointer + 1);
+                } else {
+                    // We can't shift downwards anymore
+                    break;
+                }
+            }
+
+            //
+            // Shift Deletion Downward
+            //
+            (DiffRange::Delete(this_diff), DiffRange::Equal(_, next_diff2)) => {
+                // check common prefix for the amoutn we can shift
+                let prefix_len = this_diff.common_prefix_len(next_diff2);
+                if prefix_len != 0 {
+                    if let Some(DiffRange::Equal(..)) =
+                        pointer.checked_sub(1).and_then(|idx| diffs.get(idx))
+                    {
+                        diffs[pointer - 1].grow_down(prefix_len);
+                    } else {
+                        diffs.insert(
+                            pointer,
+                            DiffRange::Equal(
+                                this_diff.slice(..prefix_len),
+                                next_diff2.slice(..prefix_len),
+                            ),
+                        );
+                        pointer += 1;
+                    }
+
+                    diffs[pointer].shift_down(prefix_len);
+                    diffs[pointer + 1].shrink_front(prefix_len);
+
+                    if diffs[pointer + 1].is_empty() {
+                        diffs.remove(pointer + 1);
+                    }
+                } else if diffs[pointer + 1].is_empty() {
+                    diffs.remove(pointer + 1);
+                } else {
+                    // We can't shift downwards anymore
+                    break;
+                }
+            }
+
+            //
+            // Swap the Delete and Insert
+            //
+            (DiffRange::Insert(_), DiffRange::Delete(_))
+            | (DiffRange::Delete(_), DiffRange::Insert(_)) => {
+                diffs.swap(pointer, pointer + 1);
+                pointer += 1;
+            }
+
+            //
+            // Merge the two ranges
+            //
+            (DiffRange::Insert(_), next_diff @ DiffRange::Insert(_))
+            | (DiffRange::Delete(_), next_diff @ DiffRange::Delete(_)) => {
+                diffs[pointer].grow_down(next_diff.len());
+                diffs.remove(pointer + 1);
+            }
+
+            _ => panic!("range to shift must be either Insert or Delete"),
+        }
+    }
+
+    pointer
 }
 
 #[derive(Default)]
@@ -678,8 +913,9 @@ fn build_edit_script<T>(solution: &[DiffRange<[T]>]) -> Vec<EditRange> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
-        diff::{Diff, Myers, V},
+        diff::{Diff, DiffRange, Myers, V},
         range::Range,
     };
 
@@ -722,8 +958,8 @@ mod tests {
             vec![
                 Diff::Delete("ab"),
                 Diff::Equal("g"),
-                Diff::Insert("h"),
                 Diff::Delete("def"),
+                Diff::Insert("h"),
             ]
         );
     }
@@ -734,11 +970,11 @@ mod tests {
         let b = "map";
         let solution = Myers::diff_slice(a.as_bytes(), b.as_bytes());
         let expected: Vec<Diff<[u8]>> = vec![
-            Diff::Insert(b"m"),
             Diff::Delete(b"b"),
+            Diff::Insert(b"m"),
             Diff::Equal(b"a"),
-            Diff::Insert(b"p"),
             Diff::Delete(b"t"),
+            Diff::Insert(b"p"),
         ];
         assert_eq!(solution, expected);
 
@@ -746,11 +982,11 @@ mod tests {
         assert_eq!(
             solution,
             vec![
-                Diff::Insert("m"),
                 Diff::Delete("b"),
+                Diff::Insert("m"),
                 Diff::Equal("a"),
-                Diff::Insert("p"),
                 Diff::Delete("t"),
+                Diff::Insert("p"),
             ]
         );
     }
@@ -760,7 +996,25 @@ mod tests {
         let a = "abc";
         let b = "def";
         let solution = Myers::diff(a, b);
-        assert_eq!(solution, vec![Diff::Insert("def"), Diff::Delete("abc"),]);
+        assert_eq!(solution, vec![Diff::Delete("abc"), Diff::Insert("def")]);
+    }
+
+    #[test]
+    fn diff_test6() {
+        let a = "ACZBDZ";
+        let b = "ACBCBDEFD";
+        let solution = Myers::diff(a, b);
+        assert_eq!(
+            solution,
+            vec![
+                Diff::Equal("AC"),
+                Diff::Delete("Z"),
+                Diff::Equal("B"),
+                Diff::Insert("CBDEF"),
+                Diff::Equal("D"),
+                Diff::Delete("Z"),
+            ]
+        );
     }
 
     #[test]
@@ -880,8 +1134,6 @@ The door of all subtleties!
         assert_eq!(diff.to_patch(1).to_string(), expected);
     }
 
-    // XXX Fix this test once we implement a cleanup pass to remove the empty Equality
-    // XXX Fix this test once we have a cleanup pass to reorder Deletions before Insertions
     #[test]
     fn test_unicode() {
         // Unicode snowman and unicode comet have the same first two bytes. A
@@ -892,9 +1144,94 @@ The door of all subtleties!
         assert_eq!(snowman.as_bytes()[..2], comet.as_bytes()[..2]);
 
         let d = Myers::diff(snowman, comet);
-        assert_eq!(
-            d,
-            vec![Diff::Equal(""), Diff::Insert(comet), Diff::Delete(snowman)]
-        );
+        assert_eq!(d, vec![Diff::Delete(snowman), Diff::Insert(comet)]);
+    }
+
+    #[test]
+    fn test_compact() {
+        let a = "1A ";
+        let b = "1A B A 2";
+        let solution = Myers::diff(a, b);
+        let expected = vec![Diff::Equal("1A "), Diff::Insert("B A 2")];
+        assert_eq!(solution, expected);
+
+        let mut to_comact = vec![
+            DiffRange::Equal(Range::new(a, ..1), Range::new(b, ..1)),
+            DiffRange::Insert(Range::new(b, 1..5)),
+            DiffRange::Equal(Range::new(a, 1..), Range::new(b, 5..7)),
+            DiffRange::Insert(Range::new(b, 7..)),
+        ];
+
+        compact(&mut to_comact);
+        let compacted: Vec<_> = to_comact.into_iter().map(Diff::from).collect();
+        assert_eq!(compacted, expected);
+
+        let a = "ACBD";
+        let b = "ACBCBDEFD";
+        let solution = Myers::diff(a, b);
+        let expected = vec![Diff::Equal("ACB"), Diff::Insert("CBDEF"), Diff::Equal("D")];
+        assert_eq!(solution, expected);
+
+        let mut to_comact = vec![
+            DiffRange::Equal(Range::new(a, ..2), Range::new(b, ..2)),
+            DiffRange::Insert(Range::new(b, 2..4)),
+            DiffRange::Equal(Range::new(a, 2..4), Range::new(b, 4..6)),
+            DiffRange::Insert(Range::new(b, 6..)),
+        ];
+
+        compact(&mut to_comact);
+        let compacted: Vec<_> = to_comact.into_iter().map(Diff::from).collect();
+        assert_eq!(compacted, expected);
+
+        // actual: `[Equal("AC"), Delete("Z"), Insert("BC"), Equal("BD"), Delete("Z"), Insert("EFD")]`,
+        // expected: `[Equal("AC"), Delete("Z"), Equal("B"), Insert("CBDEF"), Equal("D"), Delete("Z")]`', src/diff.rs:1094:9
+    }
+
+    #[test]
+    fn compact_new() {
+        let a = "ACZBDZ";
+        let b = "ACBCBDEFD";
+        let expected = vec![
+            Diff::Equal("AC"),
+            Diff::Delete("Z"),
+            Diff::Equal("B"),
+            Diff::Insert("CBDEF"),
+            Diff::Equal("D"),
+            Diff::Delete("Z"),
+        ];
+        let mut to_comact = vec![
+            DiffRange::Equal(Range::new(a, ..2), Range::new(b, ..2)),
+            DiffRange::Delete(Range::new(a, 2..3)),
+            DiffRange::Insert(Range::new(b, 2..4)),
+            DiffRange::Equal(Range::new(a, 3..5), Range::new(b, 4..6)),
+            DiffRange::Delete(Range::new(a, 5..6)),
+            DiffRange::Insert(Range::new(b, 6..)),
+        ];
+
+        compact(&mut to_comact);
+        let compacted: Vec<_> = to_comact.iter().cloned().map(Diff::from).collect();
+        assert_eq!(compacted, expected);
+
+        // Flip it
+        let expected = vec![
+            Diff::Equal("AC"),
+            Diff::Insert("Z"),
+            Diff::Equal("B"),
+            Diff::Delete("CBDEF"),
+            Diff::Equal("D"),
+            Diff::Insert("Z"),
+        ];
+        let mut to_comact = vec![
+            DiffRange::Equal(Range::new(a, ..2), Range::new(b, ..2)),
+            DiffRange::Insert(Range::new(a, 2..3)),
+            DiffRange::Delete(Range::new(b, 2..4)),
+            DiffRange::Equal(Range::new(a, 3..5), Range::new(b, 4..6)),
+            DiffRange::Insert(Range::new(a, 5..6)),
+            DiffRange::Delete(Range::new(b, 6..)),
+        ];
+
+        compact(&mut to_comact);
+        let compacted: Vec<_> = to_comact.iter().cloned().map(Diff::from).collect();
+        assert_eq!(compacted, expected);
     }
 }
