@@ -83,14 +83,8 @@ impl DiffOptions {
 
     pub fn create_patch<'a>(&self, original: &'a str, modified: &'a str) -> Patch<'a> {
         let mut classifier = Classifier::default();
-        let (old_lines, old_ids): (Vec<&str>, Vec<u64>) = original
-            .lines()
-            .map(|line| (line, classifier.classify(&line)))
-            .unzip();
-        let (new_lines, new_ids): (Vec<&str>, Vec<u64>) = modified
-            .lines()
-            .map(|line| (line, classifier.classify(&line)))
-            .unzip();
+        let (old_lines, old_ids) = classifier.classify_lines(original);
+        let (new_lines, new_ids) = classifier.classify_lines(modified);
 
         let mut solution = myers::diff(&old_ids, &new_ids);
 
@@ -144,6 +138,12 @@ impl<'a> Classifier<'a> {
                 *v.insert(id)
             }
         }
+    }
+
+    fn classify_lines(&mut self, text: &'a str) -> (Vec<&'a str>, Vec<u64>) {
+        text.lines()
+            .map(|line| (line, self.classify(&line)))
+            .unzip()
     }
 }
 
