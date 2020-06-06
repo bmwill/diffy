@@ -179,20 +179,12 @@ fn to_patch<'a>(
 
         loop {
             // Delete lines from text1
-            for line in lines1
-                .get(script.old.start..script.old.end)
-                .into_iter()
-                .flatten()
-            {
+            for line in lines1.get(script.old.clone()).into_iter().flatten() {
                 lines.push(Line::Delete(line));
             }
 
             // Insert lines from text2
-            for line in lines2
-                .get(script.new.start..script.new.end)
-                .into_iter()
-                .flatten()
-            {
+            for line in lines2.get(script.new.clone()).into_iter().flatten() {
                 lines.push(Line::Insert(line));
             }
 
