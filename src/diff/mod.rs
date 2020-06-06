@@ -42,41 +42,90 @@ where
     }
 }
 
-pub fn diff_slice<'a, T: PartialEq>(old: &'a [T], new: &'a [T]) -> Vec<Diff<'a, [T]>> {
-    let mut solution = myers::diff(old, new);
-    cleanup::compact(&mut solution);
-
-    solution.into_iter().map(Diff::from).collect()
+#[derive(Debug)]
+pub struct DiffOptions {
+    compact: bool,
+    context_len: usize,
 }
 
-pub fn diff<'a>(old: &'a str, new: &'a str) -> Vec<Diff<'a, str>> {
-    let solution = myers::diff(old.as_bytes(), new.as_bytes());
+impl DiffOptions {
+    pub fn new() -> Self {
+        Self {
+            compact: true,
+            context_len: 3,
+        }
+    }
 
-    let mut solution = solution
-        .into_iter()
-        .map(|diff_range| diff_range.to_str(old, new))
-        .collect();
+    pub fn set_context_len(&mut self, context_len: usize) -> &mut Self {
+        self.context_len = context_len;
+        self
+    }
 
-    cleanup::compact(&mut solution);
+    pub fn set_compact(&mut self, compact: bool) -> &mut Self {
+        self.compact = compact;
+        self
+    }
 
-    solution.into_iter().map(Diff::from).collect()
+    pub fn diff<'a>(&self, original: &'a str, modified: &'a str) -> Vec<Diff<'a, str>> {
+        let solution = myers::diff(original.as_bytes(), modified.as_bytes());
+
+        let mut solution = solution
+            .into_iter()
+            .map(|diff_range| diff_range.to_str(original, modified))
+            .collect();
+
+        if self.compact {
+            cleanup::compact(&mut solution);
+        }
+
+        solution.into_iter().map(Diff::from).collect()
+    }
+
+    pub fn create_patch<'a>(&self, original: &'a str, modified: &'a str) -> Patch<'a> {
+        let mut classifier = Classifier::default();
+        let (old_lines, old_ids): (Vec<&str>, Vec<u64>) = original
+            .lines()
+            .map(|line| (line, classifier.classify(&line)))
+            .unzip();
+        let (new_lines, new_ids): (Vec<&str>, Vec<u64>) = modified
+            .lines()
+            .map(|line| (line, classifier.classify(&line)))
+            .unzip();
+
+        let mut solution = myers::diff(&old_ids, &new_ids);
+
+        if self.compact {
+            cleanup::compact(&mut solution);
+        }
+
+        to_patch(&old_lines, &new_lines, &solution, self.context_len)
+    }
+
+    // TODO determine if this should be exposed in the public API
+    #[allow(dead_code)]
+    fn diff_slice<'a, T: PartialEq>(&self, old: &'a [T], new: &'a [T]) -> Vec<Diff<'a, [T]>> {
+        let mut solution = myers::diff(old, new);
+
+        if self.compact {
+            cleanup::compact(&mut solution);
+        }
+
+        solution.into_iter().map(Diff::from).collect()
+    }
 }
 
-pub fn create_patch<'a>(original: &'a str, modified: &'a str, context_len: usize) -> Patch<'a> {
-    let mut classifier = Classifier::default();
-    let (old_lines, old_ids): (Vec<&str>, Vec<u64>) = original
-        .lines()
-        .map(|line| (line, classifier.classify(&line)))
-        .unzip();
-    let (new_lines, new_ids): (Vec<&str>, Vec<u64>) = modified
-        .lines()
-        .map(|line| (line, classifier.classify(&line)))
-        .unzip();
+impl Default for DiffOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
-    let mut solution = myers::diff(&old_ids, &new_ids);
-    cleanup::compact(&mut solution);
+pub fn diff<'a>(original: &'a str, modified: &'a str) -> Vec<Diff<'a, str>> {
+    DiffOptions::default().diff(original, modified)
+}
 
-    to_patch(&old_lines, &new_lines, &solution, context_len)
+pub fn create_patch<'a>(original: &'a str, modified: &'a str) -> Patch<'a> {
+    DiffOptions::default().create_patch(original, modified)
 }
 
 #[derive(Default)]

@@ -43,7 +43,7 @@ fn diff_test3() {
 fn diff_test4() {
     let a = "bat";
     let b = "map";
-    let solution = diff_slice(a.as_bytes(), b.as_bytes());
+    let solution = DiffOptions::default().diff_slice(a.as_bytes(), b.as_bytes());
     let expected: Vec<Diff<[u8]>> = vec![
         Diff::Delete(b"b"),
         Diff::Insert(b"m"),
@@ -96,7 +96,7 @@ fn diff_test6() {
 fn diff_str() {
     let a = "A\nB\nC\nA\nB\nB\nA";
     let b = "C\nB\nA\nB\nA\nC";
-    let patch = create_patch(a, b, 3);
+    let patch = create_patch(a, b);
     let expected = "\
 --- a
 +++ b
@@ -117,6 +117,7 @@ fn diff_str() {
 
 #[test]
 fn sample() {
+    let mut opts = DiffOptions::default();
     let lao = "\
 The Way that can be told of is not the eternal Way;
 The name that can be named is not the eternal name.
@@ -169,7 +170,7 @@ The door of all subtleties!
 +The door of all subtleties!
 ";
 
-    assert_eq!(create_patch(lao, tzu, 3).to_string(), expected);
+    assert_eq!(opts.create_patch(lao, tzu).to_string(), expected);
 
     let expected = "\
 --- a
@@ -186,7 +187,8 @@ The door of all subtleties!
 +Deeper and more profound,
 +The door of all subtleties!
 ";
-    assert_eq!(create_patch(lao, tzu, 0).to_string(), expected);
+    opts.set_context_len(0);
+    assert_eq!(opts.create_patch(lao, tzu).to_string(), expected);
 
     let expected = "\
 --- a
@@ -205,7 +207,8 @@ The door of all subtleties!
 +Deeper and more profound,
 +The door of all subtleties!
 ";
-    assert_eq!(create_patch(lao, tzu, 1).to_string(), expected);
+    opts.set_context_len(1);
+    assert_eq!(opts.create_patch(lao, tzu).to_string(), expected);
 }
 
 #[test]
