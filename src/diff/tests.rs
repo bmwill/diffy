@@ -96,7 +96,7 @@ fn diff_test6() {
 fn diff_str() {
     let a = "A\nB\nC\nA\nB\nB\nA";
     let b = "C\nB\nA\nB\nA\nC";
-    let diff = diff_lines(a, b);
+    let patch = create_patch(a, b, 3);
     let expected = "\
 --- a
 +++ b
@@ -112,7 +112,7 @@ fn diff_str() {
 +C
 ";
 
-    assert_eq!(diff.to_patch(3).to_string(), expected);
+    assert_eq!(patch.to_string(), expected);
 }
 
 #[test]
@@ -169,8 +169,7 @@ The door of all subtleties!
 +The door of all subtleties!
 ";
 
-    let diff = diff_lines(lao, tzu);
-    assert_eq!(diff.to_patch(3).to_string(), expected);
+    assert_eq!(create_patch(lao, tzu, 3).to_string(), expected);
 
     let expected = "\
 --- a
@@ -187,7 +186,7 @@ The door of all subtleties!
 +Deeper and more profound,
 +The door of all subtleties!
 ";
-    assert_eq!(diff.to_patch(0).to_string(), expected);
+    assert_eq!(create_patch(lao, tzu, 0).to_string(), expected);
 
     let expected = "\
 --- a
@@ -206,7 +205,7 @@ The door of all subtleties!
 +Deeper and more profound,
 +The door of all subtleties!
 ";
-    assert_eq!(diff.to_patch(1).to_string(), expected);
+    assert_eq!(create_patch(lao, tzu, 1).to_string(), expected);
 }
 
 #[test]

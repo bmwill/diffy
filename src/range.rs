@@ -33,6 +33,10 @@ impl<'a, T: ?Sized> Range<'a, T> {
         self.offset
     }
 
+    pub fn range(&self) -> ops::Range<usize> {
+        self.offset..self.offset + self.len
+    }
+
     pub fn grow_up(&mut self, adjust: usize) {
         self.offset -= adjust;
         self.len += adjust;
