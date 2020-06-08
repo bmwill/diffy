@@ -141,9 +141,32 @@ impl<'a> Classifier<'a> {
     }
 
     fn classify_lines(&mut self, text: &'a str) -> (Vec<&'a str>, Vec<u64>) {
-        text.lines()
+        LineIter(text)
             .map(|line| (line, self.classify(&line)))
             .unzip()
+    }
+}
+
+/// Iterator over the lines of a string, including the `\n` character.
+struct LineIter<'a>(&'a str);
+
+impl<'a> Iterator for LineIter<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.0.is_empty() {
+            return None;
+        }
+
+        let end = if let Some(idx) = self.0.find('\n') {
+            idx + 1
+        } else {
+            self.0.len()
+        };
+
+        let (line, remaining) = self.0.split_at(end);
+        self.0 = remaining;
+        Some(line)
     }
 }
 

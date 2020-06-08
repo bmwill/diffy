@@ -94,8 +94,8 @@ fn diff_test6() {
 
 #[test]
 fn diff_str() {
-    let a = "A\nB\nC\nA\nB\nB\nA";
-    let b = "C\nB\nA\nB\nA\nC";
+    let a = "A\nB\nC\nA\nB\nB\nA\n";
+    let b = "C\nB\nA\nB\nA\nC\n";
     let patch = create_patch(a, b);
     let expected = "\
 --- a
@@ -209,6 +209,63 @@ The door of all subtleties!
 ";
     opts.set_context_len(1);
     assert_eq!(opts.create_patch(lao, tzu).to_string(), expected);
+}
+
+#[test]
+fn no_newline_at_eof() {
+    let old = "old line";
+    let new = "new line";
+
+    let expected = "\
+--- a
++++ b
+@@ -1 +1 @@
+-old line
+\\ No newline at end of file
++new line
+\\ No newline at end of file
+";
+    assert_eq!(create_patch(old, new).to_string(), expected);
+
+    let old = "old line\n";
+    let new = "new line";
+
+    let expected = "\
+--- a
++++ b
+@@ -1 +1 @@
+-old line
++new line
+\\ No newline at end of file
+";
+    assert_eq!(create_patch(old, new).to_string(), expected);
+
+    let old = "old line";
+    let new = "new line\n";
+
+    let expected = "\
+--- a
++++ b
+@@ -1 +1 @@
+-old line
+\\ No newline at end of file
++new line
+";
+    assert_eq!(create_patch(old, new).to_string(), expected);
+
+    let old = "old line\ncommon line";
+    let new = "new line\ncommon line";
+
+    let expected = "\
+--- a
++++ b
+@@ -1,2 +1,2 @@
+-old line
++new line
+ common line
+\\ No newline at end of file
+";
+    assert_eq!(create_patch(old, new).to_string(), expected);
 }
 
 #[test]

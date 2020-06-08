@@ -5,17 +5,11 @@ pub struct Patch<'a> {
     old: Option<&'a str>,
     new: Option<&'a str>,
     hunks: Vec<Hunk<'a>>,
-    eof_newline: bool,
 }
 
 impl<'a> Patch<'a> {
     pub(crate) fn new(old: Option<&'a str>, new: Option<&'a str>, hunks: Vec<Hunk<'a>>) -> Self {
-        Self {
-            old,
-            new,
-            hunks,
-            eof_newline: true,
-        }
+        Self { old, new, hunks }
     }
 }
 
@@ -73,7 +67,7 @@ impl fmt::Display for Hunk<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "@@ -{} +{} @@", self.old_range, self.new_range)?;
         for line in &self.lines {
-            writeln!(f, "{}", line)?;
+            write!(f, "{}", line)?;
         }
         Ok(())
     }
@@ -115,10 +109,18 @@ pub enum Line<'a> {
 
 impl fmt::Display for Line<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Line::Context(line) => write!(f, " {}", line),
-            Line::Delete(line) => write!(f, "-{}", line),
-            Line::Insert(line) => write!(f, "+{}", line),
+        let (sign, line) = match self {
+            Line::Context(line) => (' ', line),
+            Line::Delete(line) => ('-', line),
+            Line::Insert(line) => ('+', line),
+        };
+
+        write!(f, "{}{}", sign, line)?;
+
+        if !line.ends_with('\n') {
+            writeln!(f, "\n\\ No newline at end of file")?;
         }
+
+        Ok(())
     }
 }
