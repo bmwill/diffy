@@ -259,7 +259,7 @@ fn to_patch<'a>(
         idx += 1;
     }
 
-    Patch::new(None, None, hunks)
+    Patch::new("original", "modified", hunks)
 }
 
 fn calc_end(

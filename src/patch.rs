@@ -2,21 +2,37 @@ use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Patch<'a> {
-    old: Option<&'a str>,
-    new: Option<&'a str>,
+    original: &'a str,
+    modified: &'a str,
     hunks: Vec<Hunk<'a>>,
 }
 
 impl<'a> Patch<'a> {
-    pub(crate) fn new(old: Option<&'a str>, new: Option<&'a str>, hunks: Vec<Hunk<'a>>) -> Self {
-        Self { old, new, hunks }
+    pub(crate) fn new(original: &'a str, modified: &'a str, hunks: Vec<Hunk<'a>>) -> Self {
+        Self {
+            original,
+            modified,
+            hunks,
+        }
+    }
+
+    pub fn original(&self) -> &str {
+        &self.original
+    }
+
+    pub fn modified(&self) -> &str {
+        &self.modified
+    }
+
+    pub fn hunks(&self) -> &[Hunk] {
+        &self.hunks
     }
 }
 
 impl fmt::Display for Patch<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "--- a")?;
-        writeln!(f, "+++ b")?;
+        writeln!(f, "--- {}", self.original)?;
+        writeln!(f, "+++ {}", self.modified)?;
 
         for hunk in &self.hunks {
             write!(f, "{}", hunk)?;

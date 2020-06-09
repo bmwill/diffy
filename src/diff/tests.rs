@@ -98,8 +98,8 @@ fn diff_str() {
     let b = "C\nB\nA\nB\nA\nC\n";
     let patch = create_patch(a, b);
     let expected = "\
---- a
-+++ b
+--- original
++++ modified
 @@ -1,7 +1,6 @@
 -A
 -B
@@ -149,8 +149,8 @@ The door of all subtleties!
 ";
 
     let expected = "\
---- a
-+++ b
+--- original
++++ modified
 @@ -1,7 +1,6 @@
 -The Way that can be told of is not the eternal Way;
 -The name that can be named is not the eternal name.
@@ -173,8 +173,8 @@ The door of all subtleties!
     assert_eq!(opts.create_patch(lao, tzu).to_string(), expected);
 
     let expected = "\
---- a
-+++ b
+--- original
++++ modified
 @@ -1,2 +0,0 @@
 -The Way that can be told of is not the eternal Way;
 -The name that can be named is not the eternal name.
@@ -191,8 +191,8 @@ The door of all subtleties!
     assert_eq!(opts.create_patch(lao, tzu).to_string(), expected);
 
     let expected = "\
---- a
-+++ b
+--- original
++++ modified
 @@ -1,5 +1,4 @@
 -The Way that can be told of is not the eternal Way;
 -The name that can be named is not the eternal name.
@@ -217,8 +217,8 @@ fn no_newline_at_eof() {
     let new = "new line";
 
     let expected = "\
---- a
-+++ b
+--- original
++++ modified
 @@ -1 +1 @@
 -old line
 \\ No newline at end of file
@@ -231,8 +231,8 @@ fn no_newline_at_eof() {
     let new = "new line";
 
     let expected = "\
---- a
-+++ b
+--- original
++++ modified
 @@ -1 +1 @@
 -old line
 +new line
@@ -244,8 +244,8 @@ fn no_newline_at_eof() {
     let new = "new line\n";
 
     let expected = "\
---- a
-+++ b
+--- original
++++ modified
 @@ -1 +1 @@
 -old line
 \\ No newline at end of file
@@ -257,8 +257,8 @@ fn no_newline_at_eof() {
     let new = "new line\ncommon line";
 
     let expected = "\
---- a
-+++ b
+--- original
++++ modified
 @@ -1,2 +1,2 @@
 -old line
 +new line
