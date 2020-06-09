@@ -148,7 +148,7 @@ impl<'a> Classifier<'a> {
 }
 
 /// Iterator over the lines of a string, including the `\n` character.
-struct LineIter<'a>(&'a str);
+pub(crate) struct LineIter<'a>(pub(crate) &'a str);
 
 impl<'a> Iterator for LineIter<'a> {
     type Item = &'a str;

@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
     diff::{Diff, DiffRange},
+    patch::apply,
     range::Range,
 };
 
@@ -170,7 +171,9 @@ The door of all subtleties!
 +The door of all subtleties!
 ";
 
-    assert_eq!(opts.create_patch(lao, tzu).to_string(), expected);
+    let patch = opts.create_patch(lao, tzu);
+    assert_eq!(patch.to_string(), expected);
+    assert_eq!(apply(lao, &patch), tzu);
 
     let expected = "\
 --- original
@@ -188,7 +191,9 @@ The door of all subtleties!
 +The door of all subtleties!
 ";
     opts.set_context_len(0);
-    assert_eq!(opts.create_patch(lao, tzu).to_string(), expected);
+    let patch = opts.create_patch(lao, tzu);
+    assert_eq!(patch.to_string(), expected);
+    assert_eq!(apply(lao, &patch), tzu);
 
     let expected = "\
 --- original
@@ -208,7 +213,9 @@ The door of all subtleties!
 +The door of all subtleties!
 ";
     opts.set_context_len(1);
-    assert_eq!(opts.create_patch(lao, tzu).to_string(), expected);
+    let patch = opts.create_patch(lao, tzu);
+    assert_eq!(patch.to_string(), expected);
+    assert_eq!(apply(lao, &patch), tzu);
 }
 
 #[test]
@@ -225,7 +232,9 @@ fn no_newline_at_eof() {
 +new line
 \\ No newline at end of file
 ";
-    assert_eq!(create_patch(old, new).to_string(), expected);
+    let patch = create_patch(old, new);
+    assert_eq!(patch.to_string(), expected);
+    assert_eq!(apply(old, &patch), new);
 
     let old = "old line\n";
     let new = "new line";
@@ -238,7 +247,9 @@ fn no_newline_at_eof() {
 +new line
 \\ No newline at end of file
 ";
-    assert_eq!(create_patch(old, new).to_string(), expected);
+    let patch = create_patch(old, new);
+    assert_eq!(patch.to_string(), expected);
+    assert_eq!(apply(old, &patch), new);
 
     let old = "old line";
     let new = "new line\n";
@@ -251,7 +262,9 @@ fn no_newline_at_eof() {
 \\ No newline at end of file
 +new line
 ";
-    assert_eq!(create_patch(old, new).to_string(), expected);
+    let patch = create_patch(old, new);
+    assert_eq!(patch.to_string(), expected);
+    assert_eq!(apply(old, &patch), new);
 
     let old = "old line\ncommon line";
     let new = "new line\ncommon line";
@@ -265,7 +278,9 @@ fn no_newline_at_eof() {
  common line
 \\ No newline at end of file
 ";
-    assert_eq!(create_patch(old, new).to_string(), expected);
+    let patch = create_patch(old, new);
+    assert_eq!(patch.to_string(), expected);
+    assert_eq!(apply(old, &patch), new);
 }
 
 #[test]
