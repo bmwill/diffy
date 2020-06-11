@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     diff::{Diff, DiffRange},
-    patch::apply,
+    patch::{apply, Patch},
     range::Range,
 };
 
@@ -172,7 +172,10 @@ The door of all subtleties!
 ";
 
     let patch = opts.create_patch(lao, tzu);
-    assert_eq!(patch.to_string(), expected);
+    let patch_str = patch.to_string();
+    assert_eq!(patch_str, expected);
+    assert_eq!(Patch::from_str(expected).unwrap(), patch);
+    assert_eq!(Patch::from_str(&patch_str).unwrap(), patch);
     assert_eq!(apply(lao, &patch), tzu);
 
     let expected = "\
@@ -192,7 +195,10 @@ The door of all subtleties!
 ";
     opts.set_context_len(0);
     let patch = opts.create_patch(lao, tzu);
-    assert_eq!(patch.to_string(), expected);
+    let patch_str = patch.to_string();
+    assert_eq!(patch_str, expected);
+    assert_eq!(Patch::from_str(expected).unwrap(), patch);
+    assert_eq!(Patch::from_str(&patch_str).unwrap(), patch);
     assert_eq!(apply(lao, &patch), tzu);
 
     let expected = "\
@@ -214,7 +220,10 @@ The door of all subtleties!
 ";
     opts.set_context_len(1);
     let patch = opts.create_patch(lao, tzu);
-    assert_eq!(patch.to_string(), expected);
+    let patch_str = patch.to_string();
+    assert_eq!(patch_str, expected);
+    assert_eq!(Patch::from_str(expected).unwrap(), patch);
+    assert_eq!(Patch::from_str(&patch_str).unwrap(), patch);
     assert_eq!(apply(lao, &patch), tzu);
 }
 
@@ -233,7 +242,10 @@ fn no_newline_at_eof() {
 \\ No newline at end of file
 ";
     let patch = create_patch(old, new);
-    assert_eq!(patch.to_string(), expected);
+    let patch_str = patch.to_string();
+    assert_eq!(patch_str, expected);
+    assert_eq!(Patch::from_str(expected).unwrap(), patch);
+    assert_eq!(Patch::from_str(&patch_str).unwrap(), patch);
     assert_eq!(apply(old, &patch), new);
 
     let old = "old line\n";
@@ -248,7 +260,10 @@ fn no_newline_at_eof() {
 \\ No newline at end of file
 ";
     let patch = create_patch(old, new);
-    assert_eq!(patch.to_string(), expected);
+    let patch_str = patch.to_string();
+    assert_eq!(patch_str, expected);
+    assert_eq!(Patch::from_str(expected).unwrap(), patch);
+    assert_eq!(Patch::from_str(&patch_str).unwrap(), patch);
     assert_eq!(apply(old, &patch), new);
 
     let old = "old line";
@@ -263,7 +278,10 @@ fn no_newline_at_eof() {
 +new line
 ";
     let patch = create_patch(old, new);
-    assert_eq!(patch.to_string(), expected);
+    let patch_str = patch.to_string();
+    assert_eq!(patch_str, expected);
+    assert_eq!(Patch::from_str(expected).unwrap(), patch);
+    assert_eq!(Patch::from_str(&patch_str).unwrap(), patch);
     assert_eq!(apply(old, &patch), new);
 
     let old = "old line\ncommon line";
@@ -279,7 +297,10 @@ fn no_newline_at_eof() {
 \\ No newline at end of file
 ";
     let patch = create_patch(old, new);
-    assert_eq!(patch.to_string(), expected);
+    let patch_str = patch.to_string();
+    assert_eq!(patch_str, expected);
+    assert_eq!(Patch::from_str(expected).unwrap(), patch);
+    assert_eq!(Patch::from_str(&patch_str).unwrap(), patch);
     assert_eq!(apply(old, &patch), new);
 }
 

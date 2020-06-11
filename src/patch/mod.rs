@@ -1,5 +1,7 @@
 use std::{borrow::Cow, fmt, ops};
 
+mod parse;
+
 const NO_NEWLINE_AT_EOF: &str = "\\ No newline at end of file";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,6 +22,11 @@ impl<'a> Patch<'a> {
             modified: Filename(modified.into()),
             hunks,
         }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn from_str(s: &'a str) -> Result<Patch<'a>, parse::PatchParseError> {
+        parse::parse(s)
     }
 
     pub fn original(&self) -> &str {
