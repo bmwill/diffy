@@ -1,17 +1,21 @@
-use std::{fmt, ops};
+use std::{borrow::Cow, fmt, ops};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Patch<'a> {
-    original: &'a str,
-    modified: &'a str,
+    original: Filename<'a>,
+    modified: Filename<'a>,
     hunks: Vec<Hunk<'a>>,
 }
 
 impl<'a> Patch<'a> {
-    pub(crate) fn new(original: &'a str, modified: &'a str, hunks: Vec<Hunk<'a>>) -> Self {
+    pub(crate) fn new<O, M>(original: O, modified: M, hunks: Vec<Hunk<'a>>) -> Self
+    where
+        O: Into<Cow<'a, str>>,
+        M: Into<Cow<'a, str>>,
+    {
         Self {
-            original,
-            modified,
+            original: Filename(original.into()),
+            modified: Filename(modified.into()),
             hunks,
         }
     }
@@ -36,6 +40,51 @@ impl fmt::Display for Patch<'_> {
 
         for hunk in &self.hunks {
             write!(f, "{}", hunk)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Filename<'a>(Cow<'a, str>);
+
+impl Filename<'_> {
+    const ESCAPED_CHARS: &'static [char] = &['\n', '\t', '\0', '\r', '\"', '\\'];
+
+    fn needs_to_be_escaped(&self) -> bool {
+        self.0.contains(Self::ESCAPED_CHARS)
+    }
+}
+
+impl AsRef<str> for Filename<'_> {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ops::Deref for Filename<'_> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl fmt::Display for Filename<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::fmt::Write;
+        if self.needs_to_be_escaped() {
+            f.write_char('\"')?;
+            for c in self.0.chars() {
+                if Self::ESCAPED_CHARS.contains(&c) {
+                    f.write_char('\\')?;
+                }
+                f.write_char(c)?;
+            }
+            f.write_char('\"')?;
+        } else {
+            f.write_str(&self.0)?;
         }
 
         Ok(())
