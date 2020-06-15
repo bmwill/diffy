@@ -1,5 +1,7 @@
 use std::{borrow::Cow, fmt, ops};
 
+const NO_NEWLINE_AT_EOF: &str = "\\ No newline at end of file";
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Patch<'a> {
     original: Filename<'a>,
@@ -205,7 +207,8 @@ impl fmt::Display for Line<'_> {
         write!(f, "{}{}", sign, line)?;
 
         if !line.ends_with('\n') {
-            writeln!(f, "\n\\ No newline at end of file")?;
+            writeln!(f)?;
+            writeln!(f, "{}", NO_NEWLINE_AT_EOF)?;
         }
 
         Ok(())
