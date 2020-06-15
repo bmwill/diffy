@@ -52,20 +52,22 @@ pub struct Hunk<'a> {
     lines: Vec<Line<'a>>,
 }
 
+fn hunk_lines_count(lines: &[Line<'_>]) -> (usize, usize) {
+    lines.into_iter().fold((0, 0), |count, line| match line {
+        Line::Context(_) => (count.0 + 1, count.1 + 1),
+        Line::Delete(_) => (count.0 + 1, count.1),
+        Line::Insert(_) => (count.0, count.1 + 1),
+    })
+}
+
 impl<'a> Hunk<'a> {
-    pub(crate) fn new(old_range: HunkRange, new_range: HunkRange, lines: Vec<Line<'a>>) -> Self {
-        let mut old_count = 0;
-        let mut new_count = 0;
-        for line in &lines {
-            match line {
-                Line::Context(_) => {
-                    old_count += 1;
-                    new_count += 1;
-                }
-                Line::Delete(_) => old_count += 1,
-                Line::Insert(_) => new_count += 1,
-            }
-        }
+    pub(crate) fn new(
+        old_range: HunkRange,
+        new_range: HunkRange,
+        function_context: Option<&'a str>,
+        lines: Vec<Line<'a>>,
+    ) -> Self {
+        let (old_count, new_count) = hunk_lines_count(&lines);
 
         assert_eq!(old_range.len, old_count);
         assert_eq!(new_range.len, new_count);
@@ -73,7 +75,7 @@ impl<'a> Hunk<'a> {
         Self {
             old_range,
             new_range,
-            function_context: None,
+            function_context,
             lines,
         }
     }
@@ -81,7 +83,11 @@ impl<'a> Hunk<'a> {
 
 impl fmt::Display for Hunk<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "@@ -{} +{} @@", self.old_range, self.new_range)?;
+        write!(f, "@@ -{} +{} @@", self.old_range, self.new_range)?;
+        if let Some(ctx) = self.function_context {
+            write!(f, " {}", ctx)?;
+        }
+        writeln!(f)?;
         for line in &self.lines {
             write!(f, "{}", line)?;
         }

@@ -255,7 +255,7 @@ fn to_patch<'a>(
         let len2 = end2 - start2;
         let new_range = HunkRange::new(if len2 > 0 { start2 + 1 } else { start2 }, len2);
 
-        hunks.push(Hunk::new(old_range, new_range, lines));
+        hunks.push(Hunk::new(old_range, new_range, None, lines));
         idx += 1;
     }
 
