@@ -158,7 +158,19 @@ impl HunkRange {
     }
 
     pub fn range(&self) -> ops::Range<usize> {
-        self.start..self.start + self.len
+        self.start..self.end()
+    }
+
+    pub fn start(&self) -> usize {
+        self.start
+    }
+
+    pub fn end(&self) -> usize {
+        self.start + self.len
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
     }
 }
 
