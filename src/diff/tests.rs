@@ -1,7 +1,8 @@
 use super::*;
 use crate::{
+    apply::apply,
     diff::{Diff, DiffRange},
-    patch::{apply, Patch},
+    patch::Patch,
     range::Range,
 };
 
