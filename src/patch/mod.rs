@@ -7,6 +7,7 @@ use std::{borrow::Cow, fmt, ops};
 
 const NO_NEWLINE_AT_EOF: &str = "\\ No newline at end of file";
 
+/// Representation of all the differences between two files
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Patch<'a> {
     original: Filename<'a>,
@@ -32,14 +33,17 @@ impl<'a> Patch<'a> {
         parse::parse(s)
     }
 
+    /// Return the name of the old file
     pub fn original(&self) -> &str {
         &self.original
     }
 
+    /// Return the name of the new file
     pub fn modified(&self) -> &str {
         &self.modified
     }
 
+    /// Returns the hunks in the patch
     pub fn hunks(&self) -> &[Hunk<'_>] {
         &self.hunks
     }
@@ -96,6 +100,7 @@ impl fmt::Display for Filename<'_> {
     }
 }
 
+/// Represents a group of differing lines between two files
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Hunk<'a> {
     old_range: HunkRange,
@@ -134,23 +139,28 @@ impl<'a> Hunk<'a> {
         }
     }
 
+    /// Returns the corresponding range for the old file in the hunk
     pub fn old_range(&self) -> HunkRange {
         self.old_range
     }
 
+    /// Returns the corresponding range for the new file in the hunk
     pub fn new_range(&self) -> HunkRange {
         self.new_range
     }
 
+    /// Returns the function context (if any) for the hunk
     pub fn function_context(&self) -> Option<&str> {
         self.function_context.as_deref()
     }
 
+    /// Returns the lines in the hunk
     pub fn lines(&self) -> &[Line<'a>] {
         &self.lines
     }
 }
 
+/// The range of lines in a file for a particular `Hunk`
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct HunkRange {
     /// The starting line number of a hunk
@@ -164,18 +174,22 @@ impl HunkRange {
         Self { start, len }
     }
 
+    /// Returns the range as a `ops::Range`
     pub fn range(&self) -> ops::Range<usize> {
         self.start..self.end()
     }
 
+    /// Returns the starting line number of the range (inclusive)
     pub fn start(&self) -> usize {
         self.start
     }
 
+    /// Returns the ending line number of the range (exclusive)
     pub fn end(&self) -> usize {
         self.start + self.len
     }
 
+    /// Returns the number of lines in the range
     pub fn len(&self) -> usize {
         self.len
     }
@@ -191,6 +205,7 @@ impl fmt::Display for HunkRange {
     }
 }
 
+/// A line in either the old file, new file, or both
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Line<'a> {
     /// A line providing context in the diff which is present in both the old and new file

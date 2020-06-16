@@ -2,6 +2,7 @@ use super::{Hunk, Line, Patch, NO_NEWLINE_AT_EOF};
 use ansi_term::{Color, Style};
 use std::fmt::{Display, Formatter, Result};
 
+/// Struct used to adjust the formatting of a `Patch`
 #[derive(Debug)]
 pub struct PatchFormatter {
     with_color: bool,
@@ -15,6 +16,7 @@ pub struct PatchFormatter {
 }
 
 impl PatchFormatter {
+    /// Construct a new formatter
     pub fn new() -> Self {
         Self {
             with_color: false,
@@ -28,11 +30,13 @@ impl PatchFormatter {
         }
     }
 
+    /// Enable formatting a patch with color
     pub fn with_color(mut self) -> Self {
         self.with_color = true;
         self
     }
 
+    /// Returns a `Display` impl which can be used to print a Patch
     pub fn fmt_patch<'a>(&'a self, patch: &'a Patch<'a>) -> impl Display + 'a {
         PatchDisplay { f: self, patch }
     }
