@@ -40,7 +40,7 @@ impl<'a> Patch<'a> {
         &self.modified
     }
 
-    pub fn hunks(&self) -> &[Hunk] {
+    pub fn hunks(&self) -> &[Hunk<'_>] {
         &self.hunks
     }
 }
@@ -132,6 +132,22 @@ impl<'a> Hunk<'a> {
             function_context,
             lines,
         }
+    }
+
+    pub fn old_range(&self) -> HunkRange {
+        self.old_range
+    }
+
+    pub fn new_range(&self) -> HunkRange {
+        self.new_range
+    }
+
+    pub fn function_context(&self) -> Option<&str> {
+        self.function_context.as_deref()
+    }
+
+    pub fn lines(&self) -> &[Line<'_>] {
+        &self.lines
     }
 }
 
