@@ -1,6 +1,9 @@
-use std::{borrow::Cow, fmt, ops};
-
+mod format;
 mod parse;
+
+pub use format::PatchFormatter;
+
+use std::{borrow::Cow, fmt, ops};
 
 const NO_NEWLINE_AT_EOF: &str = "\\ No newline at end of file";
 
@@ -44,14 +47,7 @@ impl<'a> Patch<'a> {
 
 impl fmt::Display for Patch<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "--- {}", self.original)?;
-        writeln!(f, "+++ {}", self.modified)?;
-
-        for hunk in &self.hunks {
-            write!(f, "{}", hunk)?;
-        }
-
-        Ok(())
+        write!(f, "{}", PatchFormatter::new().fmt_patch(self))
     }
 }
 
@@ -139,20 +135,6 @@ impl<'a> Hunk<'a> {
     }
 }
 
-impl fmt::Display for Hunk<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "@@ -{} +{} @@", self.old_range, self.new_range)?;
-        if let Some(ctx) = self.function_context {
-            write!(f, " {}", ctx)?;
-        }
-        writeln!(f)?;
-        for line in &self.lines {
-            write!(f, "{}", line)?;
-        }
-        Ok(())
-    }
-}
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct HunkRange {
     /// The starting line number of a hunk
@@ -201,25 +183,6 @@ pub enum Line<'a> {
     Delete(&'a str),
     /// A line inserted to the new file
     Insert(&'a str),
-}
-
-impl fmt::Display for Line<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (sign, line) = match self {
-            Line::Context(line) => (' ', line),
-            Line::Delete(line) => ('-', line),
-            Line::Insert(line) => ('+', line),
-        };
-
-        write!(f, "{}{}", sign, line)?;
-
-        if !line.ends_with('\n') {
-            writeln!(f)?;
-            writeln!(f, "{}", NO_NEWLINE_AT_EOF)?;
-        }
-
-        Ok(())
-    }
 }
 
 #[allow(dead_code)]
