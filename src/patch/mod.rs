@@ -52,7 +52,7 @@ impl fmt::Display for Patch<'_> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Filename<'a>(Cow<'a, str>);
+struct Filename<'a>(Cow<'a, str>);
 
 impl Filename<'_> {
     const ESCAPED_CHARS: &'static [char] = &['\n', '\t', '\0', '\r', '\"', '\\'];
