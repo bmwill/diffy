@@ -160,7 +160,7 @@ impl<'a> Hunk<'a> {
     }
 }
 
-/// The range of lines in a file for a particular `Hunk`
+/// The range of lines in a file for a particular `Hunk`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct HunkRange {
     /// The starting line number of a hunk
@@ -205,7 +205,10 @@ impl fmt::Display for HunkRange {
     }
 }
 
-/// A line in either the old file, new file, or both
+/// A line in either the old file, new file, or both.
+///
+/// A `Line` contains the terminating newline character `\n` unless it is the final
+/// line in the file and the file does not end with a newline character.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Line<'a> {
     /// A line providing context in the diff which is present in both the old and new file

@@ -44,6 +44,7 @@ where
     }
 }
 
+/// A collection of options for modifying the way a diff is performed
 #[derive(Debug)]
 pub struct DiffOptions {
     compact: bool,
@@ -51,6 +52,11 @@ pub struct DiffOptions {
 }
 
 impl DiffOptions {
+    /// Construct a new `DiffOptions` with default settings
+    ///
+    /// ## Defaults
+    /// * compact = true
+    /// * context_len = 3
     pub fn new() -> Self {
         Self {
             compact: true,
@@ -58,11 +64,15 @@ impl DiffOptions {
         }
     }
 
+    /// Set the number of context lines that should be used when producing a patch
     pub fn set_context_len(&mut self, context_len: usize) -> &mut Self {
         self.context_len = context_len;
         self
     }
 
+    /// Enable/Disable diff compaction. Compaction is a post-processing step which attempts to
+    /// produce a prettier diff by reducing the number of edited blocks by shifting and merging
+    /// edit blocks.
     pub fn set_compact(&mut self, compact: bool) -> &mut Self {
         self.compact = compact;
         self
@@ -85,6 +95,7 @@ impl DiffOptions {
         solution.into_iter().map(Diff::from).collect()
     }
 
+    /// Produce a Patch between two texts based on the configured options
     pub fn create_patch<'a>(&self, original: &'a str, modified: &'a str) -> Patch<'a> {
         let mut classifier = Classifier::default();
         let (old_lines, old_ids) = classifier.classify_lines(original);
@@ -124,6 +135,39 @@ fn diff<'a>(original: &'a str, modified: &'a str) -> Vec<Diff<'a, str>> {
     DiffOptions::default().diff(original, modified)
 }
 
+/// Create a patch between two texts.
+///
+/// ```
+/// # use diffy::create_patch;
+/// let original = "\
+/// I am afraid, however, that all I have known - that my story - will be forgotten.
+/// I am afraid for the world that is to come.
+/// Afraid that my plans will fail.
+/// Afraid of a doom worse than the Deepness.
+/// ";
+///
+/// let modified = "\
+/// I am afraid, however, that all I have known - that my story - will be forgotten.
+/// I am afraid for the world that is to come.
+/// Afraid that Alendi will fail.
+/// Afraid of a doom brought by the Deepness.
+/// ";
+///
+/// let expected = "\
+/// --- original
+/// +++ modified
+/// @@ -1,4 +1,4 @@
+///  I am afraid, however, that all I have known - that my story - will be forgotten.
+///  I am afraid for the world that is to come.
+/// -Afraid that my plans will fail.
+/// -Afraid of a doom worse than the Deepness.
+/// +Afraid that Alendi will fail.
+/// +Afraid of a doom brought by the Deepness.
+/// ";
+///
+/// let patch = create_patch(original, modified);
+/// assert_eq!(patch.to_string(), expected);
+/// ```
 pub fn create_patch<'a>(original: &'a str, modified: &'a str) -> Patch<'a> {
     DiffOptions::default().create_patch(original, modified)
 }
