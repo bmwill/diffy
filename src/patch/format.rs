@@ -50,6 +50,12 @@ impl PatchFormatter {
     }
 }
 
+impl Default for PatchFormatter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 struct PatchDisplay<'a> {
     f: &'a PatchFormatter,
     patch: &'a Patch<'a>,
