@@ -55,7 +55,6 @@ impl DiffOptions {
     /// Construct a new `DiffOptions` with default settings
     ///
     /// ## Defaults
-    /// * compact = true
     /// * context_len = 3
     pub fn new() -> Self {
         Self {
@@ -73,7 +72,9 @@ impl DiffOptions {
     /// Enable/Disable diff compaction. Compaction is a post-processing step which attempts to
     /// produce a prettier diff by reducing the number of edited blocks by shifting and merging
     /// edit blocks.
-    pub fn set_compact(&mut self, compact: bool) -> &mut Self {
+    // TODO determine if this should be exposed in the public API
+    #[allow(dead_code)]
+    fn set_compact(&mut self, compact: bool) -> &mut Self {
         self.compact = compact;
         self
     }
