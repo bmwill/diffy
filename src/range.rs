@@ -491,23 +491,23 @@ mod tests {
         let text1 = Range::new("abc", ..);
         let text2 = Range::new("xyz", ..);
         assert_eq!(0, text1.common_prefix_len(text2), "Null case");
-        let text1 = Range::new("abc".as_bytes(), ..);
-        let text2 = Range::new("xyz".as_bytes(), ..);
+        let text1 = Range::new(b"abc".as_ref(), ..);
+        let text2 = Range::new(b"xyz".as_ref(), ..);
         assert_eq!(0, text1.common_prefix_len(text2), "Null case");
 
         let text1 = Range::new("1234abcdef", ..);
         let text2 = Range::new("1234xyz", ..);
         assert_eq!(4, text1.common_prefix_len(text2), "Non-null case");
-        let text1 = Range::new("1234abcdef".as_bytes(), ..);
-        let text2 = Range::new("1234xyz".as_bytes(), ..);
+        let text1 = Range::new(b"1234abcdef".as_ref(), ..);
+        let text2 = Range::new(b"1234xyz".as_ref(), ..);
         assert_eq!(4, text1.common_prefix_len(text2), "Non-null case");
 
         let text1 = Range::new("1234", ..);
         let text2 = Range::new("1234xyz", ..);
         assert_eq!(4, text1.common_prefix_len(text2), "Whole case");
 
-        let text1 = Range::new("1234".as_bytes(), ..);
-        let text2 = Range::new("1234xyz".as_bytes(), ..);
+        let text1 = Range::new(b"1234".as_ref(), ..);
+        let text2 = Range::new(b"1234xyz".as_ref(), ..);
         assert_eq!(4, text1.common_prefix_len(text2), "Whole case");
 
         let snowman = "\u{2603}";
@@ -525,22 +525,22 @@ mod tests {
         let text1 = Range::new("abc", ..);
         let text2 = Range::new("xyz", ..);
         assert_eq!(0, text1.common_suffix_len(text2), "Null case");
-        let text1 = Range::new("abc".as_bytes(), ..);
-        let text2 = Range::new("xyz".as_bytes(), ..);
+        let text1 = Range::new(b"abc".as_ref(), ..);
+        let text2 = Range::new(b"xyz".as_ref(), ..);
         assert_eq!(0, text1.common_suffix_len(text2), "Null case");
 
         let text1 = Range::new("abcdef1234", ..);
         let text2 = Range::new("xyz1234", ..);
         assert_eq!(4, text1.common_suffix_len(text2), "Non-null case");
-        let text1 = Range::new("abcdef1234".as_bytes(), ..);
-        let text2 = Range::new("xyz1234".as_bytes(), ..);
+        let text1 = Range::new(b"abcdef1234".as_ref(), ..);
+        let text2 = Range::new(b"xyz1234".as_ref(), ..);
         assert_eq!(4, text1.common_suffix_len(text2), "Non-null case");
 
         let text1 = Range::new("1234", ..);
         let text2 = Range::new("xyz1234", ..);
         assert_eq!(4, text1.common_suffix_len(text2), "Whole case");
-        let text1 = Range::new("1234".as_bytes(), ..);
-        let text2 = Range::new("xyz1234".as_bytes(), ..);
+        let text1 = Range::new(b"1234".as_ref(), ..);
+        let text2 = Range::new(b"xyz1234".as_ref(), ..);
         assert_eq!(4, text1.common_suffix_len(text2), "Whole case");
     }
 
@@ -550,28 +550,28 @@ mod tests {
         let text2 = Range::new("abcd", ..);
         assert_eq!(0, text1.common_overlap_len(text2), "Null case");
         let text1 = Range::empty();
-        let text2 = Range::new("abcd".as_bytes(), ..);
+        let text2 = Range::new(b"abcd".as_ref(), ..);
         assert_eq!(0, text1.common_overlap_len(text2), "Null case");
 
         let text1 = Range::new("abcd", ..);
         let text2 = Range::new("abc", ..);
         assert_eq!(3, text1.common_overlap_len(text2), "Whole case");
-        let text1 = Range::new("abcd".as_bytes(), ..);
-        let text2 = Range::new("abc".as_bytes(), ..);
+        let text1 = Range::new(b"abcd".as_ref(), ..);
+        let text2 = Range::new(b"abc".as_ref(), ..);
         assert_eq!(3, text1.common_overlap_len(text2), "Whole case");
 
         let text1 = Range::new("123456", ..);
         let text2 = Range::new("abcd", ..);
         assert_eq!(0, text1.common_overlap_len(text2), "No overlap");
-        let text1 = Range::new("123456".as_bytes(), ..);
-        let text2 = Range::new("abcd".as_bytes(), ..);
+        let text1 = Range::new(b"123456".as_ref(), ..);
+        let text2 = Range::new(b"abcd".as_ref(), ..);
         assert_eq!(0, text1.common_overlap_len(text2), "No overlap");
 
         let text1 = Range::new("xxxabcd", ..);
         let text2 = Range::new("123456xxx", ..);
         assert_eq!(3, text1.common_overlap_len(text2), "Overlap");
-        let text1 = Range::new("xxxabcd".as_bytes(), ..);
-        let text2 = Range::new("123456xxx".as_bytes(), ..);
+        let text1 = Range::new(b"xxxabcd".as_ref(), ..);
+        let text2 = Range::new(b"123456xxx".as_ref(), ..);
         assert_eq!(3, text1.common_overlap_len(text2), "Overlap");
 
         // Some overly clever languages (C#) may treat ligatures as equal to their
