@@ -112,7 +112,7 @@ pub struct Hunk<'a> {
 }
 
 fn hunk_lines_count(lines: &[Line<'_>]) -> (usize, usize) {
-    lines.into_iter().fold((0, 0), |count, line| match line {
+    lines.iter().fold((0, 0), |count, line| match line {
         Line::Context(_) => (count.0 + 1, count.1 + 1),
         Line::Delete(_) => (count.0 + 1, count.1),
         Line::Insert(_) => (count.0, count.1 + 1),
@@ -192,6 +192,11 @@ impl HunkRange {
     /// Returns the number of lines in the range
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    /// Returns `true` if the range is empty (has a length of `0`)
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 }
 
