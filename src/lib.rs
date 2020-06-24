@@ -88,6 +88,7 @@
 
 mod apply;
 mod diff;
+mod merge;
 mod patch;
 mod range;
 mod utils;
