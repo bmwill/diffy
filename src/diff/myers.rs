@@ -211,7 +211,9 @@ fn conquer<'a, 'b, T: PartialEq>(
     old = old.slice(..old.len() - common_suffix_len);
     new = new.slice(..new.len() - common_suffix_len);
 
-    if old.is_empty() {
+    if old.is_empty() && new.is_empty() {
+        // Do nothing
+    } else if old.is_empty() {
         // Inserts
         solution.push(DiffRange::Insert(new));
     } else if new.is_empty() {
