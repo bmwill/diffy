@@ -14,7 +14,7 @@ pub fn compact<'a, 'b, T: ?Sized + SliceLike>(diffs: &mut Vec<DiffRange<'a, 'b, 
     }
 
     // TODO maybe able to merge these and do them in the same pass?
-    // Then attempt to compact all Deletions
+    // Then attempt to compact all Insertions
     let mut pointer = 0;
     while let Some(&diff) = diffs.get(pointer) {
         if let DiffRange::Insert(_) = diff {
