@@ -99,25 +99,23 @@ impl DiffOptions {
         let (old_lines, old_ids) = classifier.classify_lines(original);
         let (new_lines, new_ids) = classifier.classify_lines(modified);
 
-        let mut solution = myers::diff(&old_ids, &new_ids);
-
-        if self.compact {
-            cleanup::compact(&mut solution);
-        }
+        let solution = self.diff_slice(&old_ids, &new_ids);
 
         to_patch(&old_lines, &new_lines, &solution, self.context_len)
     }
 
-    // TODO determine if this should be exposed in the public API
-    #[allow(dead_code)]
-    fn diff_slice<'a, T: PartialEq>(&self, old: &'a [T], new: &'a [T]) -> Vec<Diff<'a, [T]>> {
+    pub(crate) fn diff_slice<'a, T: PartialEq>(
+        &self,
+        old: &'a [T],
+        new: &'a [T],
+    ) -> Vec<DiffRange<'a, 'a, [T]>> {
         let mut solution = myers::diff(old, new);
 
         if self.compact {
             cleanup::compact(&mut solution);
         }
 
-        solution.into_iter().map(Diff::from).collect()
+        solution
     }
 }
 

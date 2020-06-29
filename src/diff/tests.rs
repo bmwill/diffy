@@ -46,6 +46,7 @@ fn diff_test4() {
     let a = "bat";
     let b = "map";
     let solution = DiffOptions::default().diff_slice(a.as_bytes(), b.as_bytes());
+    let solution: Vec<_> = solution.into_iter().map(Diff::from).collect();
     let expected: Vec<Diff<[u8]>> = vec![
         Diff::Delete(b"b"),
         Diff::Insert(b"m"),
