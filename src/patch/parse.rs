@@ -1,7 +1,7 @@
 //! Parse a Patch
 
 use super::{Filename, Hunk, HunkRange, Line, NO_NEWLINE_AT_EOF};
-use crate::{diff::LineIter, patch::Patch};
+use crate::{patch::Patch, utils::LineIter};
 use std::borrow::Cow;
 
 type Result<T, E = PatchParseError> = std::result::Result<T, E>;
@@ -26,7 +26,7 @@ struct Parser<'a> {
 impl<'a> Parser<'a> {
     fn new(input: &'a str) -> Self {
         Self {
-            lines: LineIter(input).peekable(),
+            lines: LineIter::new(input).peekable(),
         }
     }
 

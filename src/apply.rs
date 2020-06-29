@@ -1,8 +1,11 @@
-use crate::patch::{Hunk, Line, Patch};
+use crate::{
+    patch::{Hunk, Line, Patch},
+    utils::LineIter,
+};
 
 #[allow(dead_code)]
 pub(crate) fn apply(pre_image: &str, patch: &Patch<'_>) -> String {
-    let pre_image: Vec<_> = crate::diff::LineIter(pre_image).collect();
+    let pre_image: Vec<_> = LineIter::new(pre_image).collect();
     let mut image = pre_image.clone();
 
     for hunk in patch.hunks() {

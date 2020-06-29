@@ -1,12 +1,9 @@
 use crate::{
     patch::{Hunk, HunkRange, Line, Patch},
     range::{DiffRange, SliceLike},
+    utils::Classifier,
 };
-use std::{
-    cmp,
-    collections::{hash_map::Entry, HashMap},
-    ops,
-};
+use std::{cmp, ops};
 
 mod cleanup;
 mod myers;
@@ -171,54 +168,6 @@ fn diff<'a>(original: &'a str, modified: &'a str) -> Vec<Diff<'a, str>> {
 /// ```
 pub fn create_patch<'a>(original: &'a str, modified: &'a str) -> Patch<'a> {
     DiffOptions::default().create_patch(original, modified)
-}
-
-#[derive(Default)]
-struct Classifier<'a> {
-    next_id: u64,
-    unique_ids: HashMap<&'a str, u64>,
-}
-
-impl<'a> Classifier<'a> {
-    fn classify(&mut self, record: &'a str) -> u64 {
-        match self.unique_ids.entry(record) {
-            Entry::Occupied(o) => *o.get(),
-            Entry::Vacant(v) => {
-                let id = self.next_id;
-                self.next_id += 1;
-                *v.insert(id)
-            }
-        }
-    }
-
-    fn classify_lines(&mut self, text: &'a str) -> (Vec<&'a str>, Vec<u64>) {
-        LineIter(text)
-            .map(|line| (line, self.classify(&line)))
-            .unzip()
-    }
-}
-
-/// Iterator over the lines of a string, including the `\n` character.
-pub(crate) struct LineIter<'a>(pub(crate) &'a str);
-
-impl<'a> Iterator for LineIter<'a> {
-    type Item = &'a str;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.0.is_empty() {
-            return None;
-        }
-
-        let end = if let Some(idx) = self.0.find('\n') {
-            idx + 1
-        } else {
-            self.0.len()
-        };
-
-        let (line, remaining) = self.0.split_at(end);
-        self.0 = remaining;
-        Some(line)
-    }
 }
 
 fn to_patch<'a>(

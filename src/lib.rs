@@ -90,6 +90,7 @@ mod apply;
 mod diff;
 mod patch;
 mod range;
+mod utils;
 
 pub use diff::{create_patch, DiffOptions};
 pub use patch::{Hunk, HunkRange, Line, Patch, PatchFormatter};
