@@ -210,6 +210,8 @@ fn hunk_lines<'a>(parser: &mut Parser<'a>) -> Result<Vec<Line<'a>>> {
             return Err("expected end of hunk".into());
         } else if line.starts_with(' ') {
             Line::Context(&line[1..])
+        } else if *line == "\n" {
+            Line::Context(line)
         } else if line.starts_with('-') {
             if no_newline_delete {
                 return Err("expected no more deleted lines".into());
