@@ -242,6 +242,10 @@ fn diff3_range_to_merge_range<'ancestor, 'ours, 'theirs, T: ?Sized + SliceLike>(
         }
     }
 
+    if let Some(merge_range) = create_merge_range(ancestor.take(), ours.take(), theirs.take()) {
+        merge.push(merge_range);
+    }
+
     merge
 }
 
