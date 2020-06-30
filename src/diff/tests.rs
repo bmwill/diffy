@@ -330,7 +330,7 @@ macro_rules! assert_patch {
         assert_eq!(patch_str, $expected);
         assert_eq!(Patch::from_str($expected).unwrap(), patch);
         assert_eq!(Patch::from_str(&patch_str).unwrap(), patch);
-        assert_eq!(apply($old, &patch), $new);
+        assert_eq!(apply($old, &patch).unwrap(), $new);
     };
     ($old:ident, $new:ident, $expected:ident $(,)?) => {
         assert_patch!(DiffOptions::default(), $old, $new, $expected);
@@ -571,7 +571,7 @@ void Chunk_copy(Chunk *src, size_t src_start, Chunk *dst, size_t dst_start, size
  }
 ";
     let git_patch = Patch::from_str(expected_git).unwrap();
-    assert_eq!(apply(original, &git_patch), a);
+    assert_eq!(apply(original, &git_patch).unwrap(), a);
 
     let expected_diffy = "\
 --- original
