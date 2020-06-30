@@ -292,11 +292,17 @@ fn cleanup_conflicts<'ancestor, 'ours, 'theirs, T: ?Sized + SliceLike + PartialE
     // TODO this could probably be more sophisticated:
     // e.g. run the diff algorithm on the conflict area
     while let Some(&merge) = solution.get(pointer) {
-        if let MergeRange::Conflict(_ancestor, ours, theirs) = merge {
+        if let MergeRange::Conflict(ancestor, ours, theirs) = merge {
             // If the ranges in the conflict end up being the same on both sides then we can
             // eliminate the conflict
             if ours.as_slice() == theirs.as_slice() {
                 solution[pointer] = MergeRange::Both(ours, theirs);
+            // If either ours or theirs exactly matches ancestor then we can also eliminate the
+            // conflict
+            } else if ancestor.as_slice() == ours.as_slice() {
+                solution[pointer] = MergeRange::Theirs(theirs);
+            } else if ancestor.as_slice() == theirs.as_slice() {
+                solution[pointer] = MergeRange::Ours(ours);
             }
         }
         pointer += 1;
