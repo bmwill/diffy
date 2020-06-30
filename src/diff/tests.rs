@@ -544,7 +544,7 @@ void Chunk_copy(Chunk *src, size_t src_start, Chunk *dst, size_t dst_start, size
 ";
 
     // TODO This differs from the expected output when using git's myers algorithm
-    let _expected_git = "\
+    let expected_git = "\
 --- original
 +++ modified
 @@ -1,14 +1,14 @@
@@ -570,6 +570,9 @@ void Chunk_copy(Chunk *src, size_t src_start, Chunk *dst, size_t dst_start, size
 +    memcpy(dst->data + dst_start, src->data + src_start, n);
  }
 ";
+    let git_patch = Patch::from_str(expected_git).unwrap();
+    assert_eq!(apply(original, &git_patch), a);
+
     let expected_diffy = "\
 --- original
 +++ modified
