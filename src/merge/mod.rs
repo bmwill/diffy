@@ -83,22 +83,159 @@ impl<T: ?Sized> Clone for MergeRange<'_, '_, '_, T> {
     }
 }
 
+/// Style used when rendering a conflict
+#[derive(Copy, Clone, Debug)]
+pub enum ConflictStyle {
+    /// Renders conflicting lines from both files, separated by conflict markers.
+    ///
+    /// ```console
+    /// <<<<<<< A
+    /// lines in file A
+    /// =======
+    /// lines in file B
+    /// >>>>>>> B
+    /// ```
+    Merge,
+
+    /// Renders conflicting lines from both files including lines from the original files,
+    /// separated by conflict markers.
+    ///
+    /// ```console
+    /// <<<<<<< A
+    /// lines in file A
+    /// ||||||| Original
+    /// lines in Original file
+    /// =======
+    /// lines in file B
+    /// >>>>>>> B
+    /// ```
+    Diff3,
+}
+
+/// A collection of options for modifying the way a merge is performed
+#[derive(Debug)]
+pub struct MergeOptions {
+    conflict_marker_length: usize,
+    style: ConflictStyle,
+}
+
+impl MergeOptions {
+    /// Constructs a new `MergeOptions` with default settings
+    ///
+    /// ## Defaults
+    /// * conflict_marker_length = 7
+    /// * style = ConflictStyle::Diff3
+    pub fn new() -> Self {
+        Self {
+            conflict_marker_length: DEFAULT_CONFLICT_MARKER_LENGTH,
+            style: ConflictStyle::Diff3,
+        }
+    }
+
+    /// Set the length of the conflict markers used when displaying a merge conflict
+    pub fn set_conflict_marker_length(&mut self, conflict_marker_length: usize) -> &mut Self {
+        self.conflict_marker_length = conflict_marker_length;
+        self
+    }
+
+    /// Set the conflict style used when displaying a merge conflict
+    pub fn set_conflict_style(&mut self, style: ConflictStyle) -> &mut Self {
+        self.style = style;
+        self
+    }
+
+    /// Merge two files, given a common ancestor, based on the configured options
+    pub fn merge<'a>(
+        &self,
+        ancestor: &'a str,
+        ours: &'a str,
+        theirs: &'a str,
+    ) -> Result<String, String> {
+        let mut classifier = Classifier::default();
+        let (ancestor_lines, ancestor_ids) = classifier.classify_lines(ancestor);
+        let (our_lines, our_ids) = classifier.classify_lines(ours);
+        let (their_lines, their_ids) = classifier.classify_lines(theirs);
+
+        let opts = DiffOptions::default();
+        let our_solution = opts.diff_slice(&ancestor_ids, &our_ids);
+        let their_solution = opts.diff_slice(&ancestor_ids, &their_ids);
+
+        let merged = merge_solutions(&our_solution, &their_solution);
+        let mut merge = diff3_range_to_merge_range(&merged);
+
+        cleanup_conflicts(&mut merge);
+
+        output_result(
+            &ancestor_lines,
+            &our_lines,
+            &their_lines,
+            &merge,
+            self.conflict_marker_length,
+            self.style,
+        )
+    }
+}
+
+impl Default for MergeOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Merge two files given a common ancestor.
+///
+/// Returns `Ok(String)` upon a successful merge.
+/// Returns `Err(String)` if there were conflicts, with the conflicting
+/// regions marked with conflict markers.
+///
+/// ## Merging two files without conflicts
+/// ```
+/// # use diffy::merge;
+/// let original = "\
+/// Devotion
+/// Dominion
+/// Odium
+/// Preservation
+/// Ruin
+/// Cultivation
+/// Honor
+/// Endowment
+/// Autonomy
+/// Ambition
+/// ";
+/// let a = "\
+/// Odium
+/// Preservation
+/// Ruin
+/// Cultivation
+/// Endowment
+/// Autonomy
+/// ";
+/// let b = "\
+/// Devotion
+/// Dominion
+/// Odium
+/// Harmony
+/// Cultivation
+/// Honor
+/// Endowment
+/// Autonomy
+/// Ambition
+/// ";
+///
+/// let expected = "\
+/// Odium
+/// Harmony
+/// Cultivation
+/// Endowment
+/// Autonomy
+/// ";
+///
+/// assert_eq!(merge(original, a, b).unwrap(), expected);
+/// ```
 #[allow(dead_code)]
-fn merge<'a>(ancestor: &'a str, ours: &'a str, theirs: &'a str) -> Result<String, String> {
-    let mut classifier = Classifier::default();
-    let (ancestor_lines, ancestor_ids) = classifier.classify_lines(ancestor);
-    let (our_lines, our_ids) = classifier.classify_lines(ours);
-    let (their_lines, their_ids) = classifier.classify_lines(theirs);
-
-    let our_solution = DiffOptions::default().diff_slice(&ancestor_ids, &our_ids);
-    let their_solution = DiffOptions::default().diff_slice(&ancestor_ids, &their_ids);
-
-    let merged = merge_solutions(&our_solution, &their_solution);
-    let mut merge = diff3_range_to_merge_range(&merged);
-
-    cleanup_conflicts(&mut merge);
-
-    output_result(&ancestor_lines, &our_lines, &their_lines, &merge)
+pub fn merge<'a>(ancestor: &'a str, ours: &'a str, theirs: &'a str) -> Result<String, String> {
+    MergeOptions::default().merge(ancestor, ours, theirs)
 }
 
 fn merge_solutions<'ancestor, 'ours, 'theirs, T: ?Sized + SliceLike>(
@@ -314,6 +451,8 @@ fn output_result<'a, T: ?Sized>(
     ours: &[&'a str],
     theirs: &[&'a str],
     merge: &[MergeRange<T>],
+    marker_len: usize,
+    style: ConflictStyle,
 ) -> Result<String, String> {
     let mut conflicts = 0;
     let mut output = String::new();
@@ -324,28 +463,17 @@ fn output_result<'a, T: ?Sized>(
                 output.extend(ancestor[range.range()].iter().copied());
             }
             MergeRange::Conflict(ancestor_range, ours_range, theirs_range) => {
-                add_conflict_marker(
-                    &mut output,
-                    '<',
-                    DEFAULT_CONFLICT_MARKER_LENGTH,
-                    Some("ours"),
-                );
+                add_conflict_marker(&mut output, '<', marker_len, Some("ours"));
                 output.extend(ours[ours_range.range()].iter().copied());
-                add_conflict_marker(
-                    &mut output,
-                    '|',
-                    DEFAULT_CONFLICT_MARKER_LENGTH,
-                    Some("original"),
-                );
-                output.extend(ancestor[ancestor_range.range()].iter().copied());
-                add_conflict_marker(&mut output, '=', DEFAULT_CONFLICT_MARKER_LENGTH, None);
+
+                if matches!(style, ConflictStyle::Diff3) {
+                    add_conflict_marker(&mut output, '|', marker_len, Some("original"));
+                    output.extend(ancestor[ancestor_range.range()].iter().copied());
+                }
+
+                add_conflict_marker(&mut output, '=', marker_len, None);
                 output.extend(theirs[theirs_range.range()].iter().copied());
-                add_conflict_marker(
-                    &mut output,
-                    '>',
-                    DEFAULT_CONFLICT_MARKER_LENGTH,
-                    Some("theirs"),
-                );
+                add_conflict_marker(&mut output, '>', marker_len, Some("theirs"));
                 conflicts += 1;
             }
             MergeRange::Ours(range) => {
