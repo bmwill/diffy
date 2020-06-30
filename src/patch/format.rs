@@ -132,7 +132,11 @@ impl Display for LineDisplay<'_> {
             write!(f, "{}", style.prefix())?;
         }
 
-        write!(f, "{}{}", sign, line)?;
+        if sign == ' ' && *line == "\n" {
+            write!(f, "{}", line)?;
+        } else {
+            write!(f, "{}{}", sign, line)?;
+        }
 
         if self.f.with_color {
             write!(f, "{}", style.suffix())?;
