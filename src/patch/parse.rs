@@ -6,6 +6,9 @@ use std::{borrow::Cow, fmt};
 
 type Result<T, E = ParsePatchError> = std::result::Result<T, E>;
 
+/// An error returned when parsing a `Patch` using [`Patch::from_str`] fails
+///
+/// [`Patch::from_str`]: struct.Patch.html#method.from_str
 // TODO use a custom error type instead of a Cow
 #[derive(Debug)]
 pub struct ParsePatchError(Cow<'static, str>);

@@ -159,4 +159,4 @@ mod utils;
 
 pub use diff::{create_patch, DiffOptions};
 pub use merge::{merge, ConflictStyle, MergeOptions};
-pub use patch::{Hunk, HunkRange, Line, Patch, PatchFormatter};
+pub use patch::{Hunk, HunkRange, Line, ParsePatchError, Patch, PatchFormatter};

@@ -2,6 +2,7 @@ mod format;
 mod parse;
 
 pub use format::PatchFormatter;
+pub use parse::ParsePatchError;
 
 use std::{borrow::Cow, fmt, ops};
 
@@ -28,8 +29,27 @@ impl<'a> Patch<'a> {
         }
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn from_str(s: &'a str) -> Result<Patch<'a>, parse::ParsePatchError> {
+    /// Parse a `Patch` from a string
+    ///
+    /// ```
+    /// use diffy::Patch;
+    ///
+    /// let s = "\
+    /// --- a/ideals
+    /// +++ b/ideals
+    /// @@ -1,4 +1,6 @@
+    ///  First:
+    ///      Life before death,
+    ///      strength before weakness,
+    ///      journey before destination.
+    /// +Second:
+    /// +    I will protect those who cannot protect themselves.
+    /// ";
+    ///
+    /// let patch = Patch::from_str(s).unwrap();
+    /// ```
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &'a str) -> Result<Patch<'a>, ParsePatchError> {
         parse::parse(s)
     }
 
