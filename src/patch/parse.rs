@@ -4,13 +4,13 @@ use super::{Filename, Hunk, HunkRange, Line, NO_NEWLINE_AT_EOF};
 use crate::{patch::Patch, utils::LineIter};
 use std::borrow::Cow;
 
-type Result<T, E = PatchParseError> = std::result::Result<T, E>;
+type Result<T, E = ParsePatchError> = std::result::Result<T, E>;
 
 // TODO use a custom error type instead of a Cow
 #[derive(Debug)]
-pub struct PatchParseError(Cow<'static, str>);
+pub struct ParsePatchError(Cow<'static, str>);
 
-impl<T> From<T> for PatchParseError
+impl<T> From<T> for ParsePatchError
 where
     T: Into<Cow<'static, str>>,
 {

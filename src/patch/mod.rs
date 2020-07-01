@@ -29,7 +29,7 @@ impl<'a> Patch<'a> {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn from_str(s: &'a str) -> Result<Patch<'a>, parse::PatchParseError> {
+    pub(crate) fn from_str(s: &'a str) -> Result<Patch<'a>, parse::ParsePatchError> {
         parse::parse(s)
     }
 
