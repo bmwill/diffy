@@ -15,53 +15,75 @@ impl fmt::Display for ApplyError {
 
 impl std::error::Error for ApplyError {}
 
+#[derive(Copy, Clone, Debug)]
+enum ImageLine<'a> {
+    Unpatched(&'a str),
+    Patched(&'a str),
+}
+
+impl<'a> ImageLine<'a> {
+    fn inner(&self) -> &'a str {
+        match self {
+            ImageLine::Unpatched(inner) | ImageLine::Patched(inner) => inner,
+        }
+    }
+
+    fn into_inner(self) -> &'a str {
+        self.inner()
+    }
+
+    fn is_patched(&self) -> bool {
+        match self {
+            ImageLine::Unpatched(_) => false,
+            ImageLine::Patched(_) => true,
+        }
+    }
+}
+
 #[allow(dead_code)]
 pub(crate) fn apply(pre_image: &str, patch: &Patch<'_>) -> Result<String, ApplyError> {
-    let mut image: Vec<_> = LineIter::new(pre_image).collect();
+    let mut image: Vec<_> = LineIter::new(pre_image).map(ImageLine::Unpatched).collect();
 
     for (i, hunk) in patch.hunks().iter().enumerate() {
         apply_hunk(&mut image, hunk).map_err(|_| ApplyError(i + 1))?;
     }
 
-    Ok(image.into_iter().collect())
+    Ok(image.into_iter().map(ImageLine::into_inner).collect())
 }
 
-fn apply_hunk<'a>(image: &mut Vec<&'a str>, hunk: &Hunk<'a>) -> Result<(), ()> {
+fn apply_hunk<'a>(image: &mut Vec<ImageLine<'a>>, hunk: &Hunk<'a>) -> Result<(), ()> {
     // Find position
     let pos = find_position(image, hunk).ok_or(())?;
 
     // update image
     image.splice(
         pos..pos + pre_image_line_count(hunk.lines()),
-        post_image(hunk.lines()),
+        post_image(hunk.lines()).map(ImageLine::Patched),
     );
 
     Ok(())
 }
 
-fn find_position(image: &[&str], hunk: &Hunk<'_>) -> Option<usize> {
+// Search in `image` for a palce to apply hunk.
+// This follows the general algorithm (minus fuzzy-matching context lines) described in GNU patch's
+// man page.
+//
+// It might be worth looking into other possible positions to apply the hunk to as described here:
+// https://neil.fraser.name/writing/patch/
+fn find_position(image: &[ImageLine], hunk: &Hunk<'_>) -> Option<usize> {
     let pos = hunk.new_range().start().saturating_sub(1);
 
-    if match_fragment(image, hunk.lines(), pos) {
-        Some(pos)
-    } else {
-        None
+    // Create an iterator that starts with 'pos' and then interleaves
+    // moving pos backward/foward by one.
+    let backward = (0..pos).rev();
+    let forward = pos + 1..image.len();
+    for pos in iter::once(pos).chain(interleave(backward, forward)) {
+        if match_fragment(image, hunk.lines(), pos) {
+            return Some(pos);
+        }
     }
 
-    // TODO Look into finding other possible positions to apply the hunk to as described here:
-    // https://neil.fraser.name/writing/patch/
-    //
-    // // Create an iterator that starts with 'pos' and then interleaves
-    // // moving pos backward/foward by one.
-    // let backward = (0..pos).rev();
-    // let forward = pos + 1..image.len();
-    // for pos in iter::once(pos).chain(interleave(backward, forward)) {
-    //     if match_fragment(image, hunk.lines(), pos) {
-    //         return Some(pos);
-    //     }
-    // }
-
-    // None
+    None
 }
 
 fn pre_image_line_count(lines: &[Line<'_>]) -> usize {
@@ -82,7 +104,7 @@ fn pre_image<'a, 'b>(lines: &'b [Line<'a>]) -> impl Iterator<Item = &'a str> + '
     })
 }
 
-fn match_fragment(image: &[&str], lines: &[Line<'_>], pos: usize) -> bool {
+fn match_fragment(image: &[ImageLine], lines: &[Line<'_>], pos: usize) -> bool {
     let len = pre_image_line_count(lines);
 
     let image = if let Some(image) = image.get(pos..pos + len) {
@@ -91,7 +113,12 @@ fn match_fragment(image: &[&str], lines: &[Line<'_>], pos: usize) -> bool {
         return false;
     };
 
-    pre_image(lines).eq(image.iter().copied())
+    // If any of these lines have already been patched then we can't match at this position
+    if image.iter().any(ImageLine::is_patched) {
+        return false;
+    }
+
+    pre_image(lines).eq(image.iter().map(ImageLine::inner))
 }
 
 #[derive(Debug)]
@@ -101,7 +128,6 @@ struct Interleave<I, J> {
     flag: bool,
 }
 
-#[allow(dead_code)]
 fn interleave<I, J>(
     i: I,
     j: J,
