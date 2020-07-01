@@ -10,11 +10,8 @@ type Result<T, E = ParsePatchError> = std::result::Result<T, E>;
 #[derive(Debug)]
 pub struct ParsePatchError(Cow<'static, str>);
 
-impl<T> From<T> for ParsePatchError
-where
-    T: Into<Cow<'static, str>>,
-{
-    fn from(e: T) -> Self {
+impl ParsePatchError {
+    fn new<E: Into<Cow<'static, str>>>(e: E) -> Self {
         Self(e.into())
     }
 }
@@ -35,7 +32,10 @@ impl<'a> Parser<'a> {
     }
 
     fn next(&mut self) -> Result<&'a str> {
-        let line = self.lines.next().ok_or("unexpected EOF")?;
+        let line = self
+            .lines
+            .next()
+            .ok_or_else(|| ParsePatchError::new("unexpected EOF"))?;
         Ok(line)
     }
 }
@@ -73,7 +73,7 @@ fn parse_filename<'a>(prefix: &str, line: &'a str) -> Result<Cow<'a, str>> {
 
     let filename_end = line
         .find(['\n', '\t'].as_ref())
-        .ok_or("filename unterminated")?;
+        .ok_or_else(|| ParsePatchError::new("filename unterminated"))?;
     let filename = &line[..filename_end];
 
     let filename = if is_quoted(filename) {
@@ -91,7 +91,7 @@ fn is_quoted(s: &str) -> bool {
 
 fn unescaped_filename<'a>(filename: &'a str) -> Result<Cow<'a, str>> {
     if filename.contains(Filename::ESCAPED_CHARS) {
-        return Err("invalid char in unquoted filename".into());
+        return Err(ParsePatchError::new("invalid char in unquoted filename"));
     }
 
     Ok(filename.into())
@@ -103,12 +103,15 @@ fn escaped_filename(escaped: &str) -> Result<Cow<'_, str>> {
     let mut chars = escaped.chars();
     while let Some(c) = chars.next() {
         if c == '\\' {
-            match chars.next().ok_or("expected escaped character")? {
+            match chars
+                .next()
+                .ok_or_else(|| ParsePatchError::new("expected escaped character"))?
+            {
                 'n' | 't' | '0' | 'r' | '\"' | '\\' => filename.push(c),
-                _ => return Err("invalid escaped character".into()),
+                _ => return Err(ParsePatchError::new("invalid escaped character")),
             }
         } else if Filename::ESCAPED_CHARS.contains(&c) {
-            return Err("invalid unescaped character".into());
+            return Err(ParsePatchError::new("invalid unescaped character"));
         } else {
             filename.push(c);
         }
@@ -121,7 +124,8 @@ fn strip_prefix<'a>(s: &'a str, prefix: &str) -> Result<&'a str> {
     if s.starts_with(prefix) {
         Ok(&s[prefix.len()..])
     } else {
-        Err(format!("prefix doesn't match: prefix: {:?} input: {:?}", prefix, s).into())
+        let e = format!("prefix doesn't match: prefix: {:?} input: {:?}", prefix, s);
+        Err(ParsePatchError::new(e))
     }
 }
 
@@ -144,7 +148,7 @@ fn hunks<'a>(parser: &mut Parser<'a>) -> Result<Vec<Hunk<'a>>> {
 
     // check and verify that the Hunks are in sorted order and don't overlap
     if !verify_hunks_in_order(&hunks) {
-        return Err("Hunks not in order/overlap".into());
+        return Err(ParsePatchError::new("Hunks not in order or overlap"));
     }
 
     Ok(hunks)
@@ -157,7 +161,7 @@ fn hunk<'a>(parser: &mut Parser<'a>) -> Result<Hunk<'a>> {
     // check counts of lines to see if they match the ranges in the hunk header
     let (len1, len2) = super::hunk_lines_count(&lines);
     if len1 != range1.len || len2 != range2.len {
-        return Err("Hunk header does not match hunk".into());
+        return Err(ParsePatchError::new("Hunk header does not match hunk"));
     }
 
     Ok(Hunk::new(range1, range2, function_context, lines))
@@ -166,8 +170,8 @@ fn hunk<'a>(parser: &mut Parser<'a>) -> Result<Hunk<'a>> {
 fn hunk_header<'a>(input: &'a str) -> Result<(HunkRange, HunkRange, Option<&'a str>)> {
     let input = strip_prefix(input, "@@ ")?;
 
-    let (ranges, function_context) =
-        split_at_exclusive(input, " @@").map_err(|_| "hunk header unterminated")?;
+    let (ranges, function_context) = split_at_exclusive(input, " @@")
+        .map_err(|_| ParsePatchError::new("hunk header unterminated"))?;
     let function_context = strip_prefix(function_context, " ").ok();
 
     let (range1, range2) = split_at_exclusive(ranges, " ")?;
@@ -180,18 +184,25 @@ fn split_at_exclusive<'a>(s: &'a str, needle: &str) -> Result<(&'a str, &'a str)
     if let Some(idx) = s.find(needle) {
         Ok((&s[..idx], &s[idx + needle.len()..]))
     } else {
-        Err("unable to find needle".into())
+        Err(ParsePatchError::new(format!("unable to find '{}'", needle)))
     }
 }
 
 fn range(s: &str) -> Result<HunkRange> {
     let (start, len) = if let Ok((start, len)) = split_at_exclusive(s, ",") {
         (
-            start.parse().map_err(|_| "can't parse range")?,
-            len.parse().map_err(|_| "can't parse range")?,
+            start
+                .parse()
+                .map_err(|_| ParsePatchError::new("can't parse range"))?,
+            len.parse()
+                .map_err(|_| ParsePatchError::new("can't parse range"))?,
         )
     } else {
-        (s.parse().map_err(|_| "cant parse range")?, 1)
+        (
+            s.parse()
+                .map_err(|_| ParsePatchError::new("cant parse range"))?,
+            1,
+        )
     };
 
     Ok(HunkRange::new(start, len))
@@ -207,25 +218,25 @@ fn hunk_lines<'a>(parser: &mut Parser<'a>) -> Result<Vec<Line<'a>>> {
         let line = if line.starts_with('@') {
             break;
         } else if no_newline_context {
-            return Err("expected end of hunk".into());
+            return Err(ParsePatchError::new("expected end of hunk"));
         } else if line.starts_with(' ') {
             Line::Context(&line[1..])
         } else if *line == "\n" {
             Line::Context(line)
         } else if line.starts_with('-') {
             if no_newline_delete {
-                return Err("expected no more deleted lines".into());
+                return Err(ParsePatchError::new("expected no more deleted lines"));
             }
             Line::Delete(&line[1..])
         } else if line.starts_with('+') {
             if no_newline_insert {
-                return Err("expected no more inserted lines".into());
+                return Err(ParsePatchError::new("expected no more inserted lines"));
             }
             Line::Insert(&line[1..])
         } else if line.starts_with(NO_NEWLINE_AT_EOF) {
-            let last_line = lines
-                .pop()
-                .ok_or("unexpected 'No newline at end of file' line")?;
+            let last_line = lines.pop().ok_or_else(|| {
+                ParsePatchError::new("unexpected 'No newline at end of file' line")
+            })?;
             match last_line {
                 Line::Context(line) => {
                     no_newline_context = true;
@@ -241,7 +252,7 @@ fn hunk_lines<'a>(parser: &mut Parser<'a>) -> Result<Vec<Line<'a>>> {
                 }
             }
         } else {
-            return Err("unexpected line".into());
+            return Err(ParsePatchError::new("unexpected line in hunk body"));
         };
 
         lines.push(line);
@@ -255,6 +266,6 @@ fn strip_newline<'a>(s: &'a str) -> Result<&'a str> {
     if s.ends_with('\n') {
         Ok(&s[..s.len() - 1])
     } else {
-        Err("missing newline".into())
+        Err(ParsePatchError::new("missing newline"))
     }
 }
