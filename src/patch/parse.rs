@@ -2,7 +2,7 @@
 
 use super::{Filename, Hunk, HunkRange, Line, NO_NEWLINE_AT_EOF};
 use crate::{patch::Patch, utils::LineIter};
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt};
 
 type Result<T, E = ParsePatchError> = std::result::Result<T, E>;
 
@@ -15,6 +15,14 @@ impl ParsePatchError {
         Self(e.into())
     }
 }
+
+impl fmt::Display for ParsePatchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "error parsing patch: {}", self.0)
+    }
+}
+
+impl std::error::Error for ParsePatchError {}
 
 struct Parser<'a> {
     lines: std::iter::Peekable<LineIter<'a>>,
