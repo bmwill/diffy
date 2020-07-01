@@ -5,11 +5,11 @@ use crate::{
 use std::{fmt, iter};
 
 #[derive(Debug)]
-pub(crate) struct ApplyError;
+pub(crate) struct ApplyError(usize);
 
 impl fmt::Display for ApplyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "error applying patch")
+        write!(f, "error applying hunk #{}", self.0)
     }
 }
 
@@ -19,16 +19,16 @@ impl std::error::Error for ApplyError {}
 pub(crate) fn apply(pre_image: &str, patch: &Patch<'_>) -> Result<String, ApplyError> {
     let mut image: Vec<_> = LineIter::new(pre_image).collect();
 
-    for hunk in patch.hunks() {
-        apply_hunk(&mut image, hunk)?;
+    for (i, hunk) in patch.hunks().iter().enumerate() {
+        apply_hunk(&mut image, hunk).map_err(|_| ApplyError(i + 1))?;
     }
 
     Ok(image.into_iter().collect())
 }
 
-fn apply_hunk<'a>(image: &mut Vec<&'a str>, hunk: &Hunk<'a>) -> Result<(), ApplyError> {
+fn apply_hunk<'a>(image: &mut Vec<&'a str>, hunk: &Hunk<'a>) -> Result<(), ()> {
     // Find position
-    let pos = find_position(image, hunk).ok_or(ApplyError)?;
+    let pos = find_position(image, hunk).ok_or(())?;
 
     // update image
     image.splice(
