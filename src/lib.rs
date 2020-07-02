@@ -75,6 +75,59 @@
 //! +Oathbringer
 //! ```
 //!
+//! ## Applying a Patch
+//!
+//! Once you have a [`Patch`] you can apply it to a base image in order to
+//! recover the new text. Each hunk will be applied to the base image in
+//! sequence. Similarly to GNU `patch`, this implementation can detect when
+//! line numbers specified in the patch are incorrect and will attempt to find
+//! the correct place to apply each hunk by iterating forward and backward
+//! from the given position until all context lines from a hunk match the base
+//! image.
+//!
+//! ```
+//! use diffy::{apply, Patch};
+//!
+//! let s = "\
+//! --- a/skybreaker-ideals
+//! +++ b/skybreaker-ideals
+//! @@ -10,6 +10,8 @@
+//!  First:
+//!      Life before death,
+//!      strength before weakness,
+//!      journey before destination.
+//!  Second:
+//! -    I will put the law before all else.
+//! +    I swear to seek justice,
+//! +    to let it guide me,
+//! +    until I find a more perfect Ideal.
+//! ";
+//!
+//! let patch = Patch::from_str(s).unwrap();
+//!
+//! let base_image = "\
+//! First:
+//!     Life before death,
+//!     strength before weakness,
+//!     journey before destination.
+//! Second:
+//!     I will put the law before all else.
+//! ";
+//!
+//! let expected = "\
+//! First:
+//!     Life before death,
+//!     strength before weakness,
+//!     journey before destination.
+//! Second:
+//!     I swear to seek justice,
+//!     to let it guide me,
+//!     until I find a more perfect Ideal.
+//! ";
+//!
+//! assert_eq!(apply(base_image, &patch).unwrap(), expected);
+//! ```
+//!
 //! ## Performing a Three-way Merge
 //!
 //! Two files `A` and `B` can be merged together given a common ancestor or
@@ -157,6 +210,7 @@ mod patch;
 mod range;
 mod utils;
 
+pub use apply::{apply, ApplyError};
 pub use diff::{create_patch, DiffOptions};
 pub use merge::{merge, ConflictStyle, MergeOptions};
 pub use patch::{Hunk, HunkRange, Line, ParsePatchError, Patch, PatchFormatter};

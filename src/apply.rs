@@ -4,8 +4,11 @@ use crate::{
 };
 use std::{fmt, iter};
 
+/// An error returned when [`apply`]ing a `Patch` fails
+///
+/// [`apply`]: fn.apply.html
 #[derive(Debug)]
-pub(crate) struct ApplyError(usize);
+pub struct ApplyError(usize);
 
 impl fmt::Display for ApplyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -40,9 +43,47 @@ impl<'a> ImageLine<'a> {
     }
 }
 
-#[allow(dead_code)]
-pub(crate) fn apply(pre_image: &str, patch: &Patch<'_>) -> Result<String, ApplyError> {
-    let mut image: Vec<_> = LineIter::new(pre_image).map(ImageLine::Unpatched).collect();
+/// Apply a `Patch` to a base image
+///
+/// ```
+/// use diffy::{apply, Patch};
+///
+/// let s = "\
+/// --- a/ideals
+/// +++ b/ideals
+/// @@ -1,4 +1,6 @@
+///  First:
+///      Life before death,
+///      strength before weakness,
+///      journey before destination.
+/// +Second:
+/// +    I will protect those who cannot protect themselves.
+/// ";
+///
+/// let patch = Patch::from_str(s).unwrap();
+///
+/// let base_image = "\
+/// First:
+///     Life before death,
+///     strength before weakness,
+///     journey before destination.
+/// ";
+///
+/// let expected = "\
+/// First:
+///     Life before death,
+///     strength before weakness,
+///     journey before destination.
+/// Second:
+///     I will protect those who cannot protect themselves.
+/// ";
+///
+/// assert_eq!(apply(base_image, &patch).unwrap(), expected);
+/// ```
+pub fn apply(base_image: &str, patch: &Patch<'_>) -> Result<String, ApplyError> {
+    let mut image: Vec<_> = LineIter::new(base_image)
+        .map(ImageLine::Unpatched)
+        .collect();
 
     for (i, hunk) in patch.hunks().iter().enumerate() {
         apply_hunk(&mut image, hunk).map_err(|_| ApplyError(i + 1))?;
