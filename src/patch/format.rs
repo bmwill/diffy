@@ -37,15 +37,15 @@ impl PatchFormatter {
     }
 
     /// Returns a `Display` impl which can be used to print a Patch
-    pub fn fmt_patch<'a>(&'a self, patch: &'a Patch<'a>) -> impl Display + 'a {
+    pub fn fmt_patch<'a>(&'a self, patch: &'a Patch<'a, str>) -> impl Display + 'a {
         PatchDisplay { f: self, patch }
     }
 
-    fn fmt_hunk<'a>(&'a self, hunk: &'a Hunk<'a>) -> impl Display + 'a {
+    fn fmt_hunk<'a>(&'a self, hunk: &'a Hunk<'a, str>) -> impl Display + 'a {
         HunkDisplay { f: self, hunk }
     }
 
-    fn fmt_line<'a>(&'a self, line: &'a Line<'a>) -> impl Display + 'a {
+    fn fmt_line<'a>(&'a self, line: &'a Line<'a, str>) -> impl Display + 'a {
         LineDisplay { f: self, line }
     }
 }
@@ -58,7 +58,7 @@ impl Default for PatchFormatter {
 
 struct PatchDisplay<'a> {
     f: &'a PatchFormatter,
-    patch: &'a Patch<'a>,
+    patch: &'a Patch<'a, str>,
 }
 
 impl Display for PatchDisplay<'_> {
@@ -82,7 +82,7 @@ impl Display for PatchDisplay<'_> {
 
 struct HunkDisplay<'a> {
     f: &'a PatchFormatter,
-    hunk: &'a Hunk<'a>,
+    hunk: &'a Hunk<'a, str>,
 }
 
 impl Display for HunkDisplay<'_> {
@@ -117,7 +117,7 @@ impl Display for HunkDisplay<'_> {
 
 struct LineDisplay<'a> {
     f: &'a PatchFormatter,
-    line: &'a Line<'a>,
+    line: &'a Line<'a, str>,
 }
 
 impl Display for LineDisplay<'_> {

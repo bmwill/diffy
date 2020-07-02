@@ -80,7 +80,7 @@ impl<'a> ImageLine<'a> {
 ///
 /// assert_eq!(apply(base_image, &patch).unwrap(), expected);
 /// ```
-pub fn apply(base_image: &str, patch: &Patch<'_>) -> Result<String, ApplyError> {
+pub fn apply(base_image: &str, patch: &Patch<'_, str>) -> Result<String, ApplyError> {
     let mut image: Vec<_> = LineIter::new(base_image)
         .map(ImageLine::Unpatched)
         .collect();
@@ -92,7 +92,7 @@ pub fn apply(base_image: &str, patch: &Patch<'_>) -> Result<String, ApplyError> 
     Ok(image.into_iter().map(ImageLine::into_inner).collect())
 }
 
-fn apply_hunk<'a>(image: &mut Vec<ImageLine<'a>>, hunk: &Hunk<'a>) -> Result<(), ()> {
+fn apply_hunk<'a>(image: &mut Vec<ImageLine<'a>>, hunk: &Hunk<'a, str>) -> Result<(), ()> {
     // Find position
     let pos = find_position(image, hunk).ok_or(())?;
 
@@ -111,7 +111,7 @@ fn apply_hunk<'a>(image: &mut Vec<ImageLine<'a>>, hunk: &Hunk<'a>) -> Result<(),
 //
 // It might be worth looking into other possible positions to apply the hunk to as described here:
 // https://neil.fraser.name/writing/patch/
-fn find_position(image: &[ImageLine], hunk: &Hunk<'_>) -> Option<usize> {
+fn find_position(image: &[ImageLine], hunk: &Hunk<'_, str>) -> Option<usize> {
     let pos = hunk.new_range().start().saturating_sub(1);
 
     // Create an iterator that starts with 'pos' and then interleaves
@@ -127,25 +127,25 @@ fn find_position(image: &[ImageLine], hunk: &Hunk<'_>) -> Option<usize> {
     None
 }
 
-fn pre_image_line_count(lines: &[Line<'_>]) -> usize {
+fn pre_image_line_count(lines: &[Line<'_, str>]) -> usize {
     pre_image(lines).count()
 }
 
-fn post_image<'a, 'b>(lines: &'b [Line<'a>]) -> impl Iterator<Item = &'a str> + 'b {
+fn post_image<'a, 'b>(lines: &'b [Line<'a, str>]) -> impl Iterator<Item = &'a str> + 'b {
     lines.iter().filter_map(|line| match line {
         Line::Context(l) | Line::Insert(l) => Some(*l),
         Line::Delete(_) => None,
     })
 }
 
-fn pre_image<'a, 'b>(lines: &'b [Line<'a>]) -> impl Iterator<Item = &'a str> + 'b {
+fn pre_image<'a, 'b>(lines: &'b [Line<'a, str>]) -> impl Iterator<Item = &'a str> + 'b {
     lines.iter().filter_map(|line| match line {
         Line::Context(l) | Line::Delete(l) => Some(*l),
         Line::Insert(_) => None,
     })
 }
 
-fn match_fragment(image: &[ImageLine], lines: &[Line<'_>], pos: usize) -> bool {
+fn match_fragment(image: &[ImageLine], lines: &[Line<'_, str>], pos: usize) -> bool {
     let len = pre_image_line_count(lines);
 
     let image = if let Some(image) = image.get(pos..pos + len) {

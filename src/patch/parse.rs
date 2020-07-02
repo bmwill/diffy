@@ -52,7 +52,7 @@ impl<'a> Parser<'a> {
 }
 
 #[allow(dead_code)]
-pub fn parse<'a>(input: &'a str) -> Result<Patch<'a>> {
+pub fn parse<'a>(input: &'a str) -> Result<Patch<'a, str>> {
     let mut parser = Parser::new(input);
     let header = patch_header(&mut parser)?;
     let hunks = hunks(&mut parser)?;
@@ -140,7 +140,7 @@ fn strip_prefix<'a>(s: &'a str, prefix: &str) -> Result<&'a str> {
     }
 }
 
-fn verify_hunks_in_order(hunks: &[Hunk<'_>]) -> bool {
+fn verify_hunks_in_order<T: ?Sized>(hunks: &[Hunk<'_, T>]) -> bool {
     for hunk in hunks.windows(2) {
         if hunk[0].old_range.end() >= hunk[1].old_range.start()
             || hunk[0].new_range.end() >= hunk[1].new_range.start()
@@ -151,7 +151,7 @@ fn verify_hunks_in_order(hunks: &[Hunk<'_>]) -> bool {
     true
 }
 
-fn hunks<'a>(parser: &mut Parser<'a>) -> Result<Vec<Hunk<'a>>> {
+fn hunks<'a>(parser: &mut Parser<'a>) -> Result<Vec<Hunk<'a, str>>> {
     let mut hunks = Vec::new();
     while parser.peek().is_some() {
         hunks.push(hunk(parser)?);
@@ -165,7 +165,7 @@ fn hunks<'a>(parser: &mut Parser<'a>) -> Result<Vec<Hunk<'a>>> {
     Ok(hunks)
 }
 
-fn hunk<'a>(parser: &mut Parser<'a>) -> Result<Hunk<'a>> {
+fn hunk<'a>(parser: &mut Parser<'a>) -> Result<Hunk<'a, str>> {
     let (range1, range2, function_context) = hunk_header(parser.next()?)?;
     let lines = hunk_lines(parser)?;
 
@@ -219,8 +219,8 @@ fn range(s: &str) -> Result<HunkRange> {
     Ok(HunkRange::new(start, len))
 }
 
-fn hunk_lines<'a>(parser: &mut Parser<'a>) -> Result<Vec<Line<'a>>> {
-    let mut lines: Vec<Line<'a>> = Vec::new();
+fn hunk_lines<'a>(parser: &mut Parser<'a>) -> Result<Vec<Line<'a, str>>> {
+    let mut lines: Vec<Line<'a, str>> = Vec::new();
     let mut no_newline_context = false;
     let mut no_newline_delete = false;
     let mut no_newline_insert = false;
@@ -233,7 +233,7 @@ fn hunk_lines<'a>(parser: &mut Parser<'a>) -> Result<Vec<Line<'a>>> {
         } else if line.starts_with(' ') {
             Line::Context(&line[1..])
         } else if *line == "\n" {
-            Line::Context(line)
+            Line::Context(*line)
         } else if line.starts_with('-') {
             if no_newline_delete {
                 return Err(ParsePatchError::new("expected no more deleted lines"));

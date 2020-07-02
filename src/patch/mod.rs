@@ -9,18 +9,18 @@ use std::{borrow::Cow, fmt, ops};
 const NO_NEWLINE_AT_EOF: &str = "\\ No newline at end of file";
 
 /// Representation of all the differences between two files
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Patch<'a> {
-    original: Filename<'a>,
-    modified: Filename<'a>,
-    hunks: Vec<Hunk<'a>>,
+#[derive(PartialEq, Eq)]
+pub struct Patch<'a, T: ToOwned + ?Sized> {
+    original: Filename<'a, T>,
+    modified: Filename<'a, T>,
+    hunks: Vec<Hunk<'a, T>>,
 }
 
-impl<'a> Patch<'a> {
-    pub(crate) fn new<O, M>(original: O, modified: M, hunks: Vec<Hunk<'a>>) -> Self
+impl<'a, T: ToOwned + ?Sized> Patch<'a, T> {
+    pub(crate) fn new<O, M>(original: O, modified: M, hunks: Vec<Hunk<'a, T>>) -> Self
     where
-        O: Into<Cow<'a, str>>,
-        M: Into<Cow<'a, str>>,
+        O: Into<Cow<'a, T>>,
+        M: Into<Cow<'a, T>>,
     {
         Self {
             original: Filename(original.into()),
@@ -29,6 +29,23 @@ impl<'a> Patch<'a> {
         }
     }
 
+    /// Return the name of the old file
+    pub fn original(&self) -> &T {
+        &self.original
+    }
+
+    /// Return the name of the new file
+    pub fn modified(&self) -> &T {
+        &self.modified
+    }
+
+    /// Returns the hunks in the patch
+    pub fn hunks(&self) -> &[Hunk<'_, T>] {
+        &self.hunks
+    }
+}
+
+impl<'a> Patch<'a, str> {
     /// Parse a `Patch` from a string
     ///
     /// ```
@@ -49,36 +66,45 @@ impl<'a> Patch<'a> {
     /// let patch = Patch::from_str(s).unwrap();
     /// ```
     #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &'a str) -> Result<Patch<'a>, ParsePatchError> {
+    pub fn from_str(s: &'a str) -> Result<Patch<'a, str>, ParsePatchError> {
         parse::parse(s)
-    }
-
-    /// Return the name of the old file
-    pub fn original(&self) -> &str {
-        &self.original
-    }
-
-    /// Return the name of the new file
-    pub fn modified(&self) -> &str {
-        &self.modified
-    }
-
-    /// Returns the hunks in the patch
-    pub fn hunks(&self) -> &[Hunk<'_>] {
-        &self.hunks
     }
 }
 
-impl fmt::Display for Patch<'_> {
+impl<T: ToOwned + ?Sized> Clone for Patch<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            original: self.original.clone(),
+            modified: self.modified.clone(),
+            hunks: self.hunks.clone(),
+        }
+    }
+}
+
+impl fmt::Display for Patch<'_, str> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", PatchFormatter::new().fmt_patch(self))
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct Filename<'a>(Cow<'a, str>);
+impl<T: ?Sized, O> fmt::Debug for Patch<'_, T>
+where
+    T: ToOwned<Owned = O> + fmt::Debug,
+    O: std::borrow::Borrow<T> + fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Patch")
+            .field("original", &self.original)
+            .field("modified", &self.modified)
+            .field("hunks", &self.hunks)
+            .finish()
+    }
+}
 
-impl Filename<'_> {
+#[derive(PartialEq, Eq)]
+struct Filename<'a, T: ToOwned + ?Sized>(Cow<'a, T>);
+
+impl Filename<'_, str> {
     const ESCAPED_CHARS: &'static [char] = &['\n', '\t', '\0', '\r', '\"', '\\'];
 
     fn needs_to_be_escaped(&self) -> bool {
@@ -86,21 +112,27 @@ impl Filename<'_> {
     }
 }
 
-impl AsRef<str> for Filename<'_> {
-    fn as_ref(&self) -> &str {
+impl<T: ToOwned + ?Sized> AsRef<T> for Filename<'_, T> {
+    fn as_ref(&self) -> &T {
         &self.0
     }
 }
 
-impl ops::Deref for Filename<'_> {
-    type Target = str;
+impl<T: ToOwned + ?Sized> ops::Deref for Filename<'_, T> {
+    type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl fmt::Display for Filename<'_> {
+impl<T: ToOwned + ?Sized> Clone for Filename<'_, T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl fmt::Display for Filename<'_, str> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use std::fmt::Write;
         if self.needs_to_be_escaped() {
@@ -120,18 +152,28 @@ impl fmt::Display for Filename<'_> {
     }
 }
 
+impl<T: ?Sized, O> fmt::Debug for Filename<'_, T>
+where
+    T: ToOwned<Owned = O> + fmt::Debug,
+    O: std::borrow::Borrow<T> + fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Filename").field(&self.0).finish()
+    }
+}
+
 /// Represents a group of differing lines between two files
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Hunk<'a> {
+#[derive(Debug, PartialEq, Eq)]
+pub struct Hunk<'a, T: ?Sized> {
     old_range: HunkRange,
     new_range: HunkRange,
 
-    function_context: Option<&'a str>,
+    function_context: Option<&'a T>,
 
-    lines: Vec<Line<'a>>,
+    lines: Vec<Line<'a, T>>,
 }
 
-fn hunk_lines_count(lines: &[Line<'_>]) -> (usize, usize) {
+fn hunk_lines_count<T: ?Sized>(lines: &[Line<'_, T>]) -> (usize, usize) {
     lines.iter().fold((0, 0), |count, line| match line {
         Line::Context(_) => (count.0 + 1, count.1 + 1),
         Line::Delete(_) => (count.0 + 1, count.1),
@@ -139,12 +181,12 @@ fn hunk_lines_count(lines: &[Line<'_>]) -> (usize, usize) {
     })
 }
 
-impl<'a> Hunk<'a> {
+impl<'a, T: ?Sized> Hunk<'a, T> {
     pub(crate) fn new(
         old_range: HunkRange,
         new_range: HunkRange,
-        function_context: Option<&'a str>,
-        lines: Vec<Line<'a>>,
+        function_context: Option<&'a T>,
+        lines: Vec<Line<'a, T>>,
     ) -> Self {
         let (old_count, new_count) = hunk_lines_count(&lines);
 
@@ -170,13 +212,24 @@ impl<'a> Hunk<'a> {
     }
 
     /// Returns the function context (if any) for the hunk
-    pub fn function_context(&self) -> Option<&str> {
+    pub fn function_context(&self) -> Option<&T> {
         self.function_context.as_deref()
     }
 
     /// Returns the lines in the hunk
-    pub fn lines(&self) -> &[Line<'a>] {
+    pub fn lines(&self) -> &[Line<'a, T>] {
         &self.lines
+    }
+}
+
+impl<T: ?Sized> Clone for Hunk<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            old_range: self.old_range,
+            new_range: self.new_range,
+            function_context: self.function_context,
+            lines: self.lines.clone(),
+        }
     }
 }
 
@@ -234,12 +287,20 @@ impl fmt::Display for HunkRange {
 ///
 /// A `Line` contains the terminating newline character `\n` unless it is the final
 /// line in the file and the file does not end with a newline character.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Line<'a> {
+#[derive(Debug, PartialEq, Eq)]
+pub enum Line<'a, T: ?Sized> {
     /// A line providing context in the diff which is present in both the old and new file
-    Context(&'a str),
+    Context(&'a T),
     /// A line deleted from the old file
-    Delete(&'a str),
+    Delete(&'a T),
     /// A line inserted to the new file
-    Insert(&'a str),
+    Insert(&'a T),
+}
+
+impl<T: ?Sized> Copy for Line<'_, T> {}
+
+impl<T: ?Sized> Clone for Line<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
 }
