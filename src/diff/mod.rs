@@ -102,7 +102,7 @@ impl DiffOptions {
         let solution = self.diff_slice(&old_ids, &new_ids);
 
         let hunks = to_hunks(&old_lines, &new_lines, &solution, self.context_len);
-        Patch::new("original", "modified", hunks)
+        Patch::new(Some("original"), Some("modified"), hunks)
     }
 
     /// Create a patch between two potentially non-utf8 texts
@@ -118,7 +118,7 @@ impl DiffOptions {
         let solution = self.diff_slice(&old_ids, &new_ids);
 
         let hunks = to_hunks(&old_lines, &new_lines, &solution, self.context_len);
-        Patch::new(b"original".as_ref(), b"modified".as_ref(), hunks)
+        Patch::new(Some(&b"original"[..]), Some(&b"modified"[..]), hunks)
     }
 
     pub(crate) fn diff_slice<'a, T: PartialEq>(

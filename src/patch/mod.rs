@@ -11,32 +11,41 @@ const NO_NEWLINE_AT_EOF: &str = "\\ No newline at end of file";
 /// Representation of all the differences between two files
 #[derive(PartialEq, Eq)]
 pub struct Patch<'a, T: ToOwned + ?Sized> {
-    original: Filename<'a, T>,
-    modified: Filename<'a, T>,
+    // TODO GNU patch is able to parse patches without filename headers.
+    // This should be changed to an `Option` type to reflect this instead of setting this to ""
+    // when they're missing
+    original: Option<Filename<'a, T>>,
+    modified: Option<Filename<'a, T>>,
     hunks: Vec<Hunk<'a, T>>,
 }
 
 impl<'a, T: ToOwned + ?Sized> Patch<'a, T> {
-    pub(crate) fn new<O, M>(original: O, modified: M, hunks: Vec<Hunk<'a, T>>) -> Self
+    pub(crate) fn new<O, M>(
+        original: Option<O>,
+        modified: Option<M>,
+        hunks: Vec<Hunk<'a, T>>,
+    ) -> Self
     where
         O: Into<Cow<'a, T>>,
         M: Into<Cow<'a, T>>,
     {
+        let original = original.map(|o| Filename(o.into()));
+        let modified = modified.map(|m| Filename(m.into()));
         Self {
-            original: Filename(original.into()),
-            modified: Filename(modified.into()),
+            original,
+            modified,
             hunks,
         }
     }
 
     /// Return the name of the old file
-    pub fn original(&self) -> &T {
-        &self.original
+    pub fn original(&self) -> Option<&T> {
+        self.original.as_ref().map(AsRef::as_ref)
     }
 
     /// Return the name of the new file
-    pub fn modified(&self) -> &T {
-        &self.modified
+    pub fn modified(&self) -> Option<&T> {
+        self.modified.as_ref().map(AsRef::as_ref)
     }
 
     /// Returns the hunks in the patch

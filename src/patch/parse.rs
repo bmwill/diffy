@@ -60,8 +60,8 @@ pub fn parse<'a>(input: &'a str) -> Result<Patch<'a, str>> {
     let hunks = hunks(&mut parser)?;
 
     Ok(Patch::new(
-        convert_cow_to_str(header.0),
-        convert_cow_to_str(header.1),
+        header.0.map(convert_cow_to_str),
+        header.1.map(convert_cow_to_str),
         hunks,
     ))
 }
@@ -85,17 +85,36 @@ fn convert_cow_to_str(cow: Cow<'_, [u8]>) -> Cow<'_, str> {
 #[allow(clippy::type_complexity)]
 fn patch_header<'a, T: Text + ToOwned + ?Sized>(
     parser: &mut Parser<'a, T>,
-) -> Result<(Cow<'a, [u8]>, Cow<'a, [u8]>)> {
+) -> Result<(Option<Cow<'a, [u8]>>, Option<Cow<'a, [u8]>>)> {
     skip_header_preamble(parser)?;
-    let filename1 = parse_filename("--- ", parser.next()?)?;
-    let filename2 = parse_filename("+++ ", parser.next()?)?;
+
+    let mut filename1 = None;
+    let mut filename2 = None;
+
+    while let Some(line) = parser.peek() {
+        if line.starts_with("--- ") {
+            if filename1.is_some() {
+                return Err(ParsePatchError::new("multiple '---' lines"));
+            }
+            filename1 = Some(parse_filename("--- ", parser.next()?)?);
+        } else if line.starts_with("+++ ") {
+            if filename2.is_some() {
+                return Err(ParsePatchError::new("multiple '+++' lines"));
+            }
+            filename2 = Some(parse_filename("+++ ", parser.next()?)?);
+        } else {
+            break;
+        }
+    }
+
     Ok((filename1, filename2))
 }
 
-// Skip to the first "--- " line, skipping any preamble lines like "diff --git", etc.
+// Skip to the first filename header ("--- " or "+++ ") or hunk line,
+// skipping any preamble lines like "diff --git", etc.
 fn skip_header_preamble<'a, T: Text + ?Sized>(parser: &mut Parser<'a, T>) -> Result<()> {
     while let Some(line) = parser.peek() {
-        if line.starts_with("--- ") {
+        if line.starts_with("--- ") | line.starts_with("+++ ") | line.starts_with("@@ ") {
             break;
         }
         parser.next()?;
@@ -362,10 +381,69 @@ mod tests {
 +Oathbringer
 "#;
         let p = parse(s).unwrap();
-        assert_eq!(p.original(), "ori\"g\tinal");
-        assert_eq!(p.modified(), "mo\0\t\r\n\\dified");
+        assert_eq!(p.original(), Some("ori\"g\tinal"));
+        assert_eq!(p.modified(), Some("mo\0\t\r\n\\dified"));
         let b = parse_bytes(s.as_ref()).unwrap();
-        assert_eq!(b.original(), b"ori\"g\tinal");
-        assert_eq!(b.modified(), b"mo\0\t\r\n\\dified");
+        assert_eq!(b.original(), Some(&b"ori\"g\tinal"[..]));
+        assert_eq!(b.modified(), Some(&b"mo\0\t\r\n\\dified"[..]));
+    }
+
+    #[test]
+    fn test_missing_filename_header() {
+        // Missing Both '---' and '+++' lines
+        let patch = r#"
+@@ -1,11 +1,12 @@
+ diesel::table! {
+     users1 (id) {
+-        id -> Nullable<Integer>,
++        id -> Integer,
+     }
+ }
+
+ diesel::table! {
+-    users2 (id) {
+-        id -> Nullable<Integer>,
++    users2 (myid) {
++        #[sql_name = "id"]
++        myid -> Integer,
+     }
+ }
+"#;
+
+        parse(patch).unwrap();
+
+        // Missing '---'
+        let s = "\
++++ modified
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+        parse(s).unwrap();
+
+        // Missing '+++'
+        let s = "\
+--- original
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+        parse(s).unwrap();
+
+        // Headers out of order
+        let s = "\
++++ modified
+--- original
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+        parse(s).unwrap();
+
+        // multiple headers should fail to parse
+        let s = "\
+--- original
+--- modified
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+        parse(s).unwrap_err();
     }
 }
