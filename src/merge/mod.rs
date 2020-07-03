@@ -466,7 +466,7 @@ fn output_result<'a, T: ?Sized>(
                 add_conflict_marker(&mut output, '<', marker_len, Some("ours"));
                 output.extend(ours[ours_range.range()].iter().copied());
 
-                if matches!(style, ConflictStyle::Diff3) {
+                if let ConflictStyle::Diff3 = style {
                     add_conflict_marker(&mut output, '|', marker_len, Some("original"));
                     output.extend(ancestor[ancestor_range.range()].iter().copied());
                 }
