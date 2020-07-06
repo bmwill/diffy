@@ -326,14 +326,21 @@ fn test_compact() {
 macro_rules! assert_patch {
     ($diff_options:expr, $old:ident, $new:ident, $expected:ident $(,)?) => {
         let patch = $diff_options.create_patch($old, $new);
+        let bpatch = $diff_options.create_patch_bytes($old.as_bytes(), $new.as_bytes());
         let patch_str = patch.to_string();
-        let patch_bytes = patch.to_bytes();
+        let patch_bytes = bpatch.to_bytes();
         assert_eq!(patch_str, $expected);
         assert_eq!(patch_bytes, patch_str.as_bytes());
         assert_eq!(patch_bytes, $expected.as_bytes());
         assert_eq!(Patch::from_str($expected).unwrap(), patch);
         assert_eq!(Patch::from_str(&patch_str).unwrap(), patch);
+        assert_eq!(Patch::from_bytes($expected.as_bytes()).unwrap(), bpatch);
+        assert_eq!(Patch::from_bytes(&patch_bytes).unwrap(), bpatch);
         assert_eq!(apply($old, &patch).unwrap(), $new);
+        assert_eq!(
+            crate::apply_bytes($old.as_bytes(), &bpatch).unwrap(),
+            $new.as_bytes()
+        );
     };
     ($old:ident, $new:ident, $expected:ident $(,)?) => {
         assert_patch!(DiffOptions::default(), $old, $new, $expected);
