@@ -45,6 +45,16 @@ impl<'a, T: ToOwned + ?Sized> Patch<'a, T> {
     }
 }
 
+impl<T: AsRef<[u8]> + ToOwned + ?Sized> Patch<'_, T> {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        PatchFormatter::new()
+            .write_patch_into(self, &mut bytes)
+            .unwrap();
+        bytes
+    }
+}
+
 impl<'a> Patch<'a, str> {
     /// Parse a `Patch` from a string
     ///
@@ -104,11 +114,39 @@ where
 #[derive(PartialEq, Eq)]
 struct Filename<'a, T: ToOwned + ?Sized>(Cow<'a, T>);
 
-impl Filename<'_, str> {
-    const ESCAPED_CHARS: &'static [char] = &['\n', '\t', '\0', '\r', '\"', '\\'];
+const ESCAPED_CHARS: &[char] = &['\n', '\t', '\0', '\r', '\"', '\\'];
+const ESCAPED_CHARS_BYTES: &[u8] = &[b'\n', b'\t', b'\0', b'\r', b'\"', b'\\'];
 
+impl Filename<'_, str> {
     fn needs_to_be_escaped(&self) -> bool {
-        self.0.contains(Self::ESCAPED_CHARS)
+        self.0.contains(ESCAPED_CHARS)
+    }
+}
+
+impl<T: ToOwned + AsRef<[u8]> + ?Sized> Filename<'_, T> {
+    fn needs_to_be_escaped_bytes(&self) -> bool {
+        self.0
+            .as_ref()
+            .as_ref()
+            .iter()
+            .any(|b| ESCAPED_CHARS_BYTES.contains(b))
+    }
+
+    fn write_into<W: std::io::Write>(&self, mut w: W) -> std::io::Result<()> {
+        if self.needs_to_be_escaped_bytes() {
+            w.write_all(b"\"")?;
+            for b in self.0.as_ref().as_ref() {
+                if ESCAPED_CHARS_BYTES.contains(&b) {
+                    w.write_all(b"\\")?;
+                }
+                w.write_all(&[*b])?;
+            }
+            w.write_all(b"\"")?;
+        } else {
+            w.write_all(self.0.as_ref().as_ref())?;
+        }
+
+        Ok(())
     }
 }
 
@@ -138,7 +176,7 @@ impl fmt::Display for Filename<'_, str> {
         if self.needs_to_be_escaped() {
             f.write_char('\"')?;
             for c in self.0.chars() {
-                if Self::ESCAPED_CHARS.contains(&c) {
+                if ESCAPED_CHARS.contains(&c) {
                     f.write_char('\\')?;
                 }
                 f.write_char(c)?;

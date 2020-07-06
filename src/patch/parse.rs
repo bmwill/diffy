@@ -1,6 +1,6 @@
 //! Parse a Patch
 
-use super::{Filename, Hunk, HunkRange, Line, NO_NEWLINE_AT_EOF};
+use super::{Hunk, HunkRange, Line, ESCAPED_CHARS, NO_NEWLINE_AT_EOF};
 use crate::{patch::Patch, utils::LineIter};
 use std::{borrow::Cow, fmt};
 
@@ -101,7 +101,7 @@ fn is_quoted(s: &str) -> bool {
 }
 
 fn unescaped_filename<'a>(filename: &'a str) -> Result<Cow<'a, str>> {
-    if filename.contains(Filename::ESCAPED_CHARS) {
+    if filename.contains(ESCAPED_CHARS) {
         return Err(ParsePatchError::new("invalid char in unquoted filename"));
     }
 
@@ -121,7 +121,7 @@ fn escaped_filename(escaped: &str) -> Result<Cow<'_, str>> {
                 'n' | 't' | '0' | 'r' | '\"' | '\\' => filename.push(c),
                 _ => return Err(ParsePatchError::new("invalid escaped character")),
             }
-        } else if Filename::ESCAPED_CHARS.contains(&c) {
+        } else if ESCAPED_CHARS.contains(&c) {
             return Err(ParsePatchError::new("invalid unescaped character"));
         } else {
             filename.push(c);

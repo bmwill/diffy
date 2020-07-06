@@ -327,7 +327,10 @@ macro_rules! assert_patch {
     ($diff_options:expr, $old:ident, $new:ident, $expected:ident $(,)?) => {
         let patch = $diff_options.create_patch($old, $new);
         let patch_str = patch.to_string();
+        let patch_bytes = patch.to_bytes();
         assert_eq!(patch_str, $expected);
+        assert_eq!(patch_bytes, patch_str.as_bytes());
+        assert_eq!(patch_bytes, $expected.as_bytes());
         assert_eq!(Patch::from_str($expected).unwrap(), patch);
         assert_eq!(Patch::from_str(&patch_str).unwrap(), patch);
         assert_eq!(apply($old, &patch).unwrap(), $new);
