@@ -81,6 +81,12 @@ impl<'a> Patch<'a, str> {
     }
 }
 
+impl<'a> Patch<'a, [u8]> {
+    pub fn from_bytes(s: &'a [u8]) -> Result<Patch<'a, [u8]>, ParsePatchError> {
+        parse::parse_bytes(s)
+    }
+}
+
 impl<T: ToOwned + ?Sized> Clone for Patch<'_, T> {
     fn clone(&self) -> Self {
         Self {
