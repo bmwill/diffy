@@ -32,7 +32,7 @@ impl<'a, T: ?Sized + Text> Classifier<'a, T> {
     }
 }
 
-impl<T: ?Sized> Default for Classifier<'_, T> {
+impl<T: Eq + Hash + ?Sized> Default for Classifier<'_, T> {
     fn default() -> Self {
         Self {
             next_id: 0,
