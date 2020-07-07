@@ -174,6 +174,36 @@ impl MergeOptions {
             self.style,
         )
     }
+
+    pub fn merge_bytes<'a>(
+        &self,
+        ancestor: &'a [u8],
+        ours: &'a [u8],
+        theirs: &'a [u8],
+    ) -> Result<Vec<u8>, Vec<u8>> {
+        let mut classifier = Classifier::default();
+        let (ancestor_lines, ancestor_ids) = classifier.classify_lines(ancestor);
+        let (our_lines, our_ids) = classifier.classify_lines(ours);
+        let (their_lines, their_ids) = classifier.classify_lines(theirs);
+
+        let opts = DiffOptions::default();
+        let our_solution = opts.diff_slice(&ancestor_ids, &our_ids);
+        let their_solution = opts.diff_slice(&ancestor_ids, &their_ids);
+
+        let merged = merge_solutions(&our_solution, &their_solution);
+        let mut merge = diff3_range_to_merge_range(&merged);
+
+        cleanup_conflicts(&mut merge);
+
+        output_result_bytes(
+            &ancestor_lines,
+            &our_lines,
+            &their_lines,
+            &merge,
+            self.conflict_marker_length,
+            self.style,
+        )
+    }
 }
 
 impl Default for MergeOptions {
@@ -510,4 +540,84 @@ fn add_conflict_marker(
         output.push_str(filename);
     }
     output.push('\n');
+}
+
+fn output_result_bytes<'a, T: ?Sized>(
+    ancestor: &[&'a [u8]],
+    ours: &[&'a [u8]],
+    theirs: &[&'a [u8]],
+    merge: &[MergeRange<T>],
+    marker_len: usize,
+    style: ConflictStyle,
+) -> Result<Vec<u8>, Vec<u8>> {
+    let mut conflicts = 0;
+    let mut output: Vec<u8> = Vec::new();
+
+    for merge_range in merge {
+        match merge_range {
+            MergeRange::Equal(range, ..) => {
+                ancestor[range.range()]
+                    .iter()
+                    .for_each(|line| output.extend_from_slice(line));
+            }
+            MergeRange::Conflict(ancestor_range, ours_range, theirs_range) => {
+                add_conflict_marker_bytes(&mut output, b'<', marker_len, Some(b"ours"));
+                ours[ours_range.range()]
+                    .iter()
+                    .for_each(|line| output.extend_from_slice(line));
+
+                if matches!(style, ConflictStyle::Diff3) {
+                    add_conflict_marker_bytes(&mut output, b'|', marker_len, Some(b"original"));
+                    ancestor[ancestor_range.range()]
+                        .iter()
+                        .for_each(|line| output.extend_from_slice(line));
+                }
+
+                add_conflict_marker_bytes(&mut output, b'=', marker_len, None);
+                theirs[theirs_range.range()]
+                    .iter()
+                    .for_each(|line| output.extend_from_slice(line));
+                add_conflict_marker_bytes(&mut output, b'>', marker_len, Some(b"theirs"));
+                conflicts += 1;
+            }
+            MergeRange::Ours(range) => {
+                ours[range.range()]
+                    .iter()
+                    .for_each(|line| output.extend_from_slice(line));
+            }
+            MergeRange::Theirs(range) => {
+                theirs[range.range()]
+                    .iter()
+                    .for_each(|line| output.extend_from_slice(line));
+            }
+            MergeRange::Both(range, _) => {
+                theirs[range.range()]
+                    .iter()
+                    .for_each(|line| output.extend_from_slice(line));
+            }
+        }
+    }
+
+    if conflicts != 0 {
+        Err(output)
+    } else {
+        Ok(output)
+    }
+}
+
+fn add_conflict_marker_bytes(
+    output: &mut Vec<u8>,
+    marker: u8,
+    marker_len: usize,
+    filename: Option<&[u8]>,
+) {
+    for _ in 0..marker_len {
+        output.push(marker);
+    }
+
+    if let Some(filename) = filename {
+        output.push(b' ');
+        output.extend_from_slice(filename);
+    }
+    output.push(b'\n');
 }
