@@ -211,6 +211,6 @@ mod range;
 mod utils;
 
 pub use apply::{apply, apply_bytes, ApplyError};
-pub use diff::{create_patch, DiffOptions};
+pub use diff::{create_patch, create_patch_bytes, DiffOptions};
 pub use merge::{merge, merge_bytes, ConflictStyle, MergeOptions};
 pub use patch::{Hunk, HunkRange, Line, ParsePatchError, Patch, PatchFormatter};

@@ -184,6 +184,10 @@ pub fn create_patch<'a>(original: &'a str, modified: &'a str) -> Patch<'a, str> 
     DiffOptions::default().create_patch(original, modified)
 }
 
+pub fn create_patch_bytes<'a>(original: &'a [u8], modified: &'a [u8]) -> Patch<'a, [u8]> {
+    DiffOptions::default().create_patch_bytes(original, modified)
+}
+
 fn to_hunks<'a, T: ?Sized>(
     lines1: &[&'a T],
     lines2: &[&'a T],
