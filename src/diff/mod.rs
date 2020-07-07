@@ -105,6 +105,7 @@ impl DiffOptions {
         Patch::new("original", "modified", hunks)
     }
 
+    /// Create a patch between two potentially non-utf8 texts
     pub fn create_patch_bytes<'a>(
         &self,
         original: &'a [u8],
@@ -184,6 +185,7 @@ pub fn create_patch<'a>(original: &'a str, modified: &'a str) -> Patch<'a, str> 
     DiffOptions::default().create_patch(original, modified)
 }
 
+/// Create a patch between two potentially non-utf8 texts
 pub fn create_patch_bytes<'a>(original: &'a [u8], modified: &'a [u8]) -> Patch<'a, [u8]> {
     DiffOptions::default().create_patch_bytes(original, modified)
 }

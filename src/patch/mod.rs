@@ -46,6 +46,10 @@ impl<'a, T: ToOwned + ?Sized> Patch<'a, T> {
 }
 
 impl<T: AsRef<[u8]> + ToOwned + ?Sized> Patch<'_, T> {
+    /// Convert a `Patch` into bytes
+    ///
+    /// This is the equivalent of the `to_string` function but for
+    /// potentially non-utf8 patches.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         PatchFormatter::new()
@@ -82,6 +86,7 @@ impl<'a> Patch<'a, str> {
 }
 
 impl<'a> Patch<'a, [u8]> {
+    /// Parse a `Patch` from bytes
     pub fn from_bytes(s: &'a [u8]) -> Result<Patch<'a, [u8]>, ParsePatchError> {
         parse::parse_bytes(s)
     }

@@ -175,6 +175,7 @@ impl MergeOptions {
         )
     }
 
+    /// Perform a 3-way merge between potentially non-utf8 texts
     pub fn merge_bytes<'a>(
         &self,
         ancestor: &'a [u8],
@@ -267,6 +268,7 @@ pub fn merge<'a>(ancestor: &'a str, ours: &'a str, theirs: &'a str) -> Result<St
     MergeOptions::default().merge(ancestor, ours, theirs)
 }
 
+/// Perform a 3-way merge between potentially non-utf8 texts
 pub fn merge_bytes<'a>(
     ancestor: &'a [u8],
     ours: &'a [u8],

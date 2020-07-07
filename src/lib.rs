@@ -10,6 +10,13 @@
 //!
 //! The current diff implementation is based on the [Myers' diff algorithm].
 //!
+//! ## UTF-8 and Non-UTF-8
+//!
+//! This library has support for working with both utf8 and non-utf8 texts.
+//! Most of the API's have two different variants, one for working with utf8
+//! `str` texts (e.g. [`create_patch`]) and one for working with bytes `[u8]`
+//! which may or may not be utf8 (e.g. [`create_patch_bytes`]).
+//!
 //! ## Creating a Patch
 //!
 //! A [`Patch`] between two texts can be created by doing the following:
@@ -202,6 +209,8 @@
 //! [`Display`]: https://doc.rust-lang.org/stable/std/fmt/trait.Display.html
 //! [`Patch`]: struct.Patch.html
 //! [`PatchFormatter`]: struct.PatchFormatter.html
+//! [`create_patch`]: fn.create_patch.html
+//! [`create_patch_bytes`]: fn.create_patch_bytes.html
 
 mod apply;
 mod diff;

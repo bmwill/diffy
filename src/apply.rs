@@ -100,6 +100,7 @@ pub fn apply(base_image: &str, patch: &Patch<'_, str>) -> Result<String, ApplyEr
     Ok(image.into_iter().map(ImageLine::into_inner).collect())
 }
 
+/// Apply a non-utf8 `Patch` to a base image
 pub fn apply_bytes(base_image: &[u8], patch: &Patch<'_, [u8]>) -> Result<Vec<u8>, ApplyError> {
     let mut image: Vec<_> = LineIter::new(base_image)
         .map(ImageLine::Unpatched)
