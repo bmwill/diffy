@@ -575,7 +575,7 @@ fn output_result_bytes<'a, T: ?Sized>(
                     .iter()
                     .for_each(|line| output.extend_from_slice(line));
 
-                if matches!(style, ConflictStyle::Diff3) {
+                if let ConflictStyle::Diff3 = style {
                     add_conflict_marker_bytes(&mut output, b'|', marker_len, Some(b"original"));
                     ancestor[ancestor_range.range()]
                         .iter()
