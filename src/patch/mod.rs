@@ -262,7 +262,7 @@ impl<'a, T: ?Sized> Hunk<'a, T> {
 
     /// Returns the function context (if any) for the hunk
     pub fn function_context(&self) -> Option<&T> {
-        self.function_context.as_deref()
+        self.function_context
     }
 
     /// Returns the lines in the hunk
