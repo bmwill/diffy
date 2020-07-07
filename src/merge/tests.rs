@@ -18,6 +18,24 @@ macro_rules! assert_merge {
             result!($kind, $expected),
             solution
         );
+
+        let solution_bytes =
+            merge_bytes($original.as_bytes(), $ours.as_bytes(), $theirs.as_bytes());
+
+        macro_rules! result_bytes {
+            (Ok, $s:expr) => {
+                Result::<&[u8], &[u8]>::Ok($s.as_bytes())
+            };
+            (Err, $s:expr) => {
+                Result::<&[u8], &[u8]>::Err($s.as_bytes())
+            };
+        }
+        assert!(
+            same_merge_bytes(result_bytes!($kind, $expected), &solution_bytes),
+            concat!($msg, "\nexpected={:#?}\nactual={:#?}"),
+            result_bytes!($kind, $expected),
+            solution_bytes
+        );
     };
 }
 
@@ -25,6 +43,14 @@ fn same_merge(expected: Result<&str, &str>, actual: &Result<String, String>) -> 
     match (expected, actual) {
         (Ok(expected), Ok(actual)) => expected == actual,
         (Err(expected), Err(actual)) => expected == actual,
+        (_, _) => false,
+    }
+}
+
+fn same_merge_bytes(expected: Result<&[u8], &[u8]>, actual: &Result<Vec<u8>, Vec<u8>>) -> bool {
+    match (expected, actual) {
+        (Ok(expected), Ok(actual)) => expected == &actual[..],
+        (Err(expected), Err(actual)) => expected == &actual[..],
         (_, _) => false,
     }
 }

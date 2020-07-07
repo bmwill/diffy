@@ -263,9 +263,16 @@ impl Default for MergeOptions {
 ///
 /// assert_eq!(merge(original, a, b).unwrap(), expected);
 /// ```
-#[allow(dead_code)]
 pub fn merge<'a>(ancestor: &'a str, ours: &'a str, theirs: &'a str) -> Result<String, String> {
     MergeOptions::default().merge(ancestor, ours, theirs)
+}
+
+pub fn merge_bytes<'a>(
+    ancestor: &'a [u8],
+    ours: &'a [u8],
+    theirs: &'a [u8],
+) -> Result<Vec<u8>, Vec<u8>> {
+    MergeOptions::default().merge_bytes(ancestor, ours, theirs)
 }
 
 fn merge_solutions<'ancestor, 'ours, 'theirs, T: ?Sized + SliceLike>(
