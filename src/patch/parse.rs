@@ -149,13 +149,19 @@ fn escaped_filename<T: Text + ToOwned + ?Sized>(escaped: &T) -> Result<Cow<'_, [
     let mut chars = escaped.as_bytes().iter().copied();
     while let Some(c) = chars.next() {
         if c == b'\\' {
-            match chars
+            let ch = match chars
                 .next()
                 .ok_or_else(|| ParsePatchError::new("expected escaped character"))?
             {
-                b'n' | b't' | b'0' | b'r' | b'\"' | b'\\' => filename.push(c),
+                b'n' => b'\n',
+                b't' => b'\t',
+                b'0' => b'\0',
+                b'r' => b'\r',
+                b'\"' => b'\"',
+                b'\\' => b'\\',
                 _ => return Err(ParsePatchError::new("invalid escaped character")),
-            }
+            };
+            filename.push(ch);
         } else if ESCAPED_CHARS_BYTES.contains(&c) {
             return Err(ParsePatchError::new("invalid unescaped character"));
         } else {
@@ -309,5 +315,57 @@ fn strip_newline<T: Text + ?Sized>(s: &T) -> Result<&T> {
         Ok(stripped)
     } else {
         Err(ParsePatchError::new("missing newline"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse, parse_bytes};
+
+    #[test]
+    fn test_escaped_filenames() {
+        // No escaped characters
+        let s = "\
+--- original
++++ modified
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+        parse(s).unwrap();
+        parse_bytes(s.as_ref()).unwrap();
+
+        // unescaped characters fail parsing
+        let s = "\
+--- ori\"ginal
++++ modified
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+        parse(s).unwrap_err();
+        parse_bytes(s.as_ref()).unwrap_err();
+
+        // quoted with invalid escaped characters
+        let s = "\
+--- \"ori\\\"g\rinal\"
++++ modified
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+        parse(s).unwrap_err();
+        parse_bytes(s.as_ref()).unwrap_err();
+
+        // quoted with escaped characters
+        let s = r#"\
+--- "ori\"g\tinal"
++++ "mo\0\t\r\n\\dified"
+@@ -1,0 +1,1 @@
++Oathbringer
+"#;
+        let p = parse(s).unwrap();
+        assert_eq!(p.original(), "ori\"g\tinal");
+        assert_eq!(p.modified(), "mo\0\t\r\n\\dified");
+        let b = parse_bytes(s.as_ref()).unwrap();
+        assert_eq!(b.original(), b"ori\"g\tinal");
+        assert_eq!(b.modified(), b"mo\0\t\r\n\\dified");
     }
 }
