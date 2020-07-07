@@ -101,7 +101,23 @@ impl DiffOptions {
 
         let solution = self.diff_slice(&old_ids, &new_ids);
 
-        to_patch(&old_lines, &new_lines, &solution, self.context_len)
+        let hunks = to_hunks(&old_lines, &new_lines, &solution, self.context_len);
+        Patch::new("original", "modified", hunks)
+    }
+
+    pub fn create_patch_bytes<'a>(
+        &self,
+        original: &'a [u8],
+        modified: &'a [u8],
+    ) -> Patch<'a, [u8]> {
+        let mut classifier = Classifier::default();
+        let (old_lines, old_ids) = classifier.classify_lines(original);
+        let (new_lines, new_ids) = classifier.classify_lines(modified);
+
+        let solution = self.diff_slice(&old_ids, &new_ids);
+
+        let hunks = to_hunks(&old_lines, &new_lines, &solution, self.context_len);
+        Patch::new(b"original".as_ref(), b"modified".as_ref(), hunks)
     }
 
     pub(crate) fn diff_slice<'a, T: PartialEq>(
@@ -168,12 +184,12 @@ pub fn create_patch<'a>(original: &'a str, modified: &'a str) -> Patch<'a, str> 
     DiffOptions::default().create_patch(original, modified)
 }
 
-fn to_patch<'a>(
-    lines1: &[&'a str],
-    lines2: &[&'a str],
+fn to_hunks<'a, T: ?Sized>(
+    lines1: &[&'a T],
+    lines2: &[&'a T],
     solution: &[DiffRange<[u64]>],
     context_len: usize,
-) -> Patch<'a, str> {
+) -> Vec<Hunk<'a, T>> {
     let edit_script = build_edit_script(solution);
 
     let mut hunks = Vec::new();
@@ -257,7 +273,7 @@ fn to_patch<'a>(
         idx += 1;
     }
 
-    Patch::new("original", "modified", hunks)
+    hunks
 }
 
 fn calc_end(
