@@ -210,7 +210,7 @@ mod patch;
 mod range;
 mod utils;
 
-pub use apply::{apply, ApplyError};
+pub use apply::{apply, apply_bytes, ApplyError};
 pub use diff::{create_patch, DiffOptions};
 pub use merge::{merge, ConflictStyle, MergeOptions};
 pub use patch::{Hunk, HunkRange, Line, ParsePatchError, Patch, PatchFormatter};

@@ -18,20 +18,20 @@ impl fmt::Display for ApplyError {
 
 impl std::error::Error for ApplyError {}
 
-#[derive(Copy, Clone, Debug)]
-enum ImageLine<'a> {
-    Unpatched(&'a str),
-    Patched(&'a str),
+#[derive(Debug)]
+enum ImageLine<'a, T: ?Sized> {
+    Unpatched(&'a T),
+    Patched(&'a T),
 }
 
-impl<'a> ImageLine<'a> {
-    fn inner(&self) -> &'a str {
+impl<'a, T: ?Sized> ImageLine<'a, T> {
+    fn inner(&self) -> &'a T {
         match self {
             ImageLine::Unpatched(inner) | ImageLine::Patched(inner) => inner,
         }
     }
 
-    fn into_inner(self) -> &'a str {
+    fn into_inner(self) -> &'a T {
         self.inner()
     }
 
@@ -40,6 +40,14 @@ impl<'a> ImageLine<'a> {
             ImageLine::Unpatched(_) => false,
             ImageLine::Patched(_) => true,
         }
+    }
+}
+
+impl<T: ?Sized> Copy for ImageLine<'_, T> {}
+
+impl<T: ?Sized> Clone for ImageLine<'_, T> {
+    fn clone(&self) -> Self {
+        *self
     }
 }
 
@@ -92,7 +100,26 @@ pub fn apply(base_image: &str, patch: &Patch<'_, str>) -> Result<String, ApplyEr
     Ok(image.into_iter().map(ImageLine::into_inner).collect())
 }
 
-fn apply_hunk<'a>(image: &mut Vec<ImageLine<'a>>, hunk: &Hunk<'a, str>) -> Result<(), ()> {
+pub fn apply_bytes(base_image: &[u8], patch: &Patch<'_, [u8]>) -> Result<Vec<u8>, ApplyError> {
+    let mut image: Vec<_> = LineIter::new(base_image)
+        .map(ImageLine::Unpatched)
+        .collect();
+
+    for (i, hunk) in patch.hunks().iter().enumerate() {
+        apply_hunk(&mut image, hunk).map_err(|_| ApplyError(i + 1))?;
+    }
+
+    Ok(image
+        .into_iter()
+        .flat_map(ImageLine::into_inner)
+        .copied()
+        .collect())
+}
+
+fn apply_hunk<'a, T: PartialEq + ?Sized>(
+    image: &mut Vec<ImageLine<'a, T>>,
+    hunk: &Hunk<'a, T>,
+) -> Result<(), ()> {
     // Find position
     let pos = find_position(image, hunk).ok_or(())?;
 
@@ -111,7 +138,10 @@ fn apply_hunk<'a>(image: &mut Vec<ImageLine<'a>>, hunk: &Hunk<'a, str>) -> Resul
 //
 // It might be worth looking into other possible positions to apply the hunk to as described here:
 // https://neil.fraser.name/writing/patch/
-fn find_position(image: &[ImageLine], hunk: &Hunk<'_, str>) -> Option<usize> {
+fn find_position<T: PartialEq + ?Sized>(
+    image: &[ImageLine<T>],
+    hunk: &Hunk<'_, T>,
+) -> Option<usize> {
     let pos = hunk.new_range().start().saturating_sub(1);
 
     // Create an iterator that starts with 'pos' and then interleaves
@@ -127,25 +157,29 @@ fn find_position(image: &[ImageLine], hunk: &Hunk<'_, str>) -> Option<usize> {
     None
 }
 
-fn pre_image_line_count(lines: &[Line<'_, str>]) -> usize {
+fn pre_image_line_count<T: ?Sized>(lines: &[Line<'_, T>]) -> usize {
     pre_image(lines).count()
 }
 
-fn post_image<'a, 'b>(lines: &'b [Line<'a, str>]) -> impl Iterator<Item = &'a str> + 'b {
+fn post_image<'a, 'b, T: ?Sized>(lines: &'b [Line<'a, T>]) -> impl Iterator<Item = &'a T> + 'b {
     lines.iter().filter_map(|line| match line {
         Line::Context(l) | Line::Insert(l) => Some(*l),
         Line::Delete(_) => None,
     })
 }
 
-fn pre_image<'a, 'b>(lines: &'b [Line<'a, str>]) -> impl Iterator<Item = &'a str> + 'b {
+fn pre_image<'a, 'b, T: ?Sized>(lines: &'b [Line<'a, T>]) -> impl Iterator<Item = &'a T> + 'b {
     lines.iter().filter_map(|line| match line {
         Line::Context(l) | Line::Delete(l) => Some(*l),
         Line::Insert(_) => None,
     })
 }
 
-fn match_fragment(image: &[ImageLine], lines: &[Line<'_, str>], pos: usize) -> bool {
+fn match_fragment<T: PartialEq + ?Sized>(
+    image: &[ImageLine<T>],
+    lines: &[Line<'_, T>],
+    pos: usize,
+) -> bool {
     let len = pre_image_line_count(lines);
 
     let image = if let Some(image) = image.get(pos..pos + len) {
