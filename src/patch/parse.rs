@@ -28,7 +28,7 @@ impl fmt::Display for ParsePatchError {
 impl std::error::Error for ParsePatchError {}
 
 struct Parser<'a> {
-    lines: std::iter::Peekable<LineIter<'a>>,
+    lines: std::iter::Peekable<LineIter<'a, str>>,
 }
 
 impl<'a> Parser<'a> {
