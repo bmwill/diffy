@@ -522,7 +522,7 @@ fn output_result<'a, T: ?Sized>(
                 output.extend(theirs[range.range()].iter().copied());
             }
             MergeRange::Both(range, _) => {
-                output.extend(theirs[range.range()].iter().copied());
+                output.extend(ours[range.range()].iter().copied());
             }
         }
     }
@@ -600,7 +600,7 @@ fn output_result_bytes<'a, T: ?Sized>(
                     .for_each(|line| output.extend_from_slice(line));
             }
             MergeRange::Both(range, _) => {
-                theirs[range.range()]
+                ours[range.range()]
                     .iter()
                     .for_each(|line| output.extend_from_slice(line));
             }

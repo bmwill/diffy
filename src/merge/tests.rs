@@ -312,3 +312,34 @@ void Chunk_copy(Chunk *src, size_t src_start, Chunk *dst, size_t dst_start, size
 
     assert_merge!(original, a, b, Ok(expected_diffy), "Myers diffy merge");
 }
+
+#[test]
+fn correct_range_is_used_for_both_case() {
+    let base = r#"
+class GithubCall(db.Model):
+
+`url`: URL of request Example.`https://api.github.com`
+"#;
+
+    let theirs = r#"
+class GithubCall(db.Model):
+
+`repo`: String field. Github repository fields. Example: `amitu/python`
+"#;
+
+    let ours = r#"
+class Call(models.Model):
+`body`: String field. The payload of the webhook call from the github.
+
+`repo`: String field. Github repository fields. Example: `amitu/python`
+"#;
+
+    let expected = r#"
+class Call(models.Model):
+`body`: String field. The payload of the webhook call from the github.
+
+`repo`: String field. Github repository fields. Example: `amitu/python`
+"#;
+
+    assert_merge!(base, ours, theirs, Ok(expected), "MergeRange::Both case");
+}
