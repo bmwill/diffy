@@ -464,6 +464,27 @@ The door of all subtleties!
 ";
     opts.set_context_len(1);
     assert_patch!(opts, lao, tzu, expected);
+
+    let expected = "\
+--- from
++++ to
+@@ -1,5 +1,4 @@
+-The Way that can be told of is not the eternal Way;
+-The name that can be named is not the eternal name.
+ The Nameless is the origin of Heaven and Earth;
+-The Named is the mother of all things.
++The named is the mother of all things.
++
+ Therefore let there always be non-being,
+@@ -11 +10,4 @@
+   they have different names.
++They both may be called deep and profound.
++Deeper and more profound,
++The door of all subtleties!
+";
+    opts.set_original("from");
+    opts.set_modified("to");
+    assert_patch!(opts, lao, tzu, expected);
 }
 
 #[test]
