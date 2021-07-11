@@ -52,6 +52,7 @@ impl<T: ?Sized> Clone for ImageLine<'_, T> {
     }
 }
 
+#[derive(Debug)]
 pub struct ApplyOptions {
     max_fuzzy: usize,
 }
