@@ -1,6 +1,6 @@
 use crate::{
     patch::{Hunk, Line, Patch},
-    utils::{LineIter, Text},
+    utils::LineIter,
 };
 use std::collections::VecDeque;
 use std::{fmt, iter};
@@ -141,17 +141,11 @@ pub fn apply_bytes(base_image: &[u8], patch: &Patch<'_, [u8]>) -> Result<Vec<u8>
 }
 
 /// Try applying all hunks a `Patch` to a base image
-pub fn apply_all<'a, 'b, T, R, I>(
-    base_image: &'a T,
-    patch: &'a Patch<'_, T>,
+pub fn apply_all_bytes(
+    base_image: &[u8],
+    patch: &Patch<'_, [u8]>,
     options: ApplyOptions,
-) -> (R, Vec<usize>)
-where
-    T: 'a + Text + ToOwned + ?Sized,
-    I: 'b + Copy,
-    &'a T: IntoIterator<Item = &'b I>,
-    R: std::iter::FromIterator<I>,
-{
+) -> (Vec<u8>, Vec<usize>) {
     let mut image: Vec<_> = LineIter::new(base_image)
         .map(ImageLine::Unpatched)
         .collect();
@@ -170,6 +164,30 @@ where
             .flat_map(ImageLine::into_inner)
             .copied()
             .collect(),
+        failed_indices,
+    )
+}
+
+/// Try applying all hunks a `Patch` to a base image
+pub fn apply_all(
+    base_image: &str,
+    patch: &Patch<'_, str>,
+    options: ApplyOptions,
+) -> (String, Vec<usize>) {
+    let mut image: Vec<_> = LineIter::new(base_image)
+        .map(ImageLine::Unpatched)
+        .collect();
+
+    let mut failed_indices = Vec::new();
+
+    for (i, hunk) in patch.hunks().iter().enumerate() {
+        if let Some(_) = apply_hunk(&mut image, hunk, &options).err() {
+            failed_indices.push(i);
+        }
+    }
+
+    (
+        image.into_iter().map(ImageLine::into_inner).collect(),
         failed_indices,
     )
 }
