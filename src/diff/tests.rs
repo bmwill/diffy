@@ -341,6 +341,9 @@ macro_rules! assert_patch {
             crate::apply_bytes($old.as_bytes(), &bpatch).unwrap(),
             $new.as_bytes()
         );
+        let patched_all: Vec<u8> =
+            crate::apply_all($old.as_bytes(), &bpatch, crate::ApplyOptions::new()).0;
+        assert_eq!(patched_all, $new.as_bytes());
     };
     ($old:ident, $new:ident, $expected:ident $(,)?) => {
         assert_patch!(DiffOptions::default(), $old, $new, $expected);

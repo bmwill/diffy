@@ -1,6 +1,6 @@
 use crate::{
     patch::{Hunk, Line, Patch},
-    utils::LineIter,
+    utils::{LineIter, Text},
 };
 use std::{fmt, iter};
 
@@ -51,6 +51,14 @@ impl<T: ?Sized> Clone for ImageLine<'_, T> {
     }
 }
 
+pub struct ApplyOptions {}
+
+impl ApplyOptions {
+    pub fn new() -> Self {
+        ApplyOptions {}
+    }
+}
+
 /// Apply a `Patch` to a base image
 ///
 /// ```
@@ -94,7 +102,7 @@ pub fn apply(base_image: &str, patch: &Patch<'_, str>) -> Result<String, ApplyEr
         .collect();
 
     for (i, hunk) in patch.hunks().iter().enumerate() {
-        apply_hunk(&mut image, hunk).map_err(|_| ApplyError(i + 1))?;
+        apply_hunk(&mut image, hunk, &ApplyOptions::new()).map_err(|_| ApplyError(i + 1))?;
     }
 
     Ok(image.into_iter().map(ImageLine::into_inner).collect())
@@ -107,7 +115,7 @@ pub fn apply_bytes(base_image: &[u8], patch: &Patch<'_, [u8]>) -> Result<Vec<u8>
         .collect();
 
     for (i, hunk) in patch.hunks().iter().enumerate() {
-        apply_hunk(&mut image, hunk).map_err(|_| ApplyError(i + 1))?;
+        apply_hunk(&mut image, hunk, &ApplyOptions::new()).map_err(|_| ApplyError(i + 1))?;
     }
 
     Ok(image
@@ -117,9 +125,44 @@ pub fn apply_bytes(base_image: &[u8], patch: &Patch<'_, [u8]>) -> Result<Vec<u8>
         .collect())
 }
 
+/// Try applying all hunks a `Patch` to a base image
+pub fn apply_all<'a, 'b, T, R, I>(
+    base_image: &'a T,
+    patch: &'a Patch<'_, T>,
+    options: ApplyOptions,
+) -> (R, Vec<usize>)
+where
+    T: 'a + Text + ToOwned + ?Sized,
+    I: 'b + Copy,
+    &'a T: IntoIterator<Item = &'b I>,
+    R: std::iter::FromIterator<I>,
+{
+    let mut image: Vec<_> = LineIter::new(base_image)
+        .map(ImageLine::Unpatched)
+        .collect();
+
+    let mut failed_indices = Vec::new();
+
+    for (i, hunk) in patch.hunks().iter().enumerate() {
+        if let Some(_) = apply_hunk(&mut image, hunk, &options).err() {
+            failed_indices.push(i);
+        }
+    }
+
+    (
+        image
+            .into_iter()
+            .flat_map(ImageLine::into_inner)
+            .copied()
+            .collect(),
+        failed_indices,
+    )
+}
+
 fn apply_hunk<'a, T: PartialEq + ?Sized>(
     image: &mut Vec<ImageLine<'a, T>>,
     hunk: &Hunk<'a, T>,
+    _options: &ApplyOptions,
 ) -> Result<(), ()> {
     // Find position
     let pos = find_position(image, hunk).ok_or(())?;
