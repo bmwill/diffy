@@ -56,6 +56,12 @@ pub struct ApplyOptions {
     max_fuzzy: usize,
 }
 
+impl Default for ApplyOptions {
+    fn default() -> Self {
+        ApplyOptions::new()
+    }
+}
+
 impl ApplyOptions {
     pub fn new() -> Self {
         ApplyOptions { max_fuzzy: 0 }
