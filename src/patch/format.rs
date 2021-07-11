@@ -9,6 +9,7 @@ use std::{
 #[derive(Debug)]
 pub struct PatchFormatter {
     with_color: bool,
+    without_missing_newline_message: bool,
 
     context: Style,
     delete: Style,
@@ -23,6 +24,7 @@ impl PatchFormatter {
     pub fn new() -> Self {
         Self {
             with_color: false,
+            without_missing_newline_message: false,
 
             context: Style::new(),
             delete: Color::Red.normal(),
@@ -36,6 +38,12 @@ impl PatchFormatter {
     /// Enable formatting a patch with color
     pub fn with_color(mut self) -> Self {
         self.with_color = true;
+        self
+    }
+
+    /// Enable formatting a patch without a "No newline at end of file" message
+    pub fn without_missing_newline_message(mut self) -> Self {
+        self.without_missing_newline_message = true;
         self
     }
 
@@ -238,7 +246,9 @@ impl<T: AsRef<[u8]> + ?Sized> LineDisplay<'_, T> {
 
         if !line.ends_with(b"\n") {
             writeln!(w)?;
-            writeln!(w, "{}", NO_NEWLINE_AT_EOF)?;
+            if !self.f.without_missing_newline_message {
+                writeln!(w, "{}", NO_NEWLINE_AT_EOF)?;
+            }
         }
 
         Ok(())
@@ -269,7 +279,9 @@ impl Display for LineDisplay<'_, str> {
 
         if !line.ends_with('\n') {
             writeln!(f)?;
-            writeln!(f, "{}", NO_NEWLINE_AT_EOF)?;
+            if !self.f.without_missing_newline_message {
+                writeln!(f, "{}", NO_NEWLINE_AT_EOF)?;
+            }
         }
 
         Ok(())
