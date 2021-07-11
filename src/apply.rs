@@ -2,6 +2,7 @@ use crate::{
     patch::{Hunk, Line, Patch},
     utils::{LineIter, Text},
 };
+use std::collections::VecDeque;
 use std::{fmt, iter};
 
 /// An error returned when [`apply`]ing a `Patch` fails
@@ -51,11 +52,18 @@ impl<T: ?Sized> Clone for ImageLine<'_, T> {
     }
 }
 
-pub struct ApplyOptions {}
+pub struct ApplyOptions {
+    max_fuzzy: usize,
+}
 
 impl ApplyOptions {
     pub fn new() -> Self {
-        ApplyOptions {}
+        ApplyOptions { max_fuzzy: 0 }
+    }
+
+    pub fn with_max_fuzzy(mut self, max_fuzzy: usize) -> Self {
+        self.max_fuzzy = max_fuzzy;
+        self
     }
 }
 
@@ -162,15 +170,20 @@ where
 fn apply_hunk<'a, T: PartialEq + ?Sized>(
     image: &mut Vec<ImageLine<'a, T>>,
     hunk: &Hunk<'a, T>,
-    _options: &ApplyOptions,
+    options: &ApplyOptions,
 ) -> Result<(), ()> {
     // Find position
-    let pos = find_position(image, hunk).ok_or(())?;
+    let (pos, fuzzy) = find_position(image, hunk, options.max_fuzzy).ok_or(())?;
+    let begin = pos + fuzzy;
+    let end = pos
+        + pre_image_line_count(hunk.lines())
+            .checked_sub(fuzzy)
+            .unwrap_or(0);
 
     // update image
     image.splice(
-        pos..pos + pre_image_line_count(hunk.lines()),
-        post_image(hunk.lines()).map(ImageLine::Patched),
+        begin..end,
+        skip_last(post_image(hunk.lines()).skip(fuzzy), fuzzy).map(ImageLine::Patched),
     );
 
     Ok(())
@@ -185,16 +198,19 @@ fn apply_hunk<'a, T: PartialEq + ?Sized>(
 fn find_position<T: PartialEq + ?Sized>(
     image: &[ImageLine<T>],
     hunk: &Hunk<'_, T>,
-) -> Option<usize> {
+    max_fuzzy: usize,
+) -> Option<(usize, usize)> {
     let pos = hunk.new_range().start().saturating_sub(1);
 
-    // Create an iterator that starts with 'pos' and then interleaves
-    // moving pos backward/foward by one.
-    let backward = (0..pos).rev();
-    let forward = pos + 1..image.len();
-    for pos in iter::once(pos).chain(interleave(backward, forward)) {
-        if match_fragment(image, hunk.lines(), pos) {
-            return Some(pos);
+    for fuzzy in 0..=max_fuzzy {
+        // Create an iterator that starts with 'pos' and then interleaves
+        // moving pos backward/foward by one.
+        let backward = (0..pos).rev();
+        let forward = pos + 1..image.len();
+        for pos in iter::once(pos).chain(interleave(backward, forward)) {
+            if match_fragment(image, hunk.lines(), pos, fuzzy) {
+                return Some((pos, fuzzy));
+            }
         }
     }
 
@@ -223,10 +239,13 @@ fn match_fragment<T: PartialEq + ?Sized>(
     image: &[ImageLine<T>],
     lines: &[Line<'_, T>],
     pos: usize,
+    fuzzy: usize,
 ) -> bool {
     let len = pre_image_line_count(lines);
+    let begin = pos + fuzzy;
+    let end = pos + len.checked_sub(fuzzy).unwrap_or(0);
 
-    let image = if let Some(image) = image.get(pos..pos + len) {
+    let image = if let Some(image) = image.get(begin..end) {
         image
     } else {
         return false;
@@ -282,5 +301,66 @@ where
                 item => item,
             }
         }
+    }
+}
+
+fn skip_last<I: Iterator>(iter: I, count: usize) -> SkipLast<I, I::Item> {
+    SkipLast {
+        iter: iter.fuse(),
+        buffer: VecDeque::with_capacity(count),
+        count,
+    }
+}
+
+#[derive(Debug)]
+struct SkipLast<Iter: Iterator<Item = Item>, Item> {
+    iter: iter::Fuse<Iter>,
+    buffer: VecDeque<Item>,
+    count: usize,
+}
+
+impl<Iter: Iterator<Item = Item>, Item> Iterator for SkipLast<Iter, Item> {
+    type Item = Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.count == 0 {
+            return self.iter.next();
+        }
+        while self.buffer.len() != self.count {
+            self.buffer.push_front(self.iter.next()?);
+        }
+        let next = self.iter.next()?;
+        let res = self.buffer.pop_back()?;
+        self.buffer.push_front(next);
+        Some(res)
+    }
+}
+
+#[cfg(test)]
+mod skip_last_test {
+    use crate::apply::skip_last;
+
+    #[test]
+    fn skip_last_test() {
+        let a = [1, 2, 3, 4, 5, 6, 7];
+
+        assert_eq!(
+            skip_last(a.iter().copied(), 0)
+                .collect::<Vec<_>>()
+                .as_slice(),
+            &[1, 2, 3, 4, 5, 6, 7]
+        );
+        assert_eq!(
+            skip_last(a.iter().copied(), 5)
+                .collect::<Vec<_>>()
+                .as_slice(),
+            &[1, 2]
+        );
+        assert_eq!(
+            skip_last(a.iter().copied(), 7)
+                .collect::<Vec<_>>()
+                .as_slice(),
+            &[]
+        );
     }
 }
