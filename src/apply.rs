@@ -198,7 +198,11 @@ fn apply_hunk<'a, T: PartialEq + ?Sized>(
     options: &ApplyOptions,
 ) -> Result<(), ()> {
     // Find position
-    let (pos, fuzzy) = find_position(image, hunk, options.max_fuzzy).ok_or(())?;
+
+    let max_fuzzy = pre_context_line_count(hunk.lines())
+        .min(post_context_line_count(hunk.lines()))
+        .min(options.max_fuzzy);
+    let (pos, fuzzy) = find_position(image, hunk, max_fuzzy).ok_or(())?;
     let begin = pos + fuzzy;
     let end = pos
         + pre_image_line_count(hunk.lines())
@@ -240,6 +244,21 @@ fn find_position<T: PartialEq + ?Sized>(
     }
 
     None
+}
+
+fn pre_context_line_count<T: ?Sized>(lines: &[Line<'_, T>]) -> usize {
+    lines
+        .iter()
+        .take_while(|x| matches!(x, Line::Context(_)))
+        .count()
+}
+
+fn post_context_line_count<T: ?Sized>(lines: &[Line<'_, T>]) -> usize {
+    lines
+        .iter()
+        .rev()
+        .take_while(|x| matches!(x, Line::Context(_)))
+        .count()
 }
 
 fn pre_image_line_count<T: ?Sized>(lines: &[Line<'_, T>]) -> usize {
