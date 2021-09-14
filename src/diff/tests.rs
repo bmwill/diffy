@@ -632,3 +632,30 @@ void Chunk_copy(Chunk *src, size_t src_start, Chunk *dst, size_t dst_start, size
 ";
     assert_patch!(original, a, expected_diffy);
 }
+
+#[test]
+fn fuzzy_patch() {
+    let diff = Patch::from_str(
+        "\
+--- original
++++ modified
+@@ -1,6 +1,6 @@
+ A
+ B
+-C
+-D
++E
++F
+ G
+ H
+",
+    )
+    .unwrap();
+    let newer = "0\nB\nC\nD\nG\nH\n";
+    let expected = "0\nB\nE\nF\nG\nH\n";
+    println!("{}", diff);
+    assert_eq!(
+        crate::apply_all(newer, &diff, crate::ApplyOptions::new().with_max_fuzzy(2)),
+        (expected.to_owned(), vec![]),
+    )
+}

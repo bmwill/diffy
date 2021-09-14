@@ -300,7 +300,7 @@ fn match_fragment<T: PartialEq + ?Sized>(
         return false;
     }
 
-    pre_image(lines).eq(image.iter().map(ImageLine::inner))
+    pre_image(&lines[fuzzy..len - fuzzy]).eq(image.iter().map(ImageLine::inner))
 }
 
 #[derive(Debug)]
