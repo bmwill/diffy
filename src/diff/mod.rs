@@ -235,7 +235,7 @@ fn to_hunks<'a, T: ?Sized>(
                 // Check to see if we can merge the hunks
                 let start1_next =
                     cmp::min(s.old.start, lines1.len() - 1).saturating_sub(context_len);
-                if start1_next <= end1 {
+                if start1_next < end1 {
                     // Context lines between hunks
                     for (_i1, i2) in (script.old.end..s.old.start).zip(script.new.end..s.new.start)
                     {
