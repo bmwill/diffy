@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2] - 2022-01-31
+
+### Fixed
+- [#16](https://github.com/bmwill/diffy/issues/16) Fix an issue where patch
+  files failed to parse when they contained hunks which were adjacent to one
+  another.
+
 ## [0.2.1] - 2021-01-27
 
 ### Fixed
@@ -32,6 +39,7 @@
 ## [0.1.0] - 2020-06-30
 - Initial release.
 
+[0.2.2]: https://github.com/bmwill/diffy/releases/tag/0.2.2
 [0.2.1]: https://github.com/bmwill/diffy/releases/tag/0.2.1
 [0.2.0]: https://github.com/bmwill/diffy/releases/tag/0.2.0
 [0.1.1]: https://github.com/bmwill/diffy/releases/tag/0.1.1
