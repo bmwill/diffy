@@ -193,8 +193,8 @@ fn escaped_filename<T: Text + ToOwned + ?Sized>(escaped: &T) -> Result<Cow<'_, [
 
 fn verify_hunks_in_order<T: ?Sized>(hunks: &[Hunk<'_, T>]) -> bool {
     for hunk in hunks.windows(2) {
-        if hunk[0].old_range.end() >= hunk[1].old_range.start()
-            || hunk[0].new_range.end() >= hunk[1].new_range.start()
+        if hunk[0].old_range.end() > hunk[1].old_range.start()
+            || hunk[0].new_range.end() > hunk[1].new_range.start()
         {
             return false;
         }
@@ -445,5 +445,32 @@ mod tests {
 +Oathbringer
 ";
         parse(s).unwrap_err();
+    }
+
+    #[test]
+    fn adjacent_hunks_correctly_parse() {
+        let s = "\
+--- original
++++ modified
+@@ -110,7 +110,7 @@
+ --
+
+ I am afraid, however, that all I have known - that my story - will be forgotten.
+ I am afraid for the world that is to come.
+-Afraid that my plans will fail. Afraid of a doom worse than the Deepness.
++Afraid that Alendi will fail. Afraid of a doom brought by the Deepness.
+
+ Alendi was never the Hero of Ages.
+@@ -117,7 +117,7 @@
+ At best, I have amplified his virtues, creating a Hero where there was none.
+
+-At worst, I fear that all we believe may have been corrupted.
++At worst, I fear that I have corrupted all we believe.
+
+ --
+ Alendi must not reach the Well of Ascension. He must not take the power for himself.
+
+";
+        parse(s).unwrap();
     }
 }
