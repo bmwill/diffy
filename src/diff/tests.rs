@@ -611,3 +611,56 @@ void Chunk_copy(Chunk *src, size_t src_start, Chunk *dst, size_t dst_start, size
 ";
     assert_patch!(original, a, expected_diffy);
 }
+
+// In the event that a patch has an invalid hunk range we want to ensure that when apply is
+// attempting to search for a matching position to apply a hunk that the search algorithm runs in
+// time bounded by the length of the original image being patched. Before clamping the search space
+// this test would take >200ms and now it runs in roughly ~30us on an M1 laptop.
+#[test]
+fn apply_with_incorrect_hunk_has_bounded_performance() {
+    let patch = "\
+@@ -10,6 +1000000,8 @@
+ First:
+     Life before death,
+     strength before weakness,
+     journey before destination.
+ Second:
+-    I will put the law before all else.
++    I swear to seek justice,
++    to let it guide me,
++    until I find a more perfect Ideal.
+";
+
+    let original = "\
+First:
+    Life before death,
+    strength before weakness,
+    journey before destination.
+Second:
+    I will put the law before all else.
+";
+
+    let expected = "\
+First:
+    Life before death,
+    strength before weakness,
+    journey before destination.
+Second:
+    I swear to seek justice,
+    to let it guide me,
+    until I find a more perfect Ideal.
+";
+
+    let patch = Patch::from_str(patch).unwrap();
+
+    let now = std::time::Instant::now();
+
+    let result = apply(original, &patch).unwrap();
+
+    let elapsed = now.elapsed();
+
+    println!("{:?}", elapsed);
+    assert!(elapsed < std::time::Duration::from_micros(200));
+
+    assert_eq!(result, expected);
+}

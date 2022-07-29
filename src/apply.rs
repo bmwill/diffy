@@ -143,7 +143,9 @@ fn find_position<T: PartialEq + ?Sized>(
     image: &[ImageLine<T>],
     hunk: &Hunk<'_, T>,
 ) -> Option<usize> {
-    let pos = hunk.new_range().start().saturating_sub(1);
+    // In order to avoid searching through positions which are out of bounds of the image,
+    // clamp the starting position based on the length of the image
+    let pos = std::cmp::min(hunk.new_range().start().saturating_sub(1), image.len());
 
     // Create an iterator that starts with 'pos' and then interleaves
     // moving pos backward/foward by one.
