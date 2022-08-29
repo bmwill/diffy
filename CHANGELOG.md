@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0] - 2022-08-29
+
+### Fixed
+- [#17](https://github.com/bmwill/diffy/issues/17) Fix an issue which resulted
+  in a large slowdown when applying a patch with incorrect hunk headers.
+- [#18](https://github.com/bmwill/diffy/pull/18) Replace unmaintained ansi_term
+  dependency with nu_ansi_term in order to address
+  [RUSTSEC-2021-0139](https://rustsec.org/advisories/RUSTSEC-2021-0139).
+
+### Changed
+- [#19](https://github.com/bmwill/diffy/pull/19) Bump minimum supported rust
+  version (msrv) to 1.51.0.
+
 ## [0.2.2] - 2022-01-31
 
 ### Fixed
@@ -39,6 +52,7 @@
 ## [0.1.0] - 2020-06-30
 - Initial release.
 
+[0.3.0]: https://github.com/bmwill/diffy/releases/tag/0.3.0
 [0.2.2]: https://github.com/bmwill/diffy/releases/tag/0.2.2
 [0.2.1]: https://github.com/bmwill/diffy/releases/tag/0.2.1
 [0.2.0]: https://github.com/bmwill/diffy/releases/tag/0.2.0

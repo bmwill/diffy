@@ -1,6 +1,6 @@
 [package]
 name = "diffy"
-version = "0.2.2"
+version = "0.3.0"
 authors = ["Brandon Williams <bwilliams.eng@gmail.com>"]
 license = "MIT OR Apache-2.0"
 description = "Tools for finding and manipulating differences between files"
