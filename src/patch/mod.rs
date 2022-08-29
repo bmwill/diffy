@@ -156,7 +156,7 @@ impl<T: ToOwned + AsRef<[u8]> + ?Sized> Filename<'_, T> {
         if self.needs_to_be_escaped_bytes() {
             w.write_all(b"\"")?;
             for b in self.0.as_ref().as_ref() {
-                if ESCAPED_CHARS_BYTES.contains(&b) {
+                if ESCAPED_CHARS_BYTES.contains(b) {
                     w.write_all(b"\\")?;
                 }
                 w.write_all(&[*b])?;

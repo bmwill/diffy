@@ -416,7 +416,7 @@ where
 }
 
 impl<'a, 'b> DiffRange<'a, 'b, [u8]> {
-    pub fn to_str(&self, text1: &'a str, text2: &'b str) -> DiffRange<'a, 'b, str> {
+    pub fn to_str(self, text1: &'a str, text2: &'b str) -> DiffRange<'a, 'b, str> {
         fn boundary_down(text: &str, pos: usize) -> usize {
             let mut adjust = 0;
             while !text.is_char_boundary(pos - adjust) {

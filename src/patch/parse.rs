@@ -54,7 +54,7 @@ impl<'a, T: Text + ?Sized> Parser<'a, T> {
     }
 }
 
-pub fn parse<'a>(input: &'a str) -> Result<Patch<'a, str>> {
+pub fn parse(input: &str) -> Result<Patch<'_, str>> {
     let mut parser = Parser::new(input);
     let header = patch_header(&mut parser)?;
     let hunks = hunks(&mut parser)?;
@@ -66,7 +66,7 @@ pub fn parse<'a>(input: &'a str) -> Result<Patch<'a, str>> {
     ))
 }
 
-pub fn parse_bytes<'a>(input: &'a [u8]) -> Result<Patch<'a, [u8]>> {
+pub fn parse_bytes(input: &[u8]) -> Result<Patch<'_, [u8]>> {
     let mut parser = Parser::new(input);
     let header = patch_header(&mut parser)?;
     let hunks = hunks(&mut parser)?;
@@ -112,7 +112,7 @@ fn patch_header<'a, T: Text + ToOwned + ?Sized>(
 
 // Skip to the first filename header ("--- " or "+++ ") or hunk line,
 // skipping any preamble lines like "diff --git", etc.
-fn skip_header_preamble<'a, T: Text + ?Sized>(parser: &mut Parser<'a, T>) -> Result<()> {
+fn skip_header_preamble<T: Text + ?Sized>(parser: &mut Parser<'_, T>) -> Result<()> {
     while let Some(line) = parser.peek() {
         if line.starts_with("--- ") | line.starts_with("+++ ") | line.starts_with("@@ ") {
             break;
@@ -152,7 +152,7 @@ fn is_quoted<T: Text + ?Sized>(s: &T) -> Option<&T> {
     s.strip_prefix("\"").and_then(|s| s.strip_suffix("\""))
 }
 
-fn unescaped_filename<'a, T: Text + ToOwned + ?Sized>(filename: &'a T) -> Result<Cow<'a, [u8]>> {
+fn unescaped_filename<T: Text + ToOwned + ?Sized>(filename: &T) -> Result<Cow<'_, [u8]>> {
     let bytes = filename.as_bytes();
 
     if bytes.iter().any(|b| ESCAPED_CHARS_BYTES.contains(b)) {

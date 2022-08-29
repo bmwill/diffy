@@ -27,7 +27,7 @@ impl<'a, T: ?Sized + Eq + Hash> Classifier<'a, T> {
 impl<'a, T: ?Sized + Text> Classifier<'a, T> {
     pub fn classify_lines(&mut self, text: &'a T) -> (Vec<&'a T>, Vec<u64>) {
         LineIter::new(text)
-            .map(|line| (line, self.classify(&line)))
+            .map(|line| (line, self.classify(line)))
             .unzip()
     }
 }
@@ -109,27 +109,16 @@ impl Text for str {
     }
 
     fn strip_prefix(&self, prefix: &str) -> Option<&Self> {
-        if self.starts_with(prefix) {
-            Some(&self[prefix.len()..])
-        } else {
-            None
-        }
+        self.strip_prefix(prefix)
     }
 
     fn strip_suffix(&self, suffix: &str) -> Option<&Self> {
-        if self.ends_with(suffix) {
-            Some(&self[..self.len() - suffix.len()])
-        } else {
-            None
-        }
+        self.strip_suffix(suffix)
     }
 
     fn split_at_exclusive(&self, needle: &str) -> Option<(&Self, &Self)> {
-        if let Some(idx) = self.find(needle) {
-            Some((&self[..idx], &self[idx + needle.len()..]))
-        } else {
-            None
-        }
+        self.find(needle)
+            .map(|idx| (&self[..idx], &self[idx + needle.len()..]))
     }
 
     fn find(&self, needle: &str) -> Option<usize> {
@@ -171,27 +160,15 @@ impl Text for [u8] {
     }
 
     fn strip_prefix(&self, prefix: &str) -> Option<&Self> {
-        if self.starts_with(prefix.as_bytes()) {
-            Some(&self[prefix.len()..])
-        } else {
-            None
-        }
+        self.strip_prefix(prefix.as_bytes())
     }
 
     fn strip_suffix(&self, suffix: &str) -> Option<&Self> {
-        if self.ends_with(suffix.as_bytes()) {
-            Some(&self[..self.len() - suffix.len()])
-        } else {
-            None
-        }
+        self.strip_suffix(suffix.as_bytes())
     }
 
     fn split_at_exclusive(&self, needle: &str) -> Option<(&Self, &Self)> {
-        if let Some(idx) = find_bytes(self, needle.as_bytes()) {
-            Some((&self[..idx], &self[idx + needle.len()..]))
-        } else {
-            None
-        }
+        find_bytes(self, needle.as_bytes()).map(|idx| (&self[..idx], &self[idx + needle.len()..]))
     }
 
     fn find(&self, needle: &str) -> Option<usize> {

@@ -2,6 +2,7 @@ use crate::range::{DiffRange, SliceLike};
 
 // Walks through all edits and shifts them up and then down, trying to see if they run into similar
 // edits which can be merged
+#[allow(clippy::needless_lifetimes)]
 pub fn compact<'a, 'b, T: ?Sized + SliceLike>(diffs: &mut Vec<DiffRange<'a, 'b, T>>) {
     // First attempt to compact all Deletions
     let mut pointer = 0;
@@ -26,6 +27,7 @@ pub fn compact<'a, 'b, T: ?Sized + SliceLike>(diffs: &mut Vec<DiffRange<'a, 'b, 
 }
 
 // Attempts to shift the Insertion or Deletion at location `pointer` as far upwards as possible.
+#[allow(clippy::needless_lifetimes)]
 fn shift_diff_up<'a, 'b, T: ?Sized + SliceLike>(
     diffs: &mut Vec<DiffRange<'a, 'b, T>>,
     mut pointer: usize,
@@ -127,6 +129,7 @@ fn shift_diff_up<'a, 'b, T: ?Sized + SliceLike>(
 }
 
 // Attempts to shift the Insertion or Deletion at location `pointer` as far downwards as possible.
+#[allow(clippy::needless_lifetimes)]
 fn shift_diff_down<'a, 'b, T: ?Sized + SliceLike>(
     diffs: &mut Vec<DiffRange<'a, 'b, T>>,
     mut pointer: usize,
