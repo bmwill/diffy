@@ -1,5 +1,5 @@
 use super::{Hunk, Line, Patch, NO_NEWLINE_AT_EOF};
-use ansi_term::{Color, Style};
+use nu_ansi_term::{Color, Style};
 use std::{
     fmt::{Display, Formatter, Result},
     io,
