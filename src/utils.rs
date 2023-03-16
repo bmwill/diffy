@@ -32,6 +32,14 @@ impl<'a, T: ?Sized + Text> Classifier<'a, T> {
     }
 }
 
+impl<'a, T: Eq + Hash> Classifier<'a, T> {
+    pub fn classify(&mut self, data: &'a [T]) -> (Vec<&'a T>, Vec<u64>) {
+        data.iter()
+            .map(|item| (item, self.classify_item(item)))
+            .unzip()
+    }
+}
+
 impl<T: Eq + Hash + ?Sized> Default for Classifier<'_, T> {
     fn default() -> Self {
         Self {
@@ -231,6 +239,14 @@ fn find_byte(haystack: &[u8], byte: u8) -> Option<usize> {
 #[cfg(test)]
 mod test {
     use super::Classifier;
+
+    #[test]
+    fn classify() {
+        let input = vec![10, 11, 12, 13];
+        let mut classifier = Classifier::default();
+        let (lines, _ids) = classifier.classify(&input);
+        assert_eq!(lines, vec![&10, &11, &12, &13]);
+    }
 
     #[test]
     fn classify_string() {
