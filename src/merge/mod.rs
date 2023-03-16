@@ -152,9 +152,9 @@ impl MergeOptions {
         theirs: &'a str,
     ) -> Result<String, String> {
         let mut classifier = Classifier::default();
-        let (ancestor_lines, ancestor_ids) = classifier.classify_lines(ancestor);
-        let (our_lines, our_ids) = classifier.classify_lines(ours);
-        let (their_lines, their_ids) = classifier.classify_lines(theirs);
+        let (ancestor_lines, ancestor_ids) = classifier.classify_text(ancestor);
+        let (our_lines, our_ids) = classifier.classify_text(ours);
+        let (their_lines, their_ids) = classifier.classify_text(theirs);
 
         let opts = DiffOptions::default();
         let our_solution = opts.diff_slice(&ancestor_ids, &our_ids);
@@ -183,9 +183,9 @@ impl MergeOptions {
         theirs: &'a [u8],
     ) -> Result<Vec<u8>, Vec<u8>> {
         let mut classifier = Classifier::default();
-        let (ancestor_lines, ancestor_ids) = classifier.classify_lines(ancestor);
-        let (our_lines, our_ids) = classifier.classify_lines(ours);
-        let (their_lines, their_ids) = classifier.classify_lines(theirs);
+        let (ancestor_lines, ancestor_ids) = classifier.classify_text(ancestor);
+        let (our_lines, our_ids) = classifier.classify_text(ours);
+        let (their_lines, their_ids) = classifier.classify_text(theirs);
 
         let opts = DiffOptions::default();
         let our_solution = opts.diff_slice(&ancestor_ids, &our_ids);
