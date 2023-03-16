@@ -7,8 +7,8 @@ description = "Tools for finding and manipulating differences between files"
 documentation = "https://docs.rs/diffy"
 repository = "https://github.com/bmwill/diffy"
 readme = "README.md"
-keywords = ["diff", "patch", "merge"]
-categories = ["text-processing"]
+keywords = ["diff", "patch", "merge", "3-way", "myers"]
+categories = ["text-processing", "algorithms"]
 rust-version = "1.62.1"
 edition = "2021"
 
