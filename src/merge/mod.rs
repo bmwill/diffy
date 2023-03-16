@@ -490,11 +490,11 @@ fn cleanup_conflicts<'ancestor, 'ours, 'theirs, T: ?Sized + SliceLike + PartialE
     }
 }
 
-fn output_result<'a, T: ?Sized>(
+fn output_result<'a>(
     ancestor: &[&'a str],
     ours: &[&'a str],
     theirs: &[&'a str],
-    merge: &[MergeRange<T>],
+    merge: &[MergeRange<[u64]>],
     marker_len: usize,
     style: ConflictStyle,
 ) -> Result<String, String> {
@@ -556,11 +556,11 @@ fn add_conflict_marker(
     output.push('\n');
 }
 
-fn output_result_bytes<'a, T: ?Sized>(
+fn output_result_bytes<'a>(
     ancestor: &[&'a [u8]],
     ours: &[&'a [u8]],
     theirs: &[&'a [u8]],
-    merge: &[MergeRange<T>],
+    merge: &[MergeRange<[u64]>],
     marker_len: usize,
     style: ConflictStyle,
 ) -> Result<Vec<u8>, Vec<u8>> {
