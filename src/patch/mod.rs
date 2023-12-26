@@ -52,6 +52,15 @@ impl<'a, T: ToOwned + ?Sized> Patch<'a, T> {
     pub fn hunks(&self) -> &[Hunk<'_, T>] {
         &self.hunks
     }
+
+    pub fn reverse(&self) -> Patch<'_, T> {
+        let hunks = self.hunks.iter().map(Hunk::reverse).collect();
+        Patch {
+            original: self.modified.clone(),
+            modified: self.original.clone(),
+            hunks,
+        }
+    }
 }
 
 impl<T: AsRef<[u8]> + ToOwned + ?Sized> Patch<'_, T> {
@@ -278,6 +287,16 @@ impl<'a, T: ?Sized> Hunk<'a, T> {
     pub fn lines(&self) -> &[Line<'a, T>] {
         &self.lines
     }
+
+    pub fn reverse(&self) -> Self {
+        let lines = self.lines.iter().map(Line::reverse).collect();
+        Self {
+            old_range: self.new_range,
+            new_range: self.old_range,
+            function_context: self.function_context,
+            lines,
+        }
+    }
 }
 
 impl<T: ?Sized> Clone for Hunk<'_, T> {
@@ -360,5 +379,15 @@ impl<T: ?Sized> Copy for Line<'_, T> {}
 impl<T: ?Sized> Clone for Line<'_, T> {
     fn clone(&self) -> Self {
         *self
+    }
+}
+
+impl<T: ?Sized> Line<'_, T> {
+    pub fn reverse(&self) -> Self {
+        match self {
+            Line::Context(s) => Line::Context(s),
+            Line::Delete(s) => Line::Insert(s),
+            Line::Insert(s) => Line::Delete(s),
+        }
     }
 }

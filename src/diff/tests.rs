@@ -664,3 +664,45 @@ Second:
 
     assert_eq!(result, expected);
 }
+
+#[test]
+fn reverse_empty_file() {
+    let p = create_patch("", "make it so");
+    let reverse = p.reverse();
+
+    let hunk_lines = p.hunks().iter().map(|h| h.lines());
+    let reverse_hunk_lines = reverse.hunks().iter().map(|h| h.lines());
+
+    for (lines, reverse_lines) in hunk_lines.zip(reverse_hunk_lines) {
+        for (line, reverse) in lines.iter().zip(reverse_lines.iter()) {
+            match line {
+                l @ Line::Context(_) => assert_eq!(l, reverse),
+                Line::Delete(d) => assert!(matches!(reverse, Line::Insert(i) if d == i)),
+                Line::Insert(i) => assert!(matches!(reverse, Line::Delete(d) if d == i)),
+            }
+        }
+    }
+
+    let re_reverse = apply(&apply("", &p).unwrap(), &reverse).unwrap();
+    assert_eq!(re_reverse, "");
+}
+
+#[test]
+fn reverse_multi_line_file() {
+    let original = r"Commander Worf
+What do you want this time, Picard?!
+Commander Worf how dare you speak to mean that way!
+";
+    let modified = r"Commander Worf
+Yes, Captain Picard?
+Commander Worf, you are a valued member of my crew
+Why, thank you Captain.  As are you.  A true warrior. Kupluh!
+Kupluh, Indeed
+";
+
+    let p = create_patch(original, modified);
+    let reverse = p.reverse();
+
+    let re_reverse = apply(&apply(original, &p).unwrap(), &reverse).unwrap();
+    assert_eq!(re_reverse, original);
+}
