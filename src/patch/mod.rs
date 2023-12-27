@@ -288,6 +288,8 @@ impl<'a, T: ?Sized> Hunk<'a, T> {
         &self.lines
     }
 
+    /// Creates a reverse patch for the hunk.  This is equivalent to what
+    /// XDL_PATCH_REVERSE would apply in libxdiff.
     pub fn reverse(&self) -> Self {
         let lines = self.lines.iter().map(Line::reverse).collect();
         Self {
