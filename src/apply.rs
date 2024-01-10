@@ -151,13 +151,10 @@ fn find_position<T: PartialEq + ?Sized>(
     // moving pos backward/foward by one.
     let backward = (0..pos).rev();
     let forward = pos + 1..image.len();
-    for pos in iter::once(pos).chain(interleave(backward, forward)) {
-        if match_fragment(image, hunk.lines(), pos) {
-            return Some(pos);
-        }
-    }
 
-    None
+    iter::once(pos)
+        .chain(interleave(backward, forward))
+        .find(|&pos| match_fragment(image, hunk.lines(), pos))
 }
 
 fn pre_image_line_count<T: ?Sized>(lines: &[Line<'_, T>]) -> usize {
