@@ -96,8 +96,8 @@ impl DiffOptions {
     /// Produce a Patch between two texts based on the configured options
     pub fn create_patch<'a>(&self, original: &'a str, modified: &'a str) -> Patch<'a, str> {
         let mut classifier = Classifier::default();
-        let (old_lines, old_ids) = classifier.classify_lines(original);
-        let (new_lines, new_ids) = classifier.classify_lines(modified);
+        let (old_lines, old_ids) = classifier.classify_text(original);
+        let (new_lines, new_ids) = classifier.classify_text(modified);
 
         let solution = self.diff_slice(&old_ids, &new_ids);
 
@@ -112,8 +112,8 @@ impl DiffOptions {
         modified: &'a [u8],
     ) -> Patch<'a, [u8]> {
         let mut classifier = Classifier::default();
-        let (old_lines, old_ids) = classifier.classify_lines(original);
-        let (new_lines, new_ids) = classifier.classify_lines(modified);
+        let (old_lines, old_ids) = classifier.classify_text(original);
+        let (new_lines, new_ids) = classifier.classify_text(modified);
 
         let solution = self.diff_slice(&old_ids, &new_ids);
 
