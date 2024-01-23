@@ -3,6 +3,7 @@ use crate::{
     apply::apply,
     diff::{Diff, DiffRange},
     patch::Patch,
+    PatchFormatter,
     range::Range,
 };
 
@@ -463,6 +464,27 @@ The door of all subtleties!
 ";
     opts.set_context_len(1);
     assert_patch!(opts, lao, tzu, expected);
+
+    let expected = "\
+--- from
++++ to
+@@ -1,5 +1,4 @@
+-The Way that can be told of is not the eternal Way;
+-The name that can be named is not the eternal name.
+ The Nameless is the origin of Heaven and Earth;
+-The Named is the mother of all things.
++The named is the mother of all things.
++
+ Therefore let there always be non-being,
+@@ -11 +10,4 @@
+   they have different names.
++They both may be called deep and profound.
++Deeper and more profound,
++The door of all subtleties!
+";
+    opts.set_original("from");
+    opts.set_modified("to");
+    assert_patch!(opts, lao, tzu, expected);
 }
 
 #[test]
@@ -516,6 +538,35 @@ fn no_newline_at_eof() {
 \\ No newline at end of file
 ";
     assert_patch!(old, new, expected);
+}
+
+#[test]
+fn without_no_newline_at_eof() {
+    let old = "old line";
+    let new = "new line";
+    let expected = "\
+--- original
++++ modified
+@@ -1 +1 @@
+-old line
++new line
+";
+
+    let f = PatchFormatter::new().without_missing_newline_message();
+    let patch = create_patch(old, new);
+    let bpatch = create_patch_bytes(old.as_bytes(), new.as_bytes());
+    let patch_str = format!("{}", f.fmt_patch(&patch));
+    let mut patch_bytes = Vec::new();
+    f.write_patch_into(&bpatch, &mut patch_bytes).unwrap();
+
+    assert_eq!(patch_str, expected);
+    assert_eq!(patch_bytes, patch_str.as_bytes());
+    assert_eq!(patch_bytes, expected.as_bytes());
+    assert_eq!(apply(old, &patch).unwrap(), new);
+    assert_eq!(
+        crate::apply_bytes(old.as_bytes(), &bpatch).unwrap(),
+        new.as_bytes()
+    );
 }
 
 #[test]
