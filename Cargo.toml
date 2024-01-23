@@ -12,4 +12,4 @@ categories = ["text-processing"]
 edition = "2018"
 
 [dependencies]
-nu-ansi-term = "0.46.0"
+nu-ansi-term = "0.47"
