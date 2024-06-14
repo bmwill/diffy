@@ -343,3 +343,64 @@ class Call(models.Model):
 
     assert_merge!(base, ours, theirs, Ok(expected), "MergeRange::Both case");
 }
+
+#[test]
+fn delete_and_insert_conflict() {
+    let base = r#"
+{
+    int a = 2;
+}
+"#;
+
+    let ours = r#"
+{
+}
+"#;
+
+    let theirs = r#"
+{
+    int a = 2;
+    int b = 3;
+}
+"#;
+
+    let expected = r#"
+{
+<<<<<<< ours
+||||||| original
+    int a = 2;
+=======
+    int a = 2;
+    int b = 3;
+>>>>>>> theirs
+}
+"#;
+
+    assert_merge!(
+        base,
+        ours,
+        theirs,
+        Err(expected),
+        "MergeRange (Ours::delete, Theirs::insert) conflict"
+    );
+
+    let expected = r#"
+{
+<<<<<<< ours
+    int a = 2;
+    int b = 3;
+||||||| original
+    int a = 2;
+=======
+>>>>>>> theirs
+}
+"#;
+
+    assert_merge!(
+        base,
+        theirs,
+        ours,
+        Err(expected),
+        "MergeRange (Theirs::delete, Ours::insert) conflict"
+    );
+}

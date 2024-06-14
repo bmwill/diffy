@@ -453,10 +453,14 @@ fn create_merge_range<'ancestor, 'ours, 'theirs, T: ?Sized + SliceLike>(
         (None, Some(ours), None) => Some(MergeRange::Ours(ours)),
         (None, None, Some(theirs)) => Some(MergeRange::Theirs(theirs)),
 
-        (Some(_), Some(_), None)
-        | (Some(_), None, Some(_))
-        | (Some(_), None, None)
-        | (None, None, None) => None,
+        (Some(ancestor), None, Some(theirs)) => {
+            Some(MergeRange::Conflict(ancestor, Range::empty(), theirs))
+        }
+        (Some(ancestor), Some(ours), None) => {
+            Some(MergeRange::Conflict(ancestor, ours, Range::empty()))
+        }
+
+        (Some(_), None, None) | (None, None, None) => None,
     }
 }
 
