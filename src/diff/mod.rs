@@ -95,14 +95,12 @@ impl DiffOptions {
 
     /// Produce a Patch between two texts based on the configured options
     pub fn create_patch<'a>(&self, original: &'a str, modified: &'a str) -> Patch<'a, str> {
-        let mut classifier = Classifier::default();
-        let (old_lines, old_ids) = classifier.classify_lines(original);
-        let (new_lines, new_ids) = classifier.classify_lines(modified);
+        self.construct_patch(original, modified, "original", "modified")
+    }
 
-        let solution = self.diff_slice(&old_ids, &new_ids);
-
-        let hunks = to_hunks(&old_lines, &new_lines, &solution, self.context_len);
-        Patch::new(Some("original"), Some("modified"), hunks)
+    /// Produce a Patch between two texts from files based on the configured options
+    pub fn create_file_patch<'a>(&self, original: &'a str, modified: &'a str, original_filename: &'a str, modified_filename: &'a str) -> Patch<'a, str> {
+        self.construct_patch(original, modified, original_filename, modified_filename)
     }
 
     /// Create a patch between two potentially non-utf8 texts
@@ -133,6 +131,17 @@ impl DiffOptions {
         }
 
         solution
+    }
+
+    fn construct_patch<'a>(&self, original: &'a str, modified: &'a str, original_filename: &'a str, modified_filename: &'a str) -> Patch<'a, str> {
+        let mut classifier = Classifier::default();
+        let (old_lines, old_ids) = classifier.classify_lines(original);
+        let (new_lines, new_ids) = classifier.classify_lines(modified);
+
+        let solution = self.diff_slice(&old_ids, &new_ids);
+
+        let hunks = to_hunks(&old_lines, &new_lines, &solution, self.context_len);
+        Patch::new(Some(original_filename), Some(modified_filename), hunks)
     }
 }
 
@@ -183,6 +192,10 @@ fn diff<'a>(original: &'a str, modified: &'a str) -> Vec<Diff<'a, str>> {
 /// ```
 pub fn create_patch<'a>(original: &'a str, modified: &'a str) -> Patch<'a, str> {
     DiffOptions::default().create_patch(original, modified)
+}
+
+pub fn create_file_patch<'a>(original: &'a str, modified: &'a str, original_filename: &'a str, modified_filename: &'a str) -> Patch<'a, str> {
+    DiffOptions::default().create_file_patch(original, modified, original_filename, modified_filename)
 }
 
 /// Create a patch between two potentially non-utf8 texts
