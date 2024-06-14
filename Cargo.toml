@@ -13,4 +13,4 @@ rust-version = "1.62.1"
 edition = "2021"
 
 [dependencies]
-nu-ansi-term = "0.46.0"
+nu-ansi-term = "0.50"
