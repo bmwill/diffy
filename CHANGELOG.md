@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0] - 2024-06-14
+
+### Fixed
+- [#28](https://github.com/bmwill/diffy/issues/28) Fixed an issue where
+  conflicts were being omitted from merges.
+
+### Added
+- [#26](https://github.com/bmwill/diffy/pull/26) Add ability to reverse a
+  patch.
+
+### Changed
+- [#29](https://github.com/bmwill/diffy/pull/29) Bump minimum supported rust
+  version (msrv) to 1.62.1.
+- [#22](https://github.com/bmwill/diffy/pull/22) update nu-ansi-term dependency
+  to 0.50.
+
 ## [0.3.0] - 2022-08-29
 
 ### Fixed
