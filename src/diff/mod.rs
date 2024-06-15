@@ -43,12 +43,14 @@ where
 
 /// A collection of options for modifying the way a diff is performed
 #[derive(Debug)]
-pub struct DiffOptions {
+pub struct DiffOptions<'a> {
     compact: bool,
     context_len: usize,
+    original: &'a str,
+    modified: &'a str,
 }
 
-impl DiffOptions {
+impl<'a> DiffOptions<'a> {
     /// Construct a new `DiffOptions` with default settings
     ///
     /// ## Defaults
@@ -57,6 +59,8 @@ impl DiffOptions {
         Self {
             compact: true,
             context_len: 3,
+            original: "original",
+            modified: "modified",
         }
     }
 
@@ -76,9 +80,21 @@ impl DiffOptions {
         self
     }
 
+    /// Set the name of the old file should be used when producing a patch
+    pub fn set_original(&mut self, original: &'a str) -> &mut Self {
+        self.original = original;
+        self
+    }
+
+    /// Set the name of the new file that should be used when producing a patch
+    pub fn set_modified(&mut self, modified: &'a str) -> &mut Self {
+        self.modified = modified;
+        self
+    }
+
     // TODO determine if this should be exposed in the public API
     #[allow(dead_code)]
-    fn diff<'a>(&self, original: &'a str, modified: &'a str) -> Vec<Diff<'a, str>> {
+    fn diff(&self, original: &'a str, modified: &'a str) -> Vec<Diff<'a, str>> {
         let solution = myers::diff(original.as_bytes(), modified.as_bytes());
 
         let mut solution = solution
@@ -94,7 +110,7 @@ impl DiffOptions {
     }
 
     /// Produce a Patch between two texts based on the configured options
-    pub fn create_patch<'a>(&self, original: &'a str, modified: &'a str) -> Patch<'a, str> {
+    pub fn create_patch(&self, original: &'a str, modified: &'a str) -> Patch<'a, str> {
         let mut classifier = Classifier::default();
         let (old_lines, old_ids) = classifier.classify_lines(original);
         let (new_lines, new_ids) = classifier.classify_lines(modified);
@@ -102,11 +118,11 @@ impl DiffOptions {
         let solution = self.diff_slice(&old_ids, &new_ids);
 
         let hunks = to_hunks(&old_lines, &new_lines, &solution, self.context_len);
-        Patch::new(Some("original"), Some("modified"), hunks)
+        Patch::new(Some(self.original), Some(self.modified), hunks)
     }
 
     /// Create a patch between two potentially non-utf8 texts
-    pub fn create_patch_bytes<'a>(
+    pub fn create_patch_bytes(
         &self,
         original: &'a [u8],
         modified: &'a [u8],
@@ -118,10 +134,10 @@ impl DiffOptions {
         let solution = self.diff_slice(&old_ids, &new_ids);
 
         let hunks = to_hunks(&old_lines, &new_lines, &solution, self.context_len);
-        Patch::new(Some(&b"original"[..]), Some(&b"modified"[..]), hunks)
+        Patch::new(Some(self.original.as_bytes()), Some(self.modified.as_bytes()), hunks)
     }
 
-    pub(crate) fn diff_slice<'a, T: PartialEq>(
+    pub(crate) fn diff_slice<T: PartialEq>(
         &self,
         old: &'a [T],
         new: &'a [T],
@@ -136,7 +152,7 @@ impl DiffOptions {
     }
 }
 
-impl Default for DiffOptions {
+impl<'a> Default for DiffOptions<'a> {
     fn default() -> Self {
         Self::new()
     }
