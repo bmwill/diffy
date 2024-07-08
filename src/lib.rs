@@ -5,7 +5,7 @@
 //! This library is intended to be a collection of tools used to find and
 //! manipulate differences between files or arbitrary data inspired by
 //! [LibXDiff] and [GNU Diffutils]. Version control systems like [Git] and
-//! [Mercurial] generallycommunicate differences between two versions of a
+//! [Mercurial] generally communicate differences between two versions of a
 //! file using a `diff` or `patch`.
 //!
 //! The current diff implementation is based on the [Myers' diff algorithm].
