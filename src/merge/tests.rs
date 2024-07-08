@@ -216,6 +216,19 @@ salt
 }
 
 #[test]
+#[rustfmt::skip]
+fn test_merge_arbitrary_type() {
+    let original = [1,2,3,4,5,    6];
+    let ours =     [1,2,3,4,5,100,6];
+    let theirs =   [1,  3,4,5,    6];
+    let expected = [1,  3,4,5,100,6];
+
+    let result = merge_custom(&original, &ours, &theirs).unwrap();
+    let result_owned: Vec<i32> = result.iter().map(|r| **r).collect();
+    assert_eq!(result_owned, expected);
+}
+
+#[test]
 fn myers_diffy_vs_git() {
     let original = "\
 void Chunk_copy(Chunk *src, size_t src_start, Chunk *dst, size_t dst_start, size_t n)

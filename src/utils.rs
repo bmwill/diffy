@@ -12,7 +12,7 @@ pub struct Classifier<'a, T: ?Sized> {
 }
 
 impl<'a, T: ?Sized + Eq + Hash> Classifier<'a, T> {
-    fn classify(&mut self, record: &'a T) -> u64 {
+    fn classify_item(&mut self, record: &'a T) -> u64 {
         match self.unique_ids.entry(record) {
             Entry::Occupied(o) => *o.get(),
             Entry::Vacant(v) => {
@@ -25,9 +25,17 @@ impl<'a, T: ?Sized + Eq + Hash> Classifier<'a, T> {
 }
 
 impl<'a, T: ?Sized + Text> Classifier<'a, T> {
-    pub fn classify_lines(&mut self, text: &'a T) -> (Vec<&'a T>, Vec<u64>) {
+    pub fn classify_text(&mut self, text: &'a T) -> (Vec<&'a T>, Vec<u64>) {
         LineIter::new(text)
-            .map(|line| (line, self.classify(line)))
+            .map(|line| (line, self.classify_item(line)))
+            .unzip()
+    }
+}
+
+impl<'a, T: Eq + Hash> Classifier<'a, T> {
+    pub fn classify(&mut self, data: &'a [T]) -> (Vec<&'a T>, Vec<u64>) {
+        data.iter()
+            .map(|item| (item, self.classify_item(item)))
             .unzip()
     }
 }
@@ -226,4 +234,25 @@ fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 // XXX Maybe use `memchr`?
 fn find_byte(haystack: &[u8], byte: u8) -> Option<usize> {
     haystack.iter().position(|&b| b == byte)
+}
+
+#[cfg(test)]
+mod test {
+    use super::Classifier;
+
+    #[test]
+    fn classify() {
+        let input = vec![10, 11, 12, 13];
+        let mut classifier = Classifier::default();
+        let (lines, _ids) = classifier.classify(&input);
+        assert_eq!(lines, vec![&10, &11, &12, &13]);
+    }
+
+    #[test]
+    fn classify_string() {
+        let input = "abc\ndef";
+        let mut classifier = Classifier::default();
+        let (lines, _ids) = classifier.classify_text(input);
+        assert_eq!(lines, vec!["abc\n", "def"]);
+    }
 }

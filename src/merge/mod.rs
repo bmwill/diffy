@@ -3,6 +3,7 @@ use crate::{
     range::{DiffRange, Range, SliceLike},
     utils::Classifier,
 };
+use std::hash::Hash;
 use std::{cmp, fmt};
 
 #[cfg(test)]
@@ -152,9 +153,9 @@ impl MergeOptions {
         theirs: &'a str,
     ) -> Result<String, String> {
         let mut classifier = Classifier::default();
-        let (ancestor_lines, ancestor_ids) = classifier.classify_lines(ancestor);
-        let (our_lines, our_ids) = classifier.classify_lines(ours);
-        let (their_lines, their_ids) = classifier.classify_lines(theirs);
+        let (ancestor_lines, ancestor_ids) = classifier.classify_text(ancestor);
+        let (our_lines, our_ids) = classifier.classify_text(ours);
+        let (their_lines, their_ids) = classifier.classify_text(theirs);
 
         let opts = DiffOptions::default();
         let our_solution = opts.diff_slice(&ancestor_ids, &our_ids);
@@ -183,9 +184,9 @@ impl MergeOptions {
         theirs: &'a [u8],
     ) -> Result<Vec<u8>, Vec<u8>> {
         let mut classifier = Classifier::default();
-        let (ancestor_lines, ancestor_ids) = classifier.classify_lines(ancestor);
-        let (our_lines, our_ids) = classifier.classify_lines(ours);
-        let (their_lines, their_ids) = classifier.classify_lines(theirs);
+        let (ancestor_lines, ancestor_ids) = classifier.classify_text(ancestor);
+        let (our_lines, our_ids) = classifier.classify_text(ours);
+        let (their_lines, their_ids) = classifier.classify_text(theirs);
 
         let opts = DiffOptions::default();
         let our_solution = opts.diff_slice(&ancestor_ids, &our_ids);
@@ -204,6 +205,29 @@ impl MergeOptions {
             self.conflict_marker_length,
             self.style,
         )
+    }
+
+    pub fn merge_custom<'a, T: Eq + Hash>(
+        &self,
+        ancestor: &'a [T],
+        ours: &'a [T],
+        theirs: &'a [T],
+    ) -> Result<Vec<&'a T>, MergeConflicts> {
+        let mut classifier = Classifier::default();
+        let (ancestor_lines, ancestor_ids) = classifier.classify(ancestor);
+        let (our_lines, our_ids) = classifier.classify(ours);
+        let (their_lines, their_ids) = classifier.classify(theirs);
+
+        let opts = DiffOptions::default();
+        let our_solution = opts.diff_slice(&ancestor_ids, &our_ids);
+        let their_solution = opts.diff_slice(&ancestor_ids, &their_ids);
+
+        let merged = merge_solutions(&our_solution, &their_solution);
+        let mut merge = diff3_range_to_merge_range(&merged);
+
+        cleanup_conflicts(&mut merge);
+
+        output_result_custom(&ancestor_lines, &our_lines, &their_lines, &merge)
     }
 }
 
@@ -275,6 +299,30 @@ pub fn merge_bytes<'a>(
     theirs: &'a [u8],
 ) -> Result<Vec<u8>, Vec<u8>> {
     MergeOptions::default().merge_bytes(ancestor, ours, theirs)
+}
+
+/// Infos about a merge that went wrong
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
+pub struct MergeConflicts {
+    /// How many conflicts have occurred
+    pub count: usize,
+}
+
+impl std::fmt::Display for MergeConflicts {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{} merge conflicts", self.count)
+    }
+}
+
+impl std::error::Error for MergeConflicts {}
+
+/// Perform a 3-way merge between any list of values that support it
+pub fn merge_custom<'a, T: Eq + Hash>(
+    ancestor: &'a [T],
+    ours: &'a [T],
+    theirs: &'a [T],
+) -> Result<Vec<&'a T>, MergeConflicts> {
+    MergeOptions::default().merge_custom(ancestor, ours, theirs)
 }
 
 fn merge_solutions<'ancestor, 'ours, 'theirs, T: ?Sized + SliceLike>(
@@ -490,11 +538,11 @@ fn cleanup_conflicts<'ancestor, 'ours, 'theirs, T: ?Sized + SliceLike + PartialE
     }
 }
 
-fn output_result<'a, T: ?Sized>(
+fn output_result<'a>(
     ancestor: &[&'a str],
     ours: &[&'a str],
     theirs: &[&'a str],
-    merge: &[MergeRange<T>],
+    merge: &[MergeRange<[u64]>],
     marker_len: usize,
     style: ConflictStyle,
 ) -> Result<String, String> {
@@ -556,11 +604,11 @@ fn add_conflict_marker(
     output.push('\n');
 }
 
-fn output_result_bytes<'a, T: ?Sized>(
+fn output_result_bytes<'a>(
     ancestor: &[&'a [u8]],
     ours: &[&'a [u8]],
     theirs: &[&'a [u8]],
-    merge: &[MergeRange<T>],
+    merge: &[MergeRange<[u64]>],
     marker_len: usize,
     style: ConflictStyle,
 ) -> Result<Vec<u8>, Vec<u8>> {
@@ -634,4 +682,40 @@ fn add_conflict_marker_bytes(
         output.extend_from_slice(filename);
     }
     output.push(b'\n');
+}
+
+fn output_result_custom<'a, T: Eq + Hash>(
+    ancestor: &[&'a T],
+    ours: &[&'a T],
+    theirs: &[&'a T],
+    merge: &[MergeRange<[u64]>],
+) -> Result<Vec<&'a T>, MergeConflicts> {
+    let mut conflicts = 0;
+    let mut output = Vec::new();
+
+    for merge_range in merge {
+        match merge_range {
+            MergeRange::Equal(range, ..) => {
+                output.extend(ancestor[range.range()].iter().copied());
+            }
+            MergeRange::Conflict(_ancestor_range, _ours_range, _theirs_range) => {
+                conflicts += 1;
+            }
+            MergeRange::Ours(range) => {
+                output.extend(ours[range.range()].iter().copied());
+            }
+            MergeRange::Theirs(range) => {
+                output.extend(theirs[range.range()].iter().copied());
+            }
+            MergeRange::Both(range, _) => {
+                output.extend(ours[range.range()].iter().copied());
+            }
+        }
+    }
+
+    if conflicts != 0 {
+        Err(MergeConflicts { count: conflicts })
+    } else {
+        Ok(output)
+    }
 }

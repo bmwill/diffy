@@ -1,14 +1,26 @@
 //! Tools for finding and manipulating differences between files
 //!
-//! ## Overview
+//! # Overview
 //!
 //! This library is intended to be a collection of tools used to find and
-//! manipulate differences between files inspired by [LibXDiff] and [GNU
-//! Diffutils]. Version control systems like [Git] and [Mercurial] generally
-//! communicate differences between two versions of a file using a `diff` or
-//! `patch`.
+//! manipulate differences between files or arbitrary data inspired by
+//! [LibXDiff] and [GNU Diffutils]. Version control systems like [Git] and
+//! [Mercurial] generally communicate differences between two versions of a
+//! file using a `diff` or `patch`.
 //!
 //! The current diff implementation is based on the [Myers' diff algorithm].
+//!
+//! ## Supported features
+//!
+//! | Feature          | UTF-8 strings | non-UTF-8 string | Arbitrary types (that implement `Eq + Hash`) |
+//! |------------------|---------------|------------------|----------------------------------------------|
+//! | Creating a patch | ✅            | ✅              |                                              |
+//! | Applying a patch | ✅            | ✅              |                                              |
+//! | 3-way merge      | ✅            | ✅              | ✅                                          |
+//!
+//! "Arbitrary types" means "any type that implements `Eq + Hash`".<br/>
+//! Supporting patches for arbitrary types would not be very helpful, since
+//! there is no standardized way of formatting them.
 //!
 //! ## UTF-8 and Non-UTF-8
 //!
@@ -198,6 +210,22 @@
 //! assert_eq!(merge(original, a, b).unwrap_err(), expected);
 //! ```
 //!
+//! It is possible to perform 3-way merges between collections of arbitrary
+//! types `T` as long as `T: Eq + Hash`.
+//! ```
+//! use diffy::merge_custom;
+//!
+//! let original = [1,2,3,4,5,    6];
+//! let a =        [1,2,3,4,5,100,6];
+//! let b =        [1,  3,4,5,    6];
+//! let expected = [1,  3,4,5,100,6];
+//!
+//! let result = merge_custom(&original, &a, &b).unwrap();
+//! let result_owned: Vec<i32> = result.iter().map(|r| **r).collect();
+//! assert_eq!(result_owned, expected);
+//! ```
+//!
+//!
 //! [LibXDiff]: http://www.xmailserver.org/xdiff-lib.html
 //! [Myers' diff algorithm]: http://www.xmailserver.org/diff2.pdf
 //! [GNU Diffutils]: https://www.gnu.org/software/diffutils/
@@ -221,5 +249,5 @@ mod utils;
 
 pub use apply::{apply, apply_bytes, ApplyError};
 pub use diff::{create_patch, create_patch_bytes, DiffOptions};
-pub use merge::{merge, merge_bytes, ConflictStyle, MergeOptions};
+pub use merge::{merge, merge_bytes, merge_custom, ConflictStyle, MergeConflicts, MergeOptions};
 pub use patch::{Hunk, HunkRange, Line, ParsePatchError, Patch, PatchFormatter};
