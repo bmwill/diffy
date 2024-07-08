@@ -3,8 +3,8 @@ use crate::{
     range::{DiffRange, Range, SliceLike},
     utils::Classifier,
 };
-use std::{cmp, fmt};
 use std::hash::Hash;
+use std::{cmp, fmt};
 
 #[cfg(test)]
 mod tests;
@@ -227,12 +227,7 @@ impl MergeOptions {
 
         cleanup_conflicts(&mut merge);
 
-        output_result_custom(
-            &ancestor_lines,
-            &our_lines,
-            &their_lines,
-            &merge,
-        )
+        output_result_custom(&ancestor_lines, &our_lines, &their_lines, &merge)
     }
 }
 
@@ -310,7 +305,7 @@ pub fn merge_bytes<'a>(
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct MergeConflicts {
     /// How many conflicts have occurred
-    pub count: usize
+    pub count: usize,
 }
 
 impl std::fmt::Display for MergeConflicts {

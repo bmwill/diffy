@@ -216,6 +216,7 @@ salt
 }
 
 #[test]
+#[rustfmt::skip]
 fn test_merge_arbitrary_type() {
     let original = [1,2,3,4,5,    6];
     let ours =     [1,2,3,4,5,100,6];
