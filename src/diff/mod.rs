@@ -46,8 +46,8 @@ where
 pub struct DiffOptions {
     compact: bool,
     context_len: usize,
-    original_filename: Option<String>,
-    modified_filename: Option<String>,
+    original_filename: Option<Cow<'static, str>>,
+    modified_filename: Option<Cow<'static, str>>,
 }
 
 impl DiffOptions {
@@ -59,8 +59,8 @@ impl DiffOptions {
         Self {
             compact: true,
             context_len: 3,
-            original_filename: None,
-            modified_filename: None,
+            original_filename: Some("original".into()),
+            modified_filename: Some("modified".into()),
         }
     }
 
@@ -83,16 +83,22 @@ impl DiffOptions {
     /// Set the filename to be used in the patch for the original text
     ///
     /// If not set, the default value is "original".
-    pub fn set_original_filename(&mut self, filename: impl ToString) -> &mut Self {
-        self.original_filename = Some(filename.to_string());
+    pub fn set_original_filename<T>(&mut self, filename: T) -> &mut Self
+    where
+        T: Into<Cow<'static, str>>,
+    {
+        self.original_filename = Some(filename.into());
         self
     }
 
     /// Set the filename to be used in the patch for the modified text
     ///
     /// If not set, the default value is "modified".
-    pub fn set_modified_filename(&mut self, filename: impl ToString) -> &mut Self {
-        self.modified_filename = Some(filename.to_string());
+    pub fn set_modified_filename<T>(&mut self, filename: T) -> &mut Self
+    where
+        T: Into<Cow<'static, str>>,
+    {
+        self.modified_filename = Some(filename.into());
         self
     }
 
@@ -123,16 +129,8 @@ impl DiffOptions {
 
         let hunks = to_hunks(&old_lines, &new_lines, &solution, self.context_len);
         Patch::new(
-            self.original_filename
-                .as_ref()
-                .map_or(Some(Cow::Borrowed("original")), |s| {
-                    Some(Cow::Owned(s.clone()))
-                }),
-            self.modified_filename
-                .as_ref()
-                .map_or(Some(Cow::Borrowed("modified")), |s| {
-                    Some(Cow::Owned(s.clone()))
-                }),
+            self.original_filename.clone(),
+            self.modified_filename.clone(),
             hunks,
         )
     }
@@ -150,7 +148,20 @@ impl DiffOptions {
         let solution = self.diff_slice(&old_ids, &new_ids);
 
         let hunks = to_hunks(&old_lines, &new_lines, &solution, self.context_len);
-        Patch::new(Some(&b"original"[..]), Some(&b"modified"[..]), hunks)
+
+        // helper function to convert a utf8 cow to a bytes cow
+        fn cow_str_to_bytes(cow: Cow<'static, str>) -> Cow<'static, [u8]> {
+            match cow {
+                Cow::Borrowed(b) => Cow::Borrowed(b.as_bytes()),
+                Cow::Owned(o) => Cow::Owned(o.into_bytes()),
+            }
+        }
+
+        Patch::new(
+            self.original_filename.clone().map(cow_str_to_bytes),
+            self.modified_filename.clone().map(cow_str_to_bytes),
+            hunks,
+        )
     }
 
     pub(crate) fn diff_slice<'a, T: PartialEq>(

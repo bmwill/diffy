@@ -144,6 +144,7 @@ where
 struct Filename<'a, T: ToOwned + ?Sized>(Cow<'a, T>);
 
 const ESCAPED_CHARS: &[char] = &['\n', '\t', '\0', '\r', '\"', '\\'];
+#[allow(clippy::byte_char_slices)]
 const ESCAPED_CHARS_BYTES: &[u8] = &[b'\n', b'\t', b'\0', b'\r', b'\"', b'\\'];
 
 impl Filename<'_, str> {
