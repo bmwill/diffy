@@ -9,6 +9,7 @@ use std::{
 #[derive(Debug)]
 pub struct PatchFormatter {
     with_color: bool,
+    with_missing_newline_message: bool,
 
     context: Style,
     delete: Style,
@@ -23,6 +24,7 @@ impl PatchFormatter {
     pub fn new() -> Self {
         Self {
             with_color: false,
+            with_missing_newline_message: true,
 
             context: Style::new(),
             delete: Color::Red.normal(),
@@ -36,6 +38,19 @@ impl PatchFormatter {
     /// Enable formatting a patch with color
     pub fn with_color(mut self) -> Self {
         self.with_color = true;
+        self
+    }
+
+    /// Sets whether to format a patch with a "No newline at end of file" message.
+    ///
+    /// Default is `true`.
+    ///
+    /// Note: If this is disabled by setting to `false`, formatted patches will no longer contain
+    /// sufficient information to determine if a file ended with a newline character (`\n`) or not
+    /// and the patch will be formatted as if both the original and modified files ended with a
+    /// newline character (`\n`).
+    pub fn missing_newline_message(mut self, enable: bool) -> Self {
+        self.with_missing_newline_message = enable;
         self
     }
 
@@ -238,7 +253,9 @@ impl<T: AsRef<[u8]> + ?Sized> LineDisplay<'_, T> {
 
         if !line.ends_with(b"\n") {
             writeln!(w)?;
-            writeln!(w, "{}", NO_NEWLINE_AT_EOF)?;
+            if self.f.with_missing_newline_message {
+                writeln!(w, "{}", NO_NEWLINE_AT_EOF)?;
+            }
         }
 
         Ok(())
@@ -269,7 +286,9 @@ impl Display for LineDisplay<'_, str> {
 
         if !line.ends_with('\n') {
             writeln!(f)?;
-            writeln!(f, "{}", NO_NEWLINE_AT_EOF)?;
+            if self.f.with_missing_newline_message {
+                writeln!(f, "{}", NO_NEWLINE_AT_EOF)?;
+            }
         }
 
         Ok(())

@@ -4,6 +4,7 @@ use crate::{
     diff::{Diff, DiffRange},
     patch::Patch,
     range::Range,
+    PatchFormatter,
 };
 
 // Helper macros are based off of the ones used in [dissimilar](https://docs.rs/dissimilar)
@@ -516,6 +517,35 @@ fn no_newline_at_eof() {
 \\ No newline at end of file
 ";
     assert_patch!(old, new, expected);
+}
+
+#[test]
+fn without_no_newline_at_eof_message() {
+    let old = "old line";
+    let new = "new line";
+    let expected = "\
+--- original
++++ modified
+@@ -1 +1 @@
+-old line
++new line
+";
+
+    let f = PatchFormatter::new().missing_newline_message(false);
+    let patch = create_patch(old, new);
+    let bpatch = create_patch_bytes(old.as_bytes(), new.as_bytes());
+    let patch_str = format!("{}", f.fmt_patch(&patch));
+    let mut patch_bytes = Vec::new();
+    f.write_patch_into(&bpatch, &mut patch_bytes).unwrap();
+
+    assert_eq!(patch_str, expected);
+    assert_eq!(patch_bytes, patch_str.as_bytes());
+    assert_eq!(patch_bytes, expected.as_bytes());
+    assert_eq!(apply(old, &patch).unwrap(), new);
+    assert_eq!(
+        crate::apply_bytes(old.as_bytes(), &bpatch).unwrap(),
+        new.as_bytes()
+    );
 }
 
 #[test]
