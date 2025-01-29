@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.1] - 2025-01-29
+
+### Added
+- [#36](https://github.com/bmwill/diffy/pull/36) Add ability to configure
+  filenames when creating a patch with `DiffOptions`.
+
 ## [0.4.0] - 2024-06-14
 
 ### Fixed
@@ -68,6 +74,8 @@
 ## [0.1.0] - 2020-06-30
 - Initial release.
 
+[0.4.1]: https://github.com/bmwill/diffy/releases/tag/0.4.1
+[0.4.0]: https://github.com/bmwill/diffy/releases/tag/0.4.0
 [0.3.0]: https://github.com/bmwill/diffy/releases/tag/0.3.0
 [0.2.2]: https://github.com/bmwill/diffy/releases/tag/0.2.2
 [0.2.1]: https://github.com/bmwill/diffy/releases/tag/0.2.1
