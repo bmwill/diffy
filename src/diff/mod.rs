@@ -3,7 +3,7 @@ use crate::{
     range::{DiffRange, SliceLike},
     utils::Classifier,
 };
-use std::{cmp, ops};
+use std::{borrow::Cow, cmp, ops};
 
 mod cleanup;
 mod myers;
@@ -46,6 +46,8 @@ where
 pub struct DiffOptions {
     compact: bool,
     context_len: usize,
+    original_filename: Option<Cow<'static, str>>,
+    modified_filename: Option<Cow<'static, str>>,
 }
 
 impl DiffOptions {
@@ -57,6 +59,8 @@ impl DiffOptions {
         Self {
             compact: true,
             context_len: 3,
+            original_filename: Some("original".into()),
+            modified_filename: Some("modified".into()),
         }
     }
 
@@ -73,6 +77,28 @@ impl DiffOptions {
     #[allow(dead_code)]
     fn set_compact(&mut self, compact: bool) -> &mut Self {
         self.compact = compact;
+        self
+    }
+
+    /// Set the filename to be used in the patch for the original text
+    ///
+    /// If not set, the default value is "original".
+    pub fn set_original_filename<T>(&mut self, filename: T) -> &mut Self
+    where
+        T: Into<Cow<'static, str>>,
+    {
+        self.original_filename = Some(filename.into());
+        self
+    }
+
+    /// Set the filename to be used in the patch for the modified text
+    ///
+    /// If not set, the default value is "modified".
+    pub fn set_modified_filename<T>(&mut self, filename: T) -> &mut Self
+    where
+        T: Into<Cow<'static, str>>,
+    {
+        self.modified_filename = Some(filename.into());
         self
     }
 
@@ -102,7 +128,11 @@ impl DiffOptions {
         let solution = self.diff_slice(&old_ids, &new_ids);
 
         let hunks = to_hunks(&old_lines, &new_lines, &solution, self.context_len);
-        Patch::new(Some("original"), Some("modified"), hunks)
+        Patch::new(
+            self.original_filename.clone(),
+            self.modified_filename.clone(),
+            hunks,
+        )
     }
 
     /// Create a patch between two potentially non-utf8 texts
@@ -118,7 +148,20 @@ impl DiffOptions {
         let solution = self.diff_slice(&old_ids, &new_ids);
 
         let hunks = to_hunks(&old_lines, &new_lines, &solution, self.context_len);
-        Patch::new(Some(&b"original"[..]), Some(&b"modified"[..]), hunks)
+
+        // helper function to convert a utf8 cow to a bytes cow
+        fn cow_str_to_bytes(cow: Cow<'static, str>) -> Cow<'static, [u8]> {
+            match cow {
+                Cow::Borrowed(b) => Cow::Borrowed(b.as_bytes()),
+                Cow::Owned(o) => Cow::Owned(o.into_bytes()),
+            }
+        }
+
+        Patch::new(
+            self.original_filename.clone().map(cow_str_to_bytes),
+            self.modified_filename.clone().map(cow_str_to_bytes),
+            hunks,
+        )
     }
 
     pub(crate) fn diff_slice<'a, T: PartialEq>(
@@ -357,4 +400,43 @@ fn build_edit_script<T>(solution: &[DiffRange<[T]>]) -> Vec<EditRange> {
     }
 
     edit_script
+}
+
+#[cfg(test)]
+mod test {
+    use super::DiffOptions;
+
+    #[test]
+    fn set_original_and_modified_filenames() {
+        let original = "\
+I am afraid, however, that all I have known - that my story - will be forgotten.
+I am afraid for the world that is to come.
+Afraid that my plans will fail.
+Afraid of a doom worse than the Deepness.
+";
+        let modified = "\
+I am afraid, however, that all I have known - that my story - will be forgotten.
+I am afraid for the world that is to come.
+Afraid that Alendi will fail.
+Afraid of a doom brought by the Deepness.
+";
+        let expected = "\
+--- the old version
++++ the better version
+@@ -1,4 +1,4 @@
+ I am afraid, however, that all I have known - that my story - will be forgotten.
+ I am afraid for the world that is to come.
+-Afraid that my plans will fail.
+-Afraid of a doom worse than the Deepness.
++Afraid that Alendi will fail.
++Afraid of a doom brought by the Deepness.
+";
+
+        let patch = DiffOptions::new()
+            .set_original_filename("the old version")
+            .set_modified_filename("the better version")
+            .create_patch(original, modified);
+
+        assert_eq!(patch.to_string(), expected);
+    }
 }
