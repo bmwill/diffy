@@ -642,6 +642,81 @@ void Chunk_copy(Chunk *src, size_t src_start, Chunk *dst, size_t dst_start, size
     assert_patch!(original, a, expected_diffy);
 }
 
+#[test]
+fn suppress_blank_empty() {
+    let original = "\
+1
+2
+3
+
+4
+";
+
+    let modified = "\
+1
+2
+3
+
+5
+";
+
+    // Note that there is a space " " on the line after 3
+    let expected = "\
+--- original
++++ modified
+@@ -2,4 +2,4 @@
+ 2
+ 3
+ 
+-4
++5
+";
+
+    let f = PatchFormatter::new().suppress_blank_empty(false);
+    let patch = create_patch(original, modified);
+    let bpatch = create_patch_bytes(original.as_bytes(), modified.as_bytes());
+    let patch_str = format!("{}", f.fmt_patch(&patch));
+    let mut patch_bytes = Vec::new();
+    f.write_patch_into(&bpatch, &mut patch_bytes).unwrap();
+
+    assert_eq!(patch_str, expected);
+    assert_eq!(patch_bytes, patch_str.as_bytes());
+    assert_eq!(patch_bytes, expected.as_bytes());
+    assert_eq!(apply(original, &patch).unwrap(), modified);
+    assert_eq!(
+        crate::apply_bytes(original.as_bytes(), &bpatch).unwrap(),
+        modified.as_bytes()
+    );
+
+    // Note that there is no space " " on the line after 3
+    let expected_suppressed = "\
+--- original
++++ modified
+@@ -2,4 +2,4 @@
+ 2
+ 3
+
+-4
++5
+";
+
+    let f = PatchFormatter::new().suppress_blank_empty(true);
+    let patch = create_patch(original, modified);
+    let bpatch = create_patch_bytes(original.as_bytes(), modified.as_bytes());
+    let patch_str = format!("{}", f.fmt_patch(&patch));
+    let mut patch_bytes = Vec::new();
+    f.write_patch_into(&bpatch, &mut patch_bytes).unwrap();
+
+    assert_eq!(patch_str, expected_suppressed);
+    assert_eq!(patch_bytes, patch_str.as_bytes());
+    assert_eq!(patch_bytes, expected_suppressed.as_bytes());
+    assert_eq!(apply(original, &patch).unwrap(), modified);
+    assert_eq!(
+        crate::apply_bytes(original.as_bytes(), &bpatch).unwrap(),
+        modified.as_bytes()
+    );
+}
+
 // In the event that a patch has an invalid hunk range we want to ensure that when apply is
 // attempting to search for a matching position to apply a hunk that the search algorithm runs in
 // time bounded by the length of the original image being patched. Before clamping the search space
