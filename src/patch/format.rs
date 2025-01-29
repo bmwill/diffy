@@ -10,6 +10,7 @@ use std::{
 pub struct PatchFormatter {
     with_color: bool,
     with_missing_newline_message: bool,
+    suppress_blank_empty: bool,
 
     context: Style,
     delete: Style,
@@ -25,6 +26,10 @@ impl PatchFormatter {
         Self {
             with_color: false,
             with_missing_newline_message: true,
+
+            // TODO the default in git-diff and GNU diff is to have this set to false, on the next
+            // semver breaking release we should contemplate switching this to be false by default
+            suppress_blank_empty: true,
 
             context: Style::new(),
             delete: Color::Red.normal(),
@@ -51,6 +56,20 @@ impl PatchFormatter {
     /// newline character (`\n`).
     pub fn missing_newline_message(mut self, enable: bool) -> Self {
         self.with_missing_newline_message = enable;
+        self
+    }
+
+    /// Sets whether to suppress printing of a space before empty lines.
+    ///
+    /// Defaults to `true`.
+    ///
+    /// For more information you can refer to the [Omitting trailing blanks] manual page of GNU
+    /// diff or the [diff.suppressBlankEmpty] config for `git-diff`.
+    ///
+    /// [Omitting trailing blanks]: https://www.gnu.org/software/diffutils/manual/html_node/Trailing-Blanks.html
+    /// [diff.suppressBlankEmpty]: https://git-scm.com/docs/git-diff#Documentation/git-diff.txt-codediffsuppressBlankEmptycode
+    pub fn suppress_blank_empty(mut self, enable: bool) -> Self {
+        self.suppress_blank_empty = enable;
         self
     }
 
@@ -240,7 +259,7 @@ impl<T: AsRef<[u8]> + ?Sized> LineDisplay<'_, T> {
             write!(w, "{}", style.prefix())?;
         }
 
-        if sign == ' ' && line == b"\n" {
+        if self.f.suppress_blank_empty && sign == ' ' && line == b"\n" {
             w.write_all(line)?;
         } else {
             write!(w, "{}", sign)?;
@@ -274,7 +293,7 @@ impl Display for LineDisplay<'_, str> {
             write!(f, "{}", style.prefix())?;
         }
 
-        if sign == ' ' && *line == "\n" {
+        if self.f.suppress_blank_empty && sign == ' ' && *line == "\n" {
             write!(f, "{}", line)?;
         } else {
             write!(f, "{}{}", sign, line)?;
