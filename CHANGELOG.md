@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2] - 2025-01-29
+
+### Added
+- [#37](https://github.com/bmwill/diffy/pull/37) Allow configuring the "No
+  newline at end of file" message from being printed when formatting a patch.
+- [#38](https://github.com/bmwill/diffy/pull/38) Add support for configuring
+  `suppress_blank_empty`.
+
 ## [0.4.1] - 2025-01-29
 
 ### Added
@@ -74,6 +82,7 @@
 ## [0.1.0] - 2020-06-30
 - Initial release.
 
+[0.4.2]: https://github.com/bmwill/diffy/releases/tag/0.4.2
 [0.4.1]: https://github.com/bmwill/diffy/releases/tag/0.4.1
 [0.4.0]: https://github.com/bmwill/diffy/releases/tag/0.4.0
 [0.3.0]: https://github.com/bmwill/diffy/releases/tag/0.3.0
