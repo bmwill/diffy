@@ -10,6 +10,13 @@
 //!
 //! The current diff implementation is based on the [Myers' diff algorithm].
 //!
+//! The documentation generally refers to "files" in many places but none of
+//! the apis explicitly operate on on-disk files. Instead this library
+//! requires that the text being operated on resides in-memory and as such if
+//! you want to perform operations on files, it is up to the user to load the
+//! contents of those files into memory before passing their contents to the
+//! apis provided by this library.
+//!
 //! ## UTF-8 and Non-UTF-8
 //!
 //! This library has support for working with both utf8 and non-utf8 texts.
