@@ -764,7 +764,7 @@ Second:
 
     let elapsed = now.elapsed();
 
-    println!("{:?}", elapsed);
+    println!("{elapsed:?}");
     assert!(elapsed < std::time::Duration::from_micros(200));
 
     assert_eq!(result, expected);

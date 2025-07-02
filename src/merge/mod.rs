@@ -117,6 +117,9 @@ pub enum ConflictStyle {
 pub struct MergeOptions {
     conflict_marker_length: usize,
     style: ConflictStyle,
+    ours_label: String,
+    theirs_label: String,
+    original_label: String,
 }
 
 impl MergeOptions {
@@ -129,6 +132,9 @@ impl MergeOptions {
         Self {
             conflict_marker_length: DEFAULT_CONFLICT_MARKER_LENGTH,
             style: ConflictStyle::Diff3,
+            ours_label: "ours".to_string(),
+            theirs_label: "theirs".to_string(),
+            original_label: "original".to_string(),
         }
     }
 
@@ -141,6 +147,42 @@ impl MergeOptions {
     /// Set the conflict style used when displaying a merge conflict
     pub fn set_conflict_style(&mut self, style: ConflictStyle) -> &mut Self {
         self.style = style;
+        self
+    }
+
+    /// Set the label for "ours" side in conflict markers
+    pub fn set_ours_label<S: Into<String>>(&mut self, label: S) -> &mut Self {
+        self.ours_label = label.into();
+        self
+    }
+
+    /// Set the label for "theirs" side in conflict markers
+    pub fn set_theirs_label<S: Into<String>>(&mut self, label: S) -> &mut Self {
+        self.theirs_label = label.into();
+        self
+    }
+
+    /// Set the label for "original" side in conflict markers (used in Diff3 style)
+    pub fn set_original_label<S: Into<String>>(&mut self, label: S) -> &mut Self {
+        self.original_label = label.into();
+        self
+    }
+
+    /// Set all conflict marker labels at once
+    pub fn set_conflict_labels<S1, S2, S3>(
+        &mut self,
+        ours: S1,
+        theirs: S2,
+        original: S3,
+    ) -> &mut Self
+    where
+        S1: Into<String>,
+        S2: Into<String>,
+        S3: Into<String>,
+    {
+        self.ours_label = ours.into();
+        self.theirs_label = theirs.into();
+        self.original_label = original.into();
         self
     }
 
@@ -172,6 +214,9 @@ impl MergeOptions {
             &merge,
             self.conflict_marker_length,
             self.style,
+            &self.ours_label,
+            &self.theirs_label,
+            &self.original_label,
         )
     }
 
@@ -203,6 +248,9 @@ impl MergeOptions {
             &merge,
             self.conflict_marker_length,
             self.style,
+            self.ours_label.as_bytes(),
+            self.theirs_label.as_bytes(),
+            self.original_label.as_bytes(),
         )
     }
 }
@@ -490,6 +538,7 @@ fn cleanup_conflicts<'ancestor, 'ours, 'theirs, T: ?Sized + SliceLike + PartialE
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn output_result<'a, T: ?Sized>(
     ancestor: &[&'a str],
     ours: &[&'a str],
@@ -497,6 +546,9 @@ fn output_result<'a, T: ?Sized>(
     merge: &[MergeRange<T>],
     marker_len: usize,
     style: ConflictStyle,
+    ours_label: &str,
+    theirs_label: &str,
+    original_label: &str,
 ) -> Result<String, String> {
     let mut conflicts = 0;
     let mut output = String::new();
@@ -507,17 +559,17 @@ fn output_result<'a, T: ?Sized>(
                 output.extend(ancestor[range.range()].iter().copied());
             }
             MergeRange::Conflict(ancestor_range, ours_range, theirs_range) => {
-                add_conflict_marker(&mut output, '<', marker_len, Some("ours"));
+                add_conflict_marker(&mut output, '<', marker_len, Some(ours_label));
                 output.extend(ours[ours_range.range()].iter().copied());
 
                 if let ConflictStyle::Diff3 = style {
-                    add_conflict_marker(&mut output, '|', marker_len, Some("original"));
+                    add_conflict_marker(&mut output, '|', marker_len, Some(original_label));
                     output.extend(ancestor[ancestor_range.range()].iter().copied());
                 }
 
                 add_conflict_marker(&mut output, '=', marker_len, None);
                 output.extend(theirs[theirs_range.range()].iter().copied());
-                add_conflict_marker(&mut output, '>', marker_len, Some("theirs"));
+                add_conflict_marker(&mut output, '>', marker_len, Some(theirs_label));
                 conflicts += 1;
             }
             MergeRange::Ours(range) => {
@@ -555,7 +607,7 @@ fn add_conflict_marker(
     }
     output.push('\n');
 }
-
+#[allow(clippy::too_many_arguments)]
 fn output_result_bytes<'a, T: ?Sized>(
     ancestor: &[&'a [u8]],
     ours: &[&'a [u8]],
@@ -563,6 +615,9 @@ fn output_result_bytes<'a, T: ?Sized>(
     merge: &[MergeRange<T>],
     marker_len: usize,
     style: ConflictStyle,
+    ours_label: &[u8],
+    theirs_label: &[u8],
+    original_label: &[u8],
 ) -> Result<Vec<u8>, Vec<u8>> {
     let mut conflicts = 0;
     let mut output: Vec<u8> = Vec::new();
@@ -575,13 +630,13 @@ fn output_result_bytes<'a, T: ?Sized>(
                     .for_each(|line| output.extend_from_slice(line));
             }
             MergeRange::Conflict(ancestor_range, ours_range, theirs_range) => {
-                add_conflict_marker_bytes(&mut output, b'<', marker_len, Some(b"ours"));
+                add_conflict_marker_bytes(&mut output, b'<', marker_len, Some(ours_label));
                 ours[ours_range.range()]
                     .iter()
                     .for_each(|line| output.extend_from_slice(line));
 
                 if let ConflictStyle::Diff3 = style {
-                    add_conflict_marker_bytes(&mut output, b'|', marker_len, Some(b"original"));
+                    add_conflict_marker_bytes(&mut output, b'|', marker_len, Some(original_label));
                     ancestor[ancestor_range.range()]
                         .iter()
                         .for_each(|line| output.extend_from_slice(line));
@@ -591,7 +646,7 @@ fn output_result_bytes<'a, T: ?Sized>(
                 theirs[theirs_range.range()]
                     .iter()
                     .for_each(|line| output.extend_from_slice(line));
-                add_conflict_marker_bytes(&mut output, b'>', marker_len, Some(b"theirs"));
+                add_conflict_marker_bytes(&mut output, b'>', marker_len, Some(theirs_label));
                 conflicts += 1;
             }
             MergeRange::Ours(range) => {
