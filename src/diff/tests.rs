@@ -52,7 +52,7 @@ macro_rules! assert_diff_range {
         let expected = &[$(Diff::$kind($text)),*];
         assert!(
             same_diffs(expected, &$solution),
-            concat!("\nexpected={:#?}\nactual={:#?}"),
+            "\nexpected={:#?}\nactual={:#?}",
             expected, $solution,
         );
     };
@@ -84,7 +84,7 @@ macro_rules! assert_diff {
         assert_eq!(
             expected,
             &$solution[..],
-            concat!("\nexpected={:#?}\nactual={:#?}"),
+            "\nexpected={:#?}\nactual={:#?}",
             expected, $solution,
         );
     };
