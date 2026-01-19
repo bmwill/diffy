@@ -1,5 +1,6 @@
 mod format;
 mod parse;
+mod style;
 
 pub use format::PatchFormatter;
 pub use parse::ParsePatchError;
