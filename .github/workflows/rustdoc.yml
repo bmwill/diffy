@@ -16,14 +16,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-
-      - name: Build Documentation
-        run: cargo doc --no-deps
+      - run: rustup toolchain install stable --profile minimal
+      - run: cargo doc --no-deps
 
       - name: Deploy Docs
         uses: peaceiris/actions-gh-pages@v3
