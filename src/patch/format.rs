@@ -147,10 +147,10 @@ impl Display for PatchDisplay<'_, str> {
                 write!(f, "{style}")?;
             }
             if let Some(original) = &self.patch.original {
-                writeln!(f, "--- {}", original)?;
+                writeln!(f, "--- {original}")?;
             }
             if let Some(modified) = &self.patch.modified {
-                writeln!(f, "+++ {}", modified)?;
+                writeln!(f, "+++ {modified}")?;
             }
             if self.f.with_color {
                 write!(f, "{style:#}")?;
@@ -220,7 +220,7 @@ impl Display for HunkDisplay<'_, str> {
             if self.f.with_color {
                 write!(f, "{style}")?;
             }
-            write!(f, " {}", ctx)?;
+            write!(f, " {ctx}")?;
             if self.f.with_color {
                 write!(f, "{style:#}")?;
             }
@@ -255,7 +255,7 @@ impl<T: AsRef<[u8]> + ?Sized> LineDisplay<'_, T> {
         if self.f.suppress_blank_empty && sign == ' ' && line == b"\n" {
             w.write_all(line)?;
         } else {
-            write!(w, "{}", sign)?;
+            write!(w, "{sign}")?;
             w.write_all(line)?;
         }
 
@@ -266,7 +266,7 @@ impl<T: AsRef<[u8]> + ?Sized> LineDisplay<'_, T> {
         if !line.ends_with(b"\n") {
             writeln!(w)?;
             if self.f.with_missing_newline_message {
-                writeln!(w, "{}", NO_NEWLINE_AT_EOF)?;
+                writeln!(w, "{NO_NEWLINE_AT_EOF}")?;
             }
         }
 
@@ -287,9 +287,9 @@ impl Display for LineDisplay<'_, str> {
         }
 
         if self.f.suppress_blank_empty && sign == ' ' && *line == "\n" {
-            write!(f, "{}", line)?;
+            write!(f, "{line}")?;
         } else {
-            write!(f, "{}{}", sign, line)?;
+            write!(f, "{sign}{line}")?;
         }
 
         if self.f.with_color {
@@ -299,7 +299,7 @@ impl Display for LineDisplay<'_, str> {
         if !line.ends_with('\n') {
             writeln!(f)?;
             if self.f.with_missing_newline_message {
-                writeln!(f, "{}", NO_NEWLINE_AT_EOF)?;
+                writeln!(f, "{NO_NEWLINE_AT_EOF}")?;
             }
         }
 
