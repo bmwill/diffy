@@ -13,15 +13,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: rustfmt, clippy
+      - run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
 
       - name: Lint
         run: |
@@ -38,8 +32,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.62.1
-          override: true
-      - run: cargo check
+      - run: rustup toolchain install 1.62.1 --profile minimal
+      - run: cargo +1.62.1 check
