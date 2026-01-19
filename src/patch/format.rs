@@ -1,9 +1,10 @@
-use super::{Hunk, Line, Patch, NO_NEWLINE_AT_EOF};
-use nu_ansi_term::{Color, Style};
 use std::{
     fmt::{Display, Formatter, Result},
     io,
 };
+
+use super::style;
+use super::{Hunk, Line, Patch, NO_NEWLINE_AT_EOF};
 
 /// Struct used to adjust the formatting of a `Patch`
 #[derive(Debug)]
@@ -11,13 +12,6 @@ pub struct PatchFormatter {
     with_color: bool,
     with_missing_newline_message: bool,
     suppress_blank_empty: bool,
-
-    context: Style,
-    delete: Style,
-    insert: Style,
-    hunk_header: Style,
-    patch_header: Style,
-    function_context: Style,
 }
 
 impl PatchFormatter {
@@ -30,13 +24,6 @@ impl PatchFormatter {
             // TODO the default in git-diff and GNU diff is to have this set to false, on the next
             // semver breaking release we should contemplate switching this to be false by default
             suppress_blank_empty: true,
-
-            context: Style::new(),
-            delete: Color::Red.normal(),
-            insert: Color::Green.normal(),
-            hunk_header: Color::Cyan.normal(),
-            patch_header: Style::new().bold(),
-            function_context: Style::new(),
         }
     }
 
@@ -125,8 +112,9 @@ struct PatchDisplay<'a, T: ToOwned + ?Sized> {
 impl<T: ToOwned + AsRef<[u8]> + ?Sized> PatchDisplay<'_, T> {
     fn write_into<W: io::Write>(&self, mut w: W) -> io::Result<()> {
         if self.patch.original.is_some() || self.patch.modified.is_some() {
+            let style = style::PATCH_HEADER;
             if self.f.with_color {
-                write!(w, "{}", self.f.patch_header.prefix())?;
+                write!(w, "{style}")?;
             }
             if let Some(original) = &self.patch.original {
                 write!(w, "--- ")?;
@@ -139,7 +127,7 @@ impl<T: ToOwned + AsRef<[u8]> + ?Sized> PatchDisplay<'_, T> {
                 writeln!(w)?;
             }
             if self.f.with_color {
-                write!(w, "{}", self.f.patch_header.suffix())?;
+                write!(w, "{style:#}")?;
             }
         }
 
@@ -154,8 +142,9 @@ impl<T: ToOwned + AsRef<[u8]> + ?Sized> PatchDisplay<'_, T> {
 impl Display for PatchDisplay<'_, str> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         if self.patch.original.is_some() || self.patch.modified.is_some() {
+            let style = style::PATCH_HEADER;
             if self.f.with_color {
-                write!(f, "{}", self.f.patch_header.prefix())?;
+                write!(f, "{style}")?;
             }
             if let Some(original) = &self.patch.original {
                 writeln!(f, "--- {}", original)?;
@@ -164,7 +153,7 @@ impl Display for PatchDisplay<'_, str> {
                 writeln!(f, "+++ {}", modified)?;
             }
             if self.f.with_color {
-                write!(f, "{}", self.f.patch_header.suffix())?;
+                write!(f, "{style:#}")?;
             }
         }
 
@@ -183,23 +172,25 @@ struct HunkDisplay<'a, T: ?Sized> {
 
 impl<T: AsRef<[u8]> + ?Sized> HunkDisplay<'_, T> {
     fn write_into<W: io::Write>(&self, mut w: W) -> io::Result<()> {
+        let style = style::HUNK_HEADER;
         if self.f.with_color {
-            write!(w, "{}", self.f.hunk_header.prefix())?;
+            write!(w, "{style}")?;
         }
         write!(w, "@@ -{} +{} @@", self.hunk.old_range, self.hunk.new_range)?;
         if self.f.with_color {
-            write!(w, "{}", self.f.hunk_header.suffix())?;
+            write!(w, "{style:#}")?;
         }
 
         if let Some(ctx) = self.hunk.function_context {
+            let style = style::FUNCTION_CONTEXT;
             write!(w, " ")?;
             if self.f.with_color {
-                write!(w, "{}", self.f.function_context.prefix())?;
+                write!(w, "{style}")?;
             }
             write!(w, " ")?;
             w.write_all(ctx.as_ref())?;
             if self.f.with_color {
-                write!(w, "{}", self.f.function_context.suffix())?;
+                write!(w, "{style:#}")?;
             }
         }
         writeln!(w)?;
@@ -214,22 +205,24 @@ impl<T: AsRef<[u8]> + ?Sized> HunkDisplay<'_, T> {
 
 impl Display for HunkDisplay<'_, str> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let style = style::HUNK_HEADER;
         if self.f.with_color {
-            write!(f, "{}", self.f.hunk_header.prefix())?;
+            write!(f, "{style}")?;
         }
         write!(f, "@@ -{} +{} @@", self.hunk.old_range, self.hunk.new_range)?;
         if self.f.with_color {
-            write!(f, "{}", self.f.hunk_header.suffix())?;
+            write!(f, "{style:#}")?;
         }
 
         if let Some(ctx) = self.hunk.function_context {
+            let style = style::FUNCTION_CONTEXT;
             write!(f, " ")?;
             if self.f.with_color {
-                write!(f, "{}", self.f.function_context.prefix())?;
+                write!(f, "{style}")?;
             }
             write!(f, " {}", ctx)?;
             if self.f.with_color {
-                write!(f, "{}", self.f.function_context.suffix())?;
+                write!(f, "{style:#}")?;
             }
         }
         writeln!(f)?;
@@ -250,13 +243,13 @@ struct LineDisplay<'a, T: ?Sized> {
 impl<T: AsRef<[u8]> + ?Sized> LineDisplay<'_, T> {
     fn write_into<W: io::Write>(&self, mut w: W) -> io::Result<()> {
         let (sign, line, style) = match self.line {
-            Line::Context(line) => (' ', line.as_ref(), self.f.context),
-            Line::Delete(line) => ('-', line.as_ref(), self.f.delete),
-            Line::Insert(line) => ('+', line.as_ref(), self.f.insert),
+            Line::Context(line) => (' ', line.as_ref(), style::CONTEXT),
+            Line::Delete(line) => ('-', line.as_ref(), style::DELETE),
+            Line::Insert(line) => ('+', line.as_ref(), style::INSERT),
         };
 
         if self.f.with_color {
-            write!(w, "{}", style.prefix())?;
+            write!(w, "{style}")?;
         }
 
         if self.f.suppress_blank_empty && sign == ' ' && line == b"\n" {
@@ -267,7 +260,7 @@ impl<T: AsRef<[u8]> + ?Sized> LineDisplay<'_, T> {
         }
 
         if self.f.with_color {
-            write!(w, "{}", style.suffix())?;
+            write!(w, "{style:#}")?;
         }
 
         if !line.ends_with(b"\n") {
@@ -284,13 +277,13 @@ impl<T: AsRef<[u8]> + ?Sized> LineDisplay<'_, T> {
 impl Display for LineDisplay<'_, str> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let (sign, line, style) = match self.line {
-            Line::Context(line) => (' ', line, self.f.context),
-            Line::Delete(line) => ('-', line, self.f.delete),
-            Line::Insert(line) => ('+', line, self.f.insert),
+            Line::Context(line) => (' ', line, style::CONTEXT),
+            Line::Delete(line) => ('-', line, style::DELETE),
+            Line::Insert(line) => ('+', line, style::INSERT),
         };
 
         if self.f.with_color {
-            write!(f, "{}", style.prefix())?;
+            write!(f, "{style}")?;
         }
 
         if self.f.suppress_blank_empty && sign == ' ' && *line == "\n" {
@@ -300,7 +293,7 @@ impl Display for LineDisplay<'_, str> {
         }
 
         if self.f.with_color {
-            write!(f, "{}", style.suffix())?;
+            write!(f, "{style:#}")?;
         }
 
         if !line.ends_with('\n') {
