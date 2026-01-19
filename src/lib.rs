@@ -50,7 +50,7 @@
 //!
 //! A [`Patch`] can the be output in the [Unified Format] either by using its
 //! [`Display`] impl or by using a [`PatchFormatter`] to output the diff with
-//! color.
+//! color (requires the `color` feature).
 //!
 //! ```
 //! # use diffy::create_patch;
@@ -73,9 +73,12 @@
 //! #
 //! // Without color
 //! print!("{}", patch);
+//! ```
 //!
-//! // With color
-//! # use diffy::PatchFormatter;
+//! With the `color` feature enabled:
+//!
+//! ```ignore
+//! use diffy::PatchFormatter;
 //! let f = PatchFormatter::new().with_color();
 //! print!("{}", f.fmt_patch(&patch));
 //! ```
