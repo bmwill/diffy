@@ -6,31 +6,26 @@ on:
 
 env:
   CARGO_INCREMENTAL: 0
-  RUSTFLAGS: -D warnings
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [stable, beta, nightly, 1.62.1]
 
     steps:
       - uses: actions/checkout@v2
+      - run: rustup toolchain install ${{ matrix.rust }} --profile minimal
+      - run: cargo +${{ matrix.rust }} test
 
-      - run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
-
-      - name: Lint
-        run: |
-          cargo fmt -- --check
-          cargo clippy --all-targets
-
-      - name: Build Documentation
-        run: cargo doc --no-deps
-
-      - name: Run tests
-        run: cargo test
-
-  minimum-supported-rust-version:
+  lint:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v2
-      - run: rustup toolchain install 1.62.1 --profile minimal
-      - run: cargo +1.62.1 check
+      - run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+      - run: cargo fmt -- --check
+      - run: cargo clippy --all-targets
+      - run: cargo doc --no-deps
