@@ -1,11 +1,22 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
   pull_request:
 
 env:
   CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+  CLICOLOR: 1
+  CI: 1
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
 
 jobs:
   test:
