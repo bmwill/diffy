@@ -69,7 +69,7 @@ impl ::std::fmt::Display for Snake {
 
 fn max_d(len1: usize, len2: usize) -> usize {
     // XXX look into reducing the need to have the additional '+ 1'
-    (len1 + len2 + 1) / 2 + 1
+    (len1 + len2).div_ceil(2) + 1
 }
 
 // The divide part of a divide-and-conquer strategy. A D-path has D+1 snakes some of which may
