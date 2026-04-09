@@ -8,7 +8,10 @@ use std::{
 
 use crate::patch::ParsePatchError;
 
+/// Characters that require escaping in filenames.
 pub(crate) const ESCAPED_CHARS: &[char] = &['\n', '\t', '\0', '\r', '\"', '\\'];
+
+/// Like [`ESCAPED_CHARS`] but in byte representation.
 #[allow(clippy::byte_char_slices)]
 pub(crate) const ESCAPED_CHARS_BYTES: &[u8] = &[b'\n', b'\t', b'\0', b'\r', b'\"', b'\\'];
 
@@ -235,10 +238,9 @@ fn find_byte(haystack: &[u8], byte: u8) -> Option<usize> {
     haystack.iter().position(|&b| b == byte)
 }
 
-/// Decodes a possibly-quoted filename, handling escape sequences.
+/// Decodes escape sequences in a quoted filename.
 ///
-/// If the filename is surrounded by double quotes, the inner content is
-/// unescaped. Otherwise, the filename is validated for invalid characters.
+/// See [`ESCAPED_CHARS`] for supported escapes.
 pub(crate) fn escaped_filename<T: Text + ToOwned + ?Sized>(
     filename: &T,
 ) -> Result<Cow<'_, [u8]>, ParsePatchError> {
