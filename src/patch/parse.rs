@@ -65,10 +65,32 @@ pub fn parse(input: &str) -> Result<Patch<'_, str>> {
     ))
 }
 
+pub fn parse_strict(input: &str) -> Result<Patch<'_, str>> {
+    let mut parser = Parser::new(input);
+    let header = patch_header(&mut parser)?;
+    let hunks = hunks(&mut parser)?;
+    reject_orphaned_hunk_headers(&mut parser)?;
+
+    Ok(Patch::new(
+        header.0.map(convert_cow_to_str),
+        header.1.map(convert_cow_to_str),
+        hunks,
+    ))
+}
+
 pub fn parse_bytes(input: &[u8]) -> Result<Patch<'_, [u8]>> {
     let mut parser = Parser::new(input);
     let header = patch_header(&mut parser)?;
     let hunks = hunks(&mut parser)?;
+
+    Ok(Patch::new(header.0, header.1, hunks))
+}
+
+pub fn parse_bytes_strict(input: &[u8]) -> Result<Patch<'_, [u8]>> {
+    let mut parser = Parser::new(input);
+    let header = patch_header(&mut parser)?;
+    let hunks = hunks(&mut parser)?;
+    reject_orphaned_hunk_headers(&mut parser)?;
 
     Ok(Patch::new(header.0, header.1, hunks))
 }
@@ -152,6 +174,20 @@ fn verify_hunks_in_order<T: ?Sized>(hunks: &[Hunk<'_, T>]) -> bool {
         }
     }
     true
+}
+
+/// Scans remaining lines for orphaned `@@ ` hunk headers.
+///
+/// In strict mode (git-apply behavior), trailing junk is allowed but
+/// an `@@ ` line hiding behind that junk indicates a lost hunk.
+fn reject_orphaned_hunk_headers<T: Text + ?Sized>(parser: &mut Parser<'_, T>) -> Result<()> {
+    while let Some(line) = parser.peek() {
+        if line.starts_with("@@ ") {
+            return Err(parser.error(ParsePatchErrorKind::OrphanedHunkHeader));
+        }
+        parser.next()?;
+    }
+    Ok(())
 }
 
 fn hunks<'a, T: Text + ?Sized>(parser: &mut Parser<'a, T>) -> Result<Vec<Hunk<'a, T>>> {
