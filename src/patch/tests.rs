@@ -21,8 +21,8 @@ fn test_escaped_filenames() {
 +Oathbringer
 ";
     assert_eq!(
-        parse(s).unwrap_err(),
-        ParsePatchErrorKind::InvalidCharInUnquotedFilename.into(),
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::InvalidCharInUnquotedFilename,
     );
     parse_bytes(s.as_ref()).unwrap_err();
 
@@ -34,8 +34,8 @@ fn test_escaped_filenames() {
 +Oathbringer
 ";
     assert_eq!(
-        parse(s).unwrap_err(),
-        ParsePatchErrorKind::InvalidUnescapedChar.into(),
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::InvalidUnescapedChar,
     );
     parse_bytes(s.as_ref()).unwrap_err();
 
@@ -193,8 +193,8 @@ fn escaped_filename_octal() {
 +content
 "#;
     assert_eq!(
-        parse(s).unwrap_err(),
-        ParsePatchErrorKind::InvalidEscapedChar.into(),
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::InvalidEscapedChar,
     );
 
     // Non-octal digit in second position → error
@@ -205,8 +205,8 @@ fn escaped_filename_octal() {
 +content
 "#;
     assert_eq!(
-        parse(s).unwrap_err(),
-        ParsePatchErrorKind::InvalidEscapedChar.into(),
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::InvalidEscapedChar,
     );
 }
 
@@ -267,8 +267,8 @@ fn test_missing_filename_header() {
 +Oathbringer
 ";
     assert_eq!(
-        parse(s).unwrap_err(),
-        ParsePatchErrorKind::MultipleOriginalHeaders.into(),
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::MultipleOriginalHeaders,
     );
 }
 
@@ -396,7 +396,7 @@ mod error_display {
         let err = Patch::from_str(content).unwrap_err();
         assert_data_eq!(
             err.to_string(),
-            str!["error parsing patch: unable to parse hunk header"]
+            str!["error parsing patch at byte 28: unable to parse hunk header"]
         );
     }
 
@@ -412,7 +412,7 @@ mod error_display {
         let err = Patch::from_str(content).unwrap_err();
         assert_data_eq!(
             err.to_string(),
-            str!["error parsing patch: hunk header does not match hunk"]
+            str!["error parsing patch at byte 28: hunk header does not match hunk"]
         );
     }
 
