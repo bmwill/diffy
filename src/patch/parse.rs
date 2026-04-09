@@ -329,7 +329,7 @@ mod tests {
         // quoted with escaped characters
         let s = r#"\
 --- "ori\"g\tinal"
-+++ "mo\0\t\r\n\\dified"
++++ "mo\000\t\r\n\\dified"
 @@ -1,0 +1,1 @@
 +Oathbringer
 "#;
@@ -390,25 +390,71 @@ mod tests {
     //   $ patch -p1 < test.patch   # with +++ "b/tl\033"
     //   patching file tl<ESC>
     //
-    // diffy misparsed \0 as standalone NUL instead of 3-digit octal start,
-    // so \033 becomes NUL + literal "33".
-    //
     // Found via llvm/llvm-project full-history replay
     // (commits 17af06ba..229c95ab, 6c031780..0683a1e5).
     #[test]
-    fn escaped_filename_octal_misparsed() {
+    fn escaped_filename_octal() {
+        // \033 = ESC (0x1B)
         let s = r#"\
 --- "orig\033"
 +++ "mod\033"
 @@ -1,0 +1,1 @@
 +content
 "#;
-        // Currently parses "successfully" but produces wrong result:
-        // \0 is consumed as NUL, "33" remains literal.
         let p = parse(s).unwrap();
-        // BUG: should be "orig\x1b" (ESC) but is "orig\x0033" (NUL + "33")
-        assert_eq!(p.original(), Some("orig\x0033"));
-        assert_eq!(p.modified(), Some("mod\x0033"));
+        assert_eq!(p.original(), Some("orig\x1b"));
+        assert_eq!(p.modified(), Some("mod\x1b"));
+
+        // \000 = NUL
+        let s = r#"\
+--- "orig\000"
++++ "mod\000"
+@@ -1,0 +1,1 @@
++content
+"#;
+        let p = parse(s).unwrap();
+        assert_eq!(p.original(), Some("orig\x00"));
+        assert_eq!(p.modified(), Some("mod\x00"));
+
+        // \177 = DEL (0x7F)
+        let s = r#"\
+--- "orig\177"
++++ "mod\177"
+@@ -1,0 +1,1 @@
++content
+"#;
+        let p = parse(s).unwrap();
+        assert_eq!(p.original(), Some("orig\x7f"));
+        assert_eq!(p.modified(), Some("mod\x7f"));
+
+        // \377 = 0xFF
+        let s = r#"\
+--- "orig\377"
++++ "mod\377"
+@@ -1,0 +1,1 @@
++content
+"#;
+        let b = parse_bytes(s.as_ref()).unwrap();
+        assert_eq!(b.original(), Some(&b"orig\xff"[..]));
+        assert_eq!(b.modified(), Some(&b"mod\xff"[..]));
+
+        // Truncated octal (only 2 digits) → error
+        let s = r#"\
+--- "orig\03"
++++ "mod\03"
+@@ -1,0 +1,1 @@
++content
+"#;
+        parse(s).unwrap_err();
+
+        // Non-octal digit in second position → error
+        let s = r#"\
+--- "orig\08x"
++++ "mod\08x"
+@@ -1,0 +1,1 @@
++content
+"#;
+        parse(s).unwrap_err();
     }
 
     #[test]
