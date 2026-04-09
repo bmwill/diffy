@@ -353,10 +353,15 @@ mod tests {
     //   $ patch -p0 < test.patch   # with +++ "bel\a"
     //   patching file bel<BEL>
     //
-    // diffy currently rejects these as invalid escaped chars.
     #[test]
-    fn escaped_filename_named_escapes_unsupported() {
-        for esc in ["\\a", "\\b", "\\f", "\\v"] {
+    fn escaped_filename_named_escapes() {
+        let cases: &[(&str, u8)] = &[
+            ("\\a", b'\x07'),
+            ("\\b", b'\x08'),
+            ("\\f", b'\x0c'),
+            ("\\v", b'\x0b'),
+        ];
+        for (esc, expected_byte) in cases {
             let s = format!(
                 "\
 --- \"orig{esc}\"
@@ -365,8 +370,11 @@ mod tests {
 +content
 "
             );
-            parse(&s).unwrap_err();
-            parse_bytes(s.as_ref()).unwrap_err();
+            let p = parse(&s).unwrap();
+            let expected_orig = format!("orig{}", *expected_byte as char);
+            let expected_mod = format!("mod{}", *expected_byte as char);
+            assert_eq!(p.original(), Some(expected_orig.as_str()));
+            assert_eq!(p.modified(), Some(expected_mod.as_str()));
         }
     }
 

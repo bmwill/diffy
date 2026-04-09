@@ -147,7 +147,6 @@ where
 #[derive(PartialEq, Eq)]
 struct Filename<'a, T: ToOwned + ?Sized>(Cow<'a, T>);
 
-
 impl Filename<'_, str> {
     fn needs_to_be_escaped(&self) -> bool {
         self.0.contains(ESCAPED_CHARS)
