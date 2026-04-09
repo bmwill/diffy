@@ -1,9 +1,9 @@
 //! Parse a Patch
 
-use super::{Hunk, HunkRange, Line, ESCAPED_CHARS_BYTES, NO_NEWLINE_AT_EOF};
+use super::{Hunk, HunkRange, Line, NO_NEWLINE_AT_EOF};
 use crate::{
     patch::Patch,
-    utils::{LineIter, Text},
+    utils::{escaped_filename, LineIter, Text},
 };
 use std::{borrow::Cow, fmt};
 
@@ -17,7 +17,7 @@ type Result<T, E = ParsePatchError> = std::result::Result<T, E>;
 pub struct ParsePatchError(Cow<'static, str>);
 
 impl ParsePatchError {
-    fn new<E: Into<Cow<'static, str>>>(e: E) -> Self {
+    pub(crate) fn new<E: Into<Cow<'static, str>>>(e: E) -> Self {
         Self(e.into())
     }
 }
@@ -139,56 +139,9 @@ fn parse_filename<'a, T: Text + ToOwned + ?Sized>(
         return Err(ParsePatchError::new("filename unterminated"));
     };
 
-    let filename = if let Some(quoted) = is_quoted(filename) {
-        escaped_filename(quoted)?
-    } else {
-        unescaped_filename(filename)?
-    };
+    let filename = escaped_filename(filename)?;
 
     Ok(filename)
-}
-
-fn is_quoted<T: Text + ?Sized>(s: &T) -> Option<&T> {
-    s.strip_prefix("\"").and_then(|s| s.strip_suffix("\""))
-}
-
-fn unescaped_filename<T: Text + ToOwned + ?Sized>(filename: &T) -> Result<Cow<'_, [u8]>> {
-    let bytes = filename.as_bytes();
-
-    if bytes.iter().any(|b| ESCAPED_CHARS_BYTES.contains(b)) {
-        return Err(ParsePatchError::new("invalid char in unquoted filename"));
-    }
-
-    Ok(bytes.into())
-}
-
-fn escaped_filename<T: Text + ToOwned + ?Sized>(escaped: &T) -> Result<Cow<'_, [u8]>> {
-    let mut filename = Vec::new();
-
-    let mut chars = escaped.as_bytes().iter().copied();
-    while let Some(c) = chars.next() {
-        if c == b'\\' {
-            let ch = match chars
-                .next()
-                .ok_or_else(|| ParsePatchError::new("expected escaped character"))?
-            {
-                b'n' => b'\n',
-                b't' => b'\t',
-                b'0' => b'\0',
-                b'r' => b'\r',
-                b'\"' => b'\"',
-                b'\\' => b'\\',
-                _ => return Err(ParsePatchError::new("invalid escaped character")),
-            };
-            filename.push(ch);
-        } else if ESCAPED_CHARS_BYTES.contains(&c) {
-            return Err(ParsePatchError::new("invalid unescaped character"));
-        } else {
-            filename.push(c);
-        }
-    }
-
-    Ok(filename.into())
 }
 
 fn verify_hunks_in_order<T: ?Sized>(hunks: &[Hunk<'_, T>]) -> bool {
