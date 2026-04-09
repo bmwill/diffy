@@ -15,7 +15,7 @@ jobs:
         rust: [stable, beta, nightly, 1.62.1]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
       - run: rustup toolchain install ${{ matrix.rust }} --profile minimal
       - run: cargo +${{ matrix.rust }} test
 
@@ -24,7 +24,7 @@ jobs:
     env:
       RUSTFLAGS: -D warnings
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
       - run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
       - run: cargo fmt -- --check
       - run: cargo clippy --all-targets
