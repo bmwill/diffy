@@ -8,7 +8,7 @@ pub use parse::ParsePatchError;
 
 use std::{borrow::Cow, fmt, ops};
 
-use crate::utils::{ESCAPED_CHARS, ESCAPED_CHARS_BYTES};
+use crate::utils::{byte_needs_quoting, fmt_escaped_byte, write_escaped_byte};
 
 const NO_NEWLINE_AT_EOF: &str = "\\ No newline at end of file";
 
@@ -147,29 +147,20 @@ where
 #[derive(PartialEq, Eq)]
 struct Filename<'a, T: ToOwned + ?Sized>(Cow<'a, T>);
 
-impl Filename<'_, str> {
-    fn needs_to_be_escaped(&self) -> bool {
-        self.0.contains(ESCAPED_CHARS)
-    }
-}
-
 impl<T: ToOwned + AsRef<[u8]> + ?Sized> Filename<'_, T> {
     fn needs_to_be_escaped_bytes(&self) -> bool {
         self.0
             .as_ref()
             .as_ref()
             .iter()
-            .any(|b| ESCAPED_CHARS_BYTES.contains(b))
+            .any(|b| byte_needs_quoting(*b))
     }
 
     fn write_into<W: std::io::Write>(&self, mut w: W) -> std::io::Result<()> {
         if self.needs_to_be_escaped_bytes() {
             w.write_all(b"\"")?;
-            for b in self.0.as_ref().as_ref() {
-                if ESCAPED_CHARS_BYTES.contains(b) {
-                    w.write_all(b"\\")?;
-                }
-                w.write_all(&[*b])?;
+            for &b in self.0.as_ref().as_ref() {
+                write_escaped_byte(&mut w, b)?;
             }
             w.write_all(b"\"")?;
         } else {
@@ -202,14 +193,12 @@ impl<T: ToOwned + ?Sized> Clone for Filename<'_, T> {
 
 impl fmt::Display for Filename<'_, str> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use std::fmt::Write;
-        if self.needs_to_be_escaped() {
+        let bytes = self.0.as_bytes();
+        if bytes.iter().any(|b| byte_needs_quoting(*b)) {
+            use std::fmt::Write;
             f.write_char('\"')?;
-            for c in self.0.chars() {
-                if ESCAPED_CHARS.contains(&c) {
-                    f.write_char('\\')?;
-                }
-                f.write_char(c)?;
+            for &b in bytes {
+                fmt_escaped_byte(f, b)?;
             }
             f.write_char('\"')?;
         } else {

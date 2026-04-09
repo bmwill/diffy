@@ -455,6 +455,116 @@ mod tests {
 +content
 "#;
         parse(s).unwrap_err();
+
+        // First octal digit > 3 → error (would overflow a byte)
+        let s = r#"\
+--- "orig\477"
++++ "mod\477"
+@@ -1,0 +1,1 @@
++content
+"#;
+        parse(s).unwrap_err();
+
+        // \101 = 'A' (0x41), first octal digit 1
+        let s = r#"\
+--- "orig\101"
++++ "mod\101"
+@@ -1,0 +1,1 @@
++content
+"#;
+        let p = parse(s).unwrap();
+        assert_eq!(p.original(), Some("origA"));
+        assert_eq!(p.modified(), Some("modA"));
+
+        // \277 = 0xBF, first octal digit 2
+        let s = r#"\
+--- "orig\277"
++++ "mod\277"
+@@ -1,0 +1,1 @@
++content
+"#;
+        let b = parse_bytes(s.as_ref()).unwrap();
+        assert_eq!(b.original(), Some(&b"orig\xbf"[..]));
+        assert_eq!(b.modified(), Some(&b"mod\xbf"[..]));
+    }
+
+    // Verify that formatting a parsed patch with escaped filenames
+    // produces output that re-parses to the same patch. This covers
+    // both the `Display` (str) and `to_bytes` ([u8]) paths.
+    #[test]
+    fn escaped_filename_roundtrip_named() {
+        // Named escapes: \a \b \t \n \v \f \r \\ \"
+        let s = r#"\
+--- "a\a\b\t\n\v\f\r\\\""
++++ "b\a\b\t\n\v\f\r\\\""
+@@ -1,1 +1,1 @@
+-old
++new
+"#;
+        let p = parse(s).unwrap();
+
+        // str roundtrip via Display
+        let formatted = p.to_string();
+        let p2 = parse(&formatted).unwrap();
+        assert_eq!(p.original(), p2.original());
+        assert_eq!(p.modified(), p2.modified());
+
+        // bytes roundtrip via to_bytes
+        let b = parse_bytes(s.as_ref()).unwrap();
+        let bytes = b.to_bytes();
+        let b2 = parse_bytes(&bytes).unwrap();
+        assert_eq!(b.original(), b2.original());
+        assert_eq!(b.modified(), b2.modified());
+    }
+
+    #[test]
+    fn escaped_filename_roundtrip_octal() {
+        // Octal escapes for control chars without named escapes
+        // and for high bytes (> 0x7f).
+        let s = r#"\
+--- "a\001\002\037\177"
++++ "b\001\002\037\177"
+@@ -1,1 +1,1 @@
+-old
++new
+"#;
+        let p = parse(s).unwrap();
+        let formatted = p.to_string();
+        let p2 = parse(&formatted).unwrap();
+        assert_eq!(p.original(), p2.original());
+        assert_eq!(p.modified(), p2.modified());
+
+        // Bytes roundtrip with a high byte (\377 = 0xFF).
+        let s = r#"\
+--- "a\377"
++++ "b\377"
+@@ -1,1 +1,1 @@
+-old
++new
+"#;
+        let b = parse_bytes(s.as_ref()).unwrap();
+        let bytes = b.to_bytes();
+        let b2 = parse_bytes(&bytes).unwrap();
+        assert_eq!(b.original(), b2.original());
+        assert_eq!(b.modified(), b2.modified());
+    }
+
+    // Filenames without special characters should not be quoted.
+    #[test]
+    fn plain_filename_roundtrip() {
+        let s = "\
+--- a/normal.txt
++++ b/normal.txt
+@@ -1,1 +1,1 @@
+-old
++new
+";
+        let p = parse(s).unwrap();
+        let formatted = p.to_string();
+        assert!(!formatted.contains('"'));
+        let p2 = parse(&formatted).unwrap();
+        assert_eq!(p.original(), p2.original());
+        assert_eq!(p.modified(), p2.modified());
     }
 
     #[test]

@@ -8,16 +8,62 @@ use std::{
 
 use crate::patch::ParsePatchError;
 
-/// Characters that require escaping in filenames.
-pub(crate) const ESCAPED_CHARS: &[char] = &[
-    '\x07', '\x08', '\t', '\n', '\x0b', '\x0c', '\r', '\0', '\"', '\\',
-];
+/// Returns `true` if a byte must be quoted in a diff filename.
+///
+/// Matches git's behavior with all control characters
+/// (0x00-0x1f), DEL (0x7f), double quote, and backslash.
+pub(crate) fn byte_needs_quoting(b: u8) -> bool {
+    b < 0x20 || b == 0x7f || b == b'"' || b == b'\\'
+}
 
-/// Like [`ESCAPED_CHARS`] but in byte representation.
-#[allow(clippy::byte_char_slices)]
-pub(crate) const ESCAPED_CHARS_BYTES: &[u8] = &[
-    b'\x07', b'\x08', b'\t', b'\n', b'\x0b', b'\x0c', b'\r', b'\0', b'\"', b'\\',
-];
+/// Writes one byte in its escaped form to an [`io::Write`] sink.
+///
+/// Named escapes are used where git defines them (`\a`, `\b`,
+/// `\t`, `\n`, `\v`, `\f`, `\r`, `\\`, `\"`). Other bytes that
+/// require quoting are emitted as 3-digit octal (`\NNN`).
+/// Non-special bytes are written through unchanged.
+pub(crate) fn write_escaped_byte<W: std::io::Write>(w: &mut W, b: u8) -> std::io::Result<()> {
+    match b {
+        b'\x07' => w.write_all(b"\\a"),
+        b'\x08' => w.write_all(b"\\b"),
+        b'\t' => w.write_all(b"\\t"),
+        b'\n' => w.write_all(b"\\n"),
+        b'\x0b' => w.write_all(b"\\v"),
+        b'\x0c' => w.write_all(b"\\f"),
+        b'\r' => w.write_all(b"\\r"),
+        b'"' => w.write_all(b"\\\""),
+        b'\\' => w.write_all(b"\\\\"),
+        b if b < 0x20 || b == 0x7f => {
+            let buf = [
+                b'\\',
+                b'0' + (b >> 6),
+                b'0' + ((b >> 3) & 7),
+                b'0' + (b & 7),
+            ];
+            w.write_all(&buf)
+        }
+        _ => w.write_all(&[b]),
+    }
+}
+
+/// Writes one byte in its escaped form to a [`fmt::Write`] sink.
+///
+/// Same logic as [`write_escaped_byte`] but for [`fmt::Write`].
+pub(crate) fn fmt_escaped_byte(f: &mut impl std::fmt::Write, b: u8) -> std::fmt::Result {
+    match b {
+        b'\x07' => f.write_str("\\a"),
+        b'\x08' => f.write_str("\\b"),
+        b'\t' => f.write_str("\\t"),
+        b'\n' => f.write_str("\\n"),
+        b'\x0b' => f.write_str("\\v"),
+        b'\x0c' => f.write_str("\\f"),
+        b'\r' => f.write_str("\\r"),
+        b'"' => f.write_str("\\\""),
+        b'\\' => f.write_str("\\\\"),
+        b if b < 0x20 || b == 0x7f => write!(f, "\\{:03o}", b),
+        _ => f.write_char(b as char),
+    }
+}
 
 /// Classifies lines, converting lines into unique `u64`s for quicker comparison
 pub struct Classifier<'a, T: ?Sized> {
@@ -244,7 +290,8 @@ fn find_byte(haystack: &[u8], byte: u8) -> Option<usize> {
 
 /// Decodes escape sequences in a quoted filename.
 ///
-/// See [`ESCAPED_CHARS`] for supported escapes.
+/// See [`byte_needs_quoting`] for the set of characters that
+/// require quoting.
 pub(crate) fn escaped_filename<T: Text + ToOwned + ?Sized>(
     filename: &T,
 ) -> Result<Cow<'_, [u8]>, ParsePatchError> {
@@ -255,7 +302,7 @@ pub(crate) fn escaped_filename<T: Text + ToOwned + ?Sized>(
         decode_escaped(inner)
     } else {
         let bytes = filename.as_bytes();
-        if bytes.iter().any(|b| ESCAPED_CHARS_BYTES.contains(b)) {
+        if bytes.iter().any(|b| byte_needs_quoting(*b)) {
             return Err(ParsePatchError::new("invalid char in unquoted filename"));
         }
         Ok(bytes.into())
@@ -309,7 +356,7 @@ fn decode_escaped<T: Text + ToOwned + ?Sized>(
             result.push(decoded);
             i += 1;
             last_copy = i;
-        } else if ESCAPED_CHARS_BYTES.contains(&bytes[i]) {
+        } else if byte_needs_quoting(bytes[i]) {
             return Err(ParsePatchError::new("invalid unescaped character"));
         } else {
             i += 1;
