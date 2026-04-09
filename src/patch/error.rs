@@ -1,6 +1,7 @@
 //! Error types for patch parsing.
 
 use std::fmt;
+use std::ops::Range;
 
 /// An error returned when parsing a `Patch` using [`Patch::from_str`] fails.
 ///
@@ -8,11 +9,30 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsePatchError {
     pub(crate) kind: ParsePatchErrorKind,
+    span: Option<Range<usize>>,
+}
+
+impl ParsePatchError {
+    /// Creates a new error with the given kind and span.
+    pub(crate) fn new(kind: ParsePatchErrorKind, span: Range<usize>) -> Self {
+        Self {
+            kind,
+            span: Some(span),
+        }
+    }
 }
 
 impl fmt::Display for ParsePatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "error parsing patch: {}", self.kind)
+        if let Some(span) = &self.span {
+            write!(
+                f,
+                "error parsing patch at byte {}: {}",
+                span.start, self.kind
+            )
+        } else {
+            write!(f, "error parsing patch: {}", self.kind)
+        }
     }
 }
 
@@ -20,7 +40,7 @@ impl std::error::Error for ParsePatchError {}
 
 impl From<ParsePatchErrorKind> for ParsePatchError {
     fn from(kind: ParsePatchErrorKind) -> Self {
-        Self { kind }
+        Self { kind, span: None }
     }
 }
 
