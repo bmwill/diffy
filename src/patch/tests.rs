@@ -1,5 +1,5 @@
-use super::parse::{parse, parse_bytes};
 use super::error::ParsePatchErrorKind;
+use super::parse::{parse, parse_bytes};
 
 #[test]
 fn test_escaped_filenames() {
@@ -376,4 +376,56 @@ fn plain_filename_roundtrip() {
     let p2 = parse(&formatted).unwrap();
     assert_eq!(p.original(), p2.original());
     assert_eq!(p.modified(), p2.modified());
+}
+
+mod error_display {
+    use crate::patch::error::ParsePatchErrorKind;
+    use crate::Patch;
+    use snapbox::assert_data_eq;
+    use snapbox::str;
+
+    #[test]
+    fn invalid_hunk_header() {
+        let content = "\
+--- a/file.rs
++++ b/file.rs
+@@ invalid @@
+-old
++new
+";
+        let err = Patch::from_str(content).unwrap_err();
+        assert_data_eq!(
+            err.to_string(),
+            str!["error parsing patch: unable to parse hunk header"]
+        );
+    }
+
+    #[test]
+    fn hunk_mismatch() {
+        let content = "\
+--- a/file.rs
++++ b/file.rs
+@@ -1,2 +1,2 @@
+-only one line
++only one line
+";
+        let err = Patch::from_str(content).unwrap_err();
+        assert_data_eq!(
+            err.to_string(),
+            str!["error parsing patch: hunk header does not match hunk"]
+        );
+    }
+
+    #[test]
+    fn kind_preserved() {
+        let content = "\
+--- a/file.rs
++++ b/file.rs
+@@ invalid @@
+-old
++new
+";
+        let err = Patch::from_str(content).unwrap_err();
+        assert_eq!(err.kind, ParsePatchErrorKind::InvalidHunkHeader);
+    }
 }

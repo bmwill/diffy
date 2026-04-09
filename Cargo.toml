@@ -18,6 +18,9 @@ color = ["dep:anstyle"]
 [dependencies]
 anstyle = { version = "1.0.13", optional = true }
 
+[dev-dependencies]
+snapbox = "0.6.24"
+
 [[example]]
 name = "patch_formatter"
 required-features = ["color"]
