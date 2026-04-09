@@ -14,12 +14,14 @@ type Result<T, E = ParsePatchError> = std::result::Result<T, E>;
 
 struct Parser<'a, T: Text + ?Sized> {
     lines: std::iter::Peekable<LineIter<'a, T>>,
+    offset: usize,
 }
 
 impl<'a, T: Text + ?Sized> Parser<'a, T> {
     fn new(input: &'a T) -> Self {
         Self {
             lines: LineIter::new(input).peekable(),
+            offset: 0,
         }
     }
 
@@ -32,8 +34,10 @@ impl<'a, T: Text + ?Sized> Parser<'a, T> {
             .lines
             .next()
             .ok_or(ParsePatchErrorKind::UnexpectedEof)?;
+        self.offset += line.len();
         Ok(line)
     }
+
 }
 
 pub fn parse(input: &str) -> Result<Patch<'_, str>> {
