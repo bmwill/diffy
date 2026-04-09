@@ -370,6 +370,39 @@ mod tests {
         }
     }
 
+    // Git uses 3-digit octal escapes (\000–\377) for bytes without a
+    // named escape. Both `git apply` and GNU patch decode them.
+    //
+    // Observed with git 2.53.0:
+    //   $ printf 'x' > "$(printf 'f\033')" && git add -A
+    //   $ git diff --cached | grep '+++'
+    //   +++ "b/f\033"
+    //
+    // Observed with GNU patch 2.7.1:
+    //   $ patch -p1 < test.patch   # with +++ "b/tl\033"
+    //   patching file tl<ESC>
+    //
+    // diffy misparsed \0 as standalone NUL instead of 3-digit octal start,
+    // so \033 becomes NUL + literal "33".
+    //
+    // Found via llvm/llvm-project full-history replay
+    // (commits 17af06ba..229c95ab, 6c031780..0683a1e5).
+    #[test]
+    fn escaped_filename_octal_misparsed() {
+        let s = r#"\
+--- "orig\033"
++++ "mod\033"
+@@ -1,0 +1,1 @@
++content
+"#;
+        // Currently parses "successfully" but produces wrong result:
+        // \0 is consumed as NUL, "33" remains literal.
+        let p = parse(s).unwrap();
+        // BUG: should be "orig\x1b" (ESC) but is "orig\x0033" (NUL + "33")
+        assert_eq!(p.original(), Some("orig\x0033"));
+        assert_eq!(p.modified(), Some("mod\x0033"));
+    }
+
     #[test]
     fn test_missing_filename_header() {
         // Missing Both '---' and '+++' lines
