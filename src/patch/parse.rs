@@ -319,7 +319,10 @@ fn hunk_lines<'a, T: Text + ?Sized>(parser: &mut Parser<'a, T>) -> Result<Vec<Li
                 }
             }
         } else {
-            return Err(ParsePatchError::new("unexpected line in hunk body"));
+            return Err(ParsePatchError::new(format!(
+                "unexpected line in hunk body: '{}'",
+                line.as_str().unwrap_or("EMPTY")
+            )));
         };
 
         lines.push(line);
