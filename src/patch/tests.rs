@@ -139,6 +139,109 @@ trailing garbage
     assert_eq!(patch.hunks()[0].new_range().len(), 4);
 }
 
+// Strict mode (git-apply behavior): rejects orphaned hunk headers
+// hidden behind trailing content, but allows plain trailing junk.
+// Currently all use permissive `parse`; the next commit introduces
+// `parse_strict` and updates assertions where behavior diverges.
+mod strict_mode {
+    use super::*;
+
+    #[test]
+    fn trailing_junk_allowed() {
+        // git apply accepts trailing junk after all hunks
+        let s = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1 @@
+-old
++new
+this is trailing garbage
+";
+        let patch = parse(s).unwrap();
+        assert_eq!(patch.hunks().len(), 1);
+    }
+
+    #[test]
+    fn trailing_junk_allowed_bytes() {
+        let s = b"\
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1 @@
+-old
++new
+this is trailing garbage
+";
+        let patch = parse_bytes(&s[..]).unwrap();
+        assert_eq!(patch.hunks().len(), 1);
+    }
+
+    #[test]
+    fn orphaned_hunk_header_after_junk() {
+        // Junk between hunks hides the second @@ — strict should reject this
+        // since git apply errors with "patch fragment without header".
+        // Currently permissive: succeeds with 1 hunk.
+        let s = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1 @@
+-a
++A
+not a hunk line
+@@ -5 +5 @@
+-b
++B
+";
+        let patch = parse(s).unwrap();
+        assert_eq!(patch.hunks().len(), 1);
+    }
+
+    #[test]
+    fn no_junk_parses_normally() {
+        let s = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1 @@
+-old
++new
+";
+        let patch = parse(s).unwrap();
+        assert_eq!(patch.hunks().len(), 1);
+    }
+
+    #[test]
+    fn multi_hunk_no_junk() {
+        let s = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1 @@
+-a
++A
+@@ -5 +5 @@
+-b
++B
+";
+        let patch = parse(s).unwrap();
+        assert_eq!(patch.hunks().len(), 2);
+    }
+
+    #[test]
+    fn garbage_before_hunk_complete_fails() {
+        let s = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1,3 +1,3 @@
+-line 1
++LINE 1
+garbage before hunk complete
+ line 3
+";
+        assert_eq!(
+            parse(s).unwrap_err().kind,
+            ParsePatchErrorKind::UnexpectedHunkLine,
+        );
+    }
+}
+
 #[test]
 fn test_escaped_filenames() {
     // No escaped characters
