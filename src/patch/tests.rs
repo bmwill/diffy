@@ -2,6 +2,150 @@ use super::error::ParsePatchErrorKind;
 use super::parse::{parse, parse_bytes};
 
 #[test]
+fn trailing_garbage_after_complete_hunk() {
+    let s = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1 @@
+-old line
++new line
+this is trailing garbage
+that should be ignored
+";
+    assert_eq!(
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::UnexpectedHunkLine,
+    );
+}
+
+#[test]
+fn garbage_before_hunk_complete_fails() {
+    // If hunk line count isn't satisfied, garbage causes error
+    let s = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1,3 +1,3 @@
+-line 1
++LINE 1
+garbage before hunk complete
+ line 3
+";
+    assert_eq!(
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::UnexpectedHunkLine,
+    );
+}
+
+#[test]
+fn git_headers_after_hunk_ignored() {
+    // Git extended headers appearing after a complete hunk should be ignored
+    let s = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1 @@
+-old
++new
+diff --git a/other.txt b/other.txt
+index 1234567..89abcdef 100644
+";
+    assert_eq!(
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::UnexpectedHunkLine,
+    );
+}
+
+/// When splitting multi-patch input by `---/+++` boundaries, trailing
+/// `diff --git` lines from the next patch may linger. If the last hunk
+/// ends with `\ No newline at end of file`, the parser should still
+/// recognize the hunk as complete and ignore the trailing content,
+/// as GNU patch does.
+///
+/// Pattern first appeared in rust-lang/cargo@b119b891df93f128abef634215cd8f967c3cd120
+/// where HTML files lost their trailing newlines.
+#[test]
+fn no_newline_at_eof_followed_by_trailing_garbage() {
+    let s = "\
+--- a/file.html
++++ b/file.html
+@@ -1,3 +1,3 @@
+ <div>
+-<p>old</p>
++<p>new</p>
+ </div>
+\\ No newline at end of file
+diff --git a/other.html b/other.html
+index 1234567..89abcdef 100644
+";
+    // no_newline_context is set, so next non-@@ line → ExpectedEndOfHunk
+    assert_eq!(
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::ExpectedEndOfHunk,
+    );
+}
+
+#[test]
+fn multi_hunk_with_trailing_garbage() {
+    let s = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1 @@
+-a
++A
+@@ -5 +5 @@
+-b
++B
+some trailing garbage
+";
+    assert_eq!(
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::UnexpectedHunkLine,
+    );
+}
+
+#[test]
+fn garbage_between_hunks_stops_parsing() {
+    // GNU patch would try to parse the second @@ as a new patch
+    // and fail because there's no `---` header.
+    //
+    // diffy `Patch` is a single patch parser, so should just ignore everything
+    // after the first complete hunk when garbage is encountered.
+    let s = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1 @@
+-a
++A
+not a hunk line
+@@ -5 +5 @@
+-b
++B
+";
+    assert_eq!(
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::UnexpectedHunkLine,
+    );
+}
+
+#[test]
+fn context_lines_counted_correctly() {
+    let s = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1,4 +1,4 @@
+ context 1
+-deleted
++inserted
+ context 2
+ context 3
+trailing garbage
+";
+    assert_eq!(
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::UnexpectedHunkLine,
+    );
+}
+
+#[test]
 fn test_escaped_filenames() {
     // No escaped characters
     let s = "\
