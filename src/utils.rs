@@ -6,7 +6,7 @@ use std::{
     hash::Hash,
 };
 
-use crate::patch::ParsePatchError;
+use crate::{patch::error::ParsePatchErrorKind, ParsePatchError};
 
 /// Returns `true` if a byte must be quoted in a diff filename.
 ///
@@ -303,7 +303,7 @@ pub(crate) fn escaped_filename<T: Text + ToOwned + ?Sized>(
     } else {
         let bytes = filename.as_bytes();
         if bytes.iter().any(|b| byte_needs_quoting(*b)) {
-            return Err(ParsePatchError::new("invalid char in unquoted filename"));
+            return Err(ParsePatchErrorKind::InvalidCharInUnquotedFilename.into());
         }
         Ok(bytes.into())
     }
@@ -325,7 +325,7 @@ fn decode_escaped<T: Text + ToOwned + ?Sized>(
 
             i += 1;
             if i >= bytes.len() {
-                return Err(ParsePatchError::new("expected escaped character"));
+                return Err(ParsePatchErrorKind::ExpectedEscapedChar.into());
             }
 
             let decoded = match bytes[i] {
@@ -341,23 +341,23 @@ fn decode_escaped<T: Text + ToOwned + ?Sized>(
                 // 3-digit octal: \0xx through \3xx (values 0x00–0xFF)
                 c @ b'0'..=b'3' => {
                     if i + 2 >= bytes.len() {
-                        return Err(ParsePatchError::new("invalid escaped character"));
+                        return Err(ParsePatchErrorKind::InvalidEscapedChar.into());
                     }
                     let d1 = bytes[i + 1];
                     let d2 = bytes[i + 2];
                     if !(b'0'..=b'7').contains(&d1) || !(b'0'..=b'7').contains(&d2) {
-                        return Err(ParsePatchError::new("invalid escaped character"));
+                        return Err(ParsePatchErrorKind::InvalidEscapedChar.into());
                     }
                     i += 2;
                     (c - b'0') << 6 | (d1 - b'0') << 3 | (d2 - b'0')
                 }
-                _ => return Err(ParsePatchError::new("invalid escaped character")),
+                _ => return Err(ParsePatchErrorKind::InvalidEscapedChar.into()),
             };
             result.push(decoded);
             i += 1;
             last_copy = i;
         } else if byte_needs_quoting(bytes[i]) {
-            return Err(ParsePatchError::new("invalid unescaped character"));
+            return Err(ParsePatchErrorKind::InvalidUnescapedChar.into());
         } else {
             i += 1;
         }
