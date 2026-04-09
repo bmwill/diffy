@@ -267,7 +267,7 @@ fn strip_newline<T: Text + ?Sized>(s: &T) -> Result<&T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse, parse_bytes};
+    use super::{parse, parse_bytes, ParsePatchErrorKind};
 
     #[test]
     fn test_escaped_filenames() {
@@ -288,7 +288,10 @@ mod tests {
 @@ -1,0 +1,1 @@
 +Oathbringer
 ";
-        parse(s).unwrap_err();
+        assert_eq!(
+            parse(s).unwrap_err(),
+            ParsePatchErrorKind::InvalidCharInUnquotedFilename.into(),
+        );
         parse_bytes(s.as_ref()).unwrap_err();
 
         // quoted with invalid escaped characters
@@ -298,7 +301,10 @@ mod tests {
 @@ -1,0 +1,1 @@
 +Oathbringer
 ";
-        parse(s).unwrap_err();
+        assert_eq!(
+            parse(s).unwrap_err(),
+            ParsePatchErrorKind::InvalidUnescapedChar.into(),
+        );
         parse_bytes(s.as_ref()).unwrap_err();
 
         // quoted with escaped characters
@@ -420,7 +426,10 @@ mod tests {
 @@ -1,0 +1,1 @@
 +content
 "#;
-        parse(s).unwrap_err();
+        assert_eq!(
+            parse(s).unwrap_err(),
+            ParsePatchErrorKind::InvalidEscapedChar.into(),
+        );
 
         // Non-octal digit in second position → error
         let s = r#"\
@@ -429,7 +438,10 @@ mod tests {
 @@ -1,0 +1,1 @@
 +content
 "#;
-        parse(s).unwrap_err();
+        assert_eq!(
+            parse(s).unwrap_err(),
+            ParsePatchErrorKind::InvalidEscapedChar.into(),
+        );
 
         // First octal digit > 3 → error (would overflow a byte)
         let s = r#"\
@@ -438,7 +450,10 @@ mod tests {
 @@ -1,0 +1,1 @@
 +content
 "#;
-        parse(s).unwrap_err();
+        assert_eq!(
+            parse(s).unwrap_err(),
+            ParsePatchErrorKind::InvalidEscapedChar.into(),
+        );
 
         // \101 = 'A' (0x41), first octal digit 1
         let s = r#"\
@@ -598,7 +613,10 @@ mod tests {
 @@ -1,0 +1,1 @@
 +Oathbringer
 ";
-        parse(s).unwrap_err();
+        assert_eq!(
+            parse(s).unwrap_err(),
+            ParsePatchErrorKind::MultipleOriginalHeaders.into(),
+        );
     }
 
     #[test]
