@@ -341,6 +341,35 @@ mod tests {
         assert_eq!(b.modified(), Some(&b"mo\0\t\r\n\\dified"[..]));
     }
 
+    // Git uses named escapes \a (BEL), \b (BS), \f (FF), \v (VT) in
+    // quoted filenames. Both `git apply` and GNU patch decode them.
+    //
+    // Observed with git 2.53.0:
+    //   $ printf 'x' > "$(printf 'f\x07')" && git add -A
+    //   $ git diff --cached --name-only
+    //   "f\a"
+    //
+    // Observed with GNU patch 2.7.1:
+    //   $ patch -p0 < test.patch   # with +++ "bel\a"
+    //   patching file bel<BEL>
+    //
+    // diffy currently rejects these as invalid escaped chars.
+    #[test]
+    fn escaped_filename_named_escapes_unsupported() {
+        for esc in ["\\a", "\\b", "\\f", "\\v"] {
+            let s = format!(
+                "\
+--- \"orig{esc}\"
++++ \"mod{esc}\"
+@@ -1,0 +1,1 @@
++content
+"
+            );
+            parse(&s).unwrap_err();
+            parse_bytes(s.as_ref()).unwrap_err();
+        }
+    }
+
     #[test]
     fn test_missing_filename_header() {
         // Missing Both '---' and '+++' lines
