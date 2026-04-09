@@ -1,10 +1,11 @@
+pub(crate) mod error;
 mod format;
 mod parse;
 #[cfg(feature = "color")]
 mod style;
 
+pub use error::ParsePatchError;
 pub use format::PatchFormatter;
-pub use parse::ParsePatchError;
 
 use std::{borrow::Cow, fmt, ops};
 
