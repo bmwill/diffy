@@ -12,10 +12,10 @@ fn trailing_garbage_after_complete_hunk() {
 this is trailing garbage
 that should be ignored
 ";
-    assert_eq!(
-        parse(s).unwrap_err().kind,
-        ParsePatchErrorKind::UnexpectedHunkLine,
-    );
+    let patch = parse(s).unwrap();
+    assert_eq!(patch.hunks().len(), 1);
+    assert_eq!(patch.hunks()[0].old_range().len(), 1);
+    assert_eq!(patch.hunks()[0].new_range().len(), 1);
 }
 
 #[test]
@@ -48,10 +48,8 @@ fn git_headers_after_hunk_ignored() {
 diff --git a/other.txt b/other.txt
 index 1234567..89abcdef 100644
 ";
-    assert_eq!(
-        parse(s).unwrap_err().kind,
-        ParsePatchErrorKind::UnexpectedHunkLine,
-    );
+    let patch = parse(s).unwrap();
+    assert_eq!(patch.hunks().len(), 1);
 }
 
 /// When splitting multi-patch input by `---/+++` boundaries, trailing
@@ -76,11 +74,10 @@ fn no_newline_at_eof_followed_by_trailing_garbage() {
 diff --git a/other.html b/other.html
 index 1234567..89abcdef 100644
 ";
-    // no_newline_context is set, so next non-@@ line → ExpectedEndOfHunk
-    assert_eq!(
-        parse(s).unwrap_err().kind,
-        ParsePatchErrorKind::ExpectedEndOfHunk,
-    );
+    let patch = parse(s).unwrap();
+    assert_eq!(patch.hunks().len(), 1);
+    assert_eq!(patch.hunks()[0].old_range().len(), 3);
+    assert_eq!(patch.hunks()[0].new_range().len(), 3);
 }
 
 #[test]
@@ -96,10 +93,8 @@ fn multi_hunk_with_trailing_garbage() {
 +B
 some trailing garbage
 ";
-    assert_eq!(
-        parse(s).unwrap_err().kind,
-        ParsePatchErrorKind::UnexpectedHunkLine,
-    );
+    let patch = parse(s).unwrap();
+    assert_eq!(patch.hunks().len(), 2);
 }
 
 #[test]
@@ -120,10 +115,9 @@ not a hunk line
 -b
 +B
 ";
-    assert_eq!(
-        parse(s).unwrap_err().kind,
-        ParsePatchErrorKind::UnexpectedHunkLine,
-    );
+    let patch = parse(s).unwrap();
+    // Only first hunk is parsed; second @@ is ignored as garbage
+    assert_eq!(patch.hunks().len(), 1);
 }
 
 #[test]
@@ -139,10 +133,10 @@ fn context_lines_counted_correctly() {
  context 3
 trailing garbage
 ";
-    assert_eq!(
-        parse(s).unwrap_err().kind,
-        ParsePatchErrorKind::UnexpectedHunkLine,
-    );
+    let patch = parse(s).unwrap();
+    assert_eq!(patch.hunks().len(), 1);
+    assert_eq!(patch.hunks()[0].old_range().len(), 4);
+    assert_eq!(patch.hunks()[0].new_range().len(), 4);
 }
 
 #[test]
