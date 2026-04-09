@@ -8,6 +8,8 @@ pub use parse::ParsePatchError;
 
 use std::{borrow::Cow, fmt, ops};
 
+use crate::utils::{ESCAPED_CHARS, ESCAPED_CHARS_BYTES};
+
 const NO_NEWLINE_AT_EOF: &str = "\\ No newline at end of file";
 
 /// Representation of all the differences between two files
@@ -145,9 +147,6 @@ where
 #[derive(PartialEq, Eq)]
 struct Filename<'a, T: ToOwned + ?Sized>(Cow<'a, T>);
 
-const ESCAPED_CHARS: &[char] = &['\n', '\t', '\0', '\r', '\"', '\\'];
-#[allow(clippy::byte_char_slices)]
-const ESCAPED_CHARS_BYTES: &[u8] = &[b'\n', b'\t', b'\0', b'\r', b'\"', b'\\'];
 
 impl Filename<'_, str> {
     fn needs_to_be_escaped(&self) -> bool {
