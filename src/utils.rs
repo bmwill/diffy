@@ -261,15 +261,23 @@ pub(crate) fn escaped_filename<T: Text + ToOwned + ?Sized>(
 fn decode_escaped<T: Text + ToOwned + ?Sized>(
     escaped: &T,
 ) -> Result<Cow<'_, [u8]>, ParsePatchError> {
-    let mut filename = Vec::new();
+    let bytes = escaped.as_bytes();
+    let mut result = Vec::new();
+    let mut i = 0;
+    let mut last_copy = 0;
+    let mut needs_allocation = false;
 
-    let mut chars = escaped.as_bytes().iter().copied();
-    while let Some(c) = chars.next() {
-        if c == b'\\' {
-            let ch = match chars
-                .next()
-                .ok_or_else(|| ParsePatchError::new("expected escaped character"))?
-            {
+    while i < bytes.len() {
+        if bytes[i] == b'\\' {
+            needs_allocation = true;
+            result.extend_from_slice(&bytes[last_copy..i]);
+
+            i += 1;
+            if i >= bytes.len() {
+                return Err(ParsePatchError::new("expected escaped character"));
+            }
+
+            let decoded = match bytes[i] {
                 b'n' => b'\n',
                 b't' => b'\t',
                 b'0' => b'\0',
@@ -278,13 +286,20 @@ fn decode_escaped<T: Text + ToOwned + ?Sized>(
                 b'\\' => b'\\',
                 _ => return Err(ParsePatchError::new("invalid escaped character")),
             };
-            filename.push(ch);
-        } else if ESCAPED_CHARS_BYTES.contains(&c) {
+            result.push(decoded);
+            i += 1;
+            last_copy = i;
+        } else if ESCAPED_CHARS_BYTES.contains(&bytes[i]) {
             return Err(ParsePatchError::new("invalid unescaped character"));
         } else {
-            filename.push(c);
+            i += 1;
         }
     }
 
-    Ok(filename.into())
+    if needs_allocation {
+        result.extend_from_slice(&bytes[last_copy..]);
+        Ok(Cow::Owned(result))
+    } else {
+        Ok(Cow::Borrowed(bytes))
+    }
 }
