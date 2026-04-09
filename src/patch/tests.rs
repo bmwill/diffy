@@ -1,0 +1,379 @@
+use super::parse::{parse, parse_bytes};
+use super::error::ParsePatchErrorKind;
+
+#[test]
+fn test_escaped_filenames() {
+    // No escaped characters
+    let s = "\
+--- original
++++ modified
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+    parse(s).unwrap();
+    parse_bytes(s.as_ref()).unwrap();
+
+    // unescaped characters fail parsing
+    let s = "\
+--- ori\"ginal
++++ modified
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+    assert_eq!(
+        parse(s).unwrap_err(),
+        ParsePatchErrorKind::InvalidCharInUnquotedFilename.into(),
+    );
+    parse_bytes(s.as_ref()).unwrap_err();
+
+    // quoted with invalid escaped characters
+    let s = "\
+--- \"ori\\\"g\rinal\"
++++ modified
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+    assert_eq!(
+        parse(s).unwrap_err(),
+        ParsePatchErrorKind::InvalidUnescapedChar.into(),
+    );
+    parse_bytes(s.as_ref()).unwrap_err();
+
+    // quoted with escaped characters
+    let s = r#"\
+--- "ori\"g\tinal"
++++ "mo\000\t\r\n\\dified"
+@@ -1,0 +1,1 @@
++Oathbringer
+"#;
+    let p = parse(s).unwrap();
+    assert_eq!(p.original(), Some("ori\"g\tinal"));
+    assert_eq!(p.modified(), Some("mo\0\t\r\n\\dified"));
+    let b = parse_bytes(s.as_ref()).unwrap();
+    assert_eq!(b.original(), Some(&b"ori\"g\tinal"[..]));
+    assert_eq!(b.modified(), Some(&b"mo\0\t\r\n\\dified"[..]));
+}
+
+// Git uses named escapes \a (BEL), \b (BS), \f (FF), \v (VT) in
+// quoted filenames. Both `git apply` and GNU patch decode them.
+//
+// Observed with git 2.53.0:
+//   $ printf 'x' > "$(printf 'f\x07')" && git add -A
+//   $ git diff --cached --name-only
+//   "f\a"
+//
+// Observed with GNU patch 2.7.1:
+//   $ patch -p0 < test.patch   # with +++ "bel\a"
+//   patching file bel<BEL>
+//
+#[test]
+fn escaped_filename_named_escapes() {
+    let cases: &[(&str, u8)] = &[
+        ("\\a", b'\x07'),
+        ("\\b", b'\x08'),
+        ("\\f", b'\x0c'),
+        ("\\v", b'\x0b'),
+    ];
+    for (esc, expected_byte) in cases {
+        let s = format!(
+            "\
+--- \"orig{esc}\"
++++ \"mod{esc}\"
+@@ -1,0 +1,1 @@
++content
+"
+        );
+        let p = parse(&s).unwrap();
+        let expected_orig = format!("orig{}", *expected_byte as char);
+        let expected_mod = format!("mod{}", *expected_byte as char);
+        assert_eq!(p.original(), Some(expected_orig.as_str()));
+        assert_eq!(p.modified(), Some(expected_mod.as_str()));
+    }
+}
+
+// Git uses 3-digit octal escapes (\000–\377) for bytes without a
+// named escape. Both `git apply` and GNU patch decode them.
+//
+// Observed with git 2.53.0:
+//   $ printf 'x' > "$(printf 'f\033')" && git add -A
+//   $ git diff --cached | grep '+++'
+//   +++ "b/f\033"
+//
+// Observed with GNU patch 2.7.1:
+//   $ patch -p1 < test.patch   # with +++ "b/tl\033"
+//   patching file tl<ESC>
+//
+// Found via llvm/llvm-project full-history replay
+// (commits 17af06ba..229c95ab, 6c031780..0683a1e5).
+#[test]
+fn escaped_filename_octal() {
+    // \033 = ESC (0x1B)
+    let s = r#"\
+--- "orig\033"
++++ "mod\033"
+@@ -1,0 +1,1 @@
++content
+"#;
+    let p = parse(s).unwrap();
+    assert_eq!(p.original(), Some("orig\x1b"));
+    assert_eq!(p.modified(), Some("mod\x1b"));
+
+    // \000 = NUL
+    let s = r#"\
+--- "orig\000"
++++ "mod\000"
+@@ -1,0 +1,1 @@
++content
+"#;
+    let p = parse(s).unwrap();
+    assert_eq!(p.original(), Some("orig\x00"));
+    assert_eq!(p.modified(), Some("mod\x00"));
+
+    // \177 = DEL (0x7F)
+    let s = r#"\
+--- "orig\177"
++++ "mod\177"
+@@ -1,0 +1,1 @@
++content
+"#;
+    let p = parse(s).unwrap();
+    assert_eq!(p.original(), Some("orig\x7f"));
+    assert_eq!(p.modified(), Some("mod\x7f"));
+
+    // \377 = 0xFF
+    let s = r#"\
+--- "orig\377"
++++ "mod\377"
+@@ -1,0 +1,1 @@
++content
+"#;
+    let b = parse_bytes(s.as_ref()).unwrap();
+    assert_eq!(b.original(), Some(&b"orig\xff"[..]));
+    assert_eq!(b.modified(), Some(&b"mod\xff"[..]));
+
+    // First octal digit > 3 → error (would overflow a byte)
+    let s = r#"\
+--- "orig\477"
++++ "mod\477"
+@@ -1,0 +1,1 @@
++content
+"#;
+    assert_eq!(
+        parse(s).unwrap_err(),
+        ParsePatchErrorKind::InvalidEscapedChar.into(),
+    );
+
+    // \101 = 'A' (0x41), first octal digit 1
+    let s = r#"\
+--- "orig\101"
++++ "mod\101"
+@@ -1,0 +1,1 @@
++content
+"#;
+    let p = parse(s).unwrap();
+    assert_eq!(p.original(), Some("origA"));
+    assert_eq!(p.modified(), Some("modA"));
+
+    // \277 = 0xBF, first octal digit 2
+    let s = r#"\
+--- "orig\277"
++++ "mod\277"
+@@ -1,0 +1,1 @@
++content
+"#;
+    let b = parse_bytes(s.as_ref()).unwrap();
+    assert_eq!(b.original(), Some(&b"orig\xbf"[..]));
+    assert_eq!(b.modified(), Some(&b"mod\xbf"[..]));
+
+    // Truncated octal (only 2 digits) → error
+    let s = r#"\
+--- "orig\03"
++++ "mod\03"
+@@ -1,0 +1,1 @@
++content
+"#;
+    assert_eq!(
+        parse(s).unwrap_err(),
+        ParsePatchErrorKind::InvalidEscapedChar.into(),
+    );
+
+    // Non-octal digit in second position → error
+    let s = r#"\
+--- "orig\08x"
++++ "mod\08x"
+@@ -1,0 +1,1 @@
++content
+"#;
+    assert_eq!(
+        parse(s).unwrap_err(),
+        ParsePatchErrorKind::InvalidEscapedChar.into(),
+    );
+}
+
+#[test]
+fn test_missing_filename_header() {
+    // Missing Both '---' and '+++' lines
+    let patch = r#"
+@@ -1,11 +1,12 @@
+ diesel::table! {
+     users1 (id) {
+-        id -> Nullable<Integer>,
++        id -> Integer,
+     }
+ }
+
+ diesel::table! {
+-    users2 (id) {
+-        id -> Nullable<Integer>,
++    users2 (myid) {
++        #[sql_name = "id"]
++        myid -> Integer,
+     }
+ }
+"#;
+
+    parse(patch).unwrap();
+
+    // Missing '---'
+    let s = "\
++++ modified
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+    parse(s).unwrap();
+
+    // Missing '+++'
+    let s = "\
+--- original
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+    parse(s).unwrap();
+
+    // Headers out of order
+    let s = "\
++++ modified
+--- original
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+    parse(s).unwrap();
+
+    // multiple headers should fail to parse
+    let s = "\
+--- original
+--- modified
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+    assert_eq!(
+        parse(s).unwrap_err(),
+        ParsePatchErrorKind::MultipleOriginalHeaders.into(),
+    );
+}
+
+#[test]
+fn adjacent_hunks_correctly_parse() {
+    let s = "\
+--- original
++++ modified
+@@ -110,7 +110,7 @@
+ --
+
+ I am afraid, however, that all I have known - that my story - will be forgotten.
+ I am afraid for the world that is to come.
+-Afraid that my plans will fail. Afraid of a doom worse than the Deepness.
++Afraid that Alendi will fail. Afraid of a doom brought by the Deepness.
+
+ Alendi was never the Hero of Ages.
+@@ -117,7 +117,7 @@
+ At best, I have amplified his virtues, creating a Hero where there was none.
+
+-At worst, I fear that all we believe may have been corrupted.
++At worst, I fear that I have corrupted all we believe.
+
+ --
+ Alendi must not reach the Well of Ascension. He must not take the power for himself.
+
+";
+    parse(s).unwrap();
+}
+
+// Verify that formatting a parsed patch with escaped filenames
+// produces output that re-parses to the same patch. This covers
+// both the `Display` (str) and `to_bytes` ([u8]) paths.
+#[test]
+fn escaped_filename_roundtrip_named() {
+    // Named escapes: \a \b \t \n \v \f \r \\ \"
+    let s = r#"\
+--- "a\a\b\t\n\v\f\r\\\""
++++ "b\a\b\t\n\v\f\r\\\""
+@@ -1,1 +1,1 @@
+-old
++new
+"#;
+    let p = parse(s).unwrap();
+
+    // str roundtrip via Display
+    let formatted = p.to_string();
+    let p2 = parse(&formatted).unwrap();
+    assert_eq!(p.original(), p2.original());
+    assert_eq!(p.modified(), p2.modified());
+
+    // bytes roundtrip via to_bytes
+    let b = parse_bytes(s.as_ref()).unwrap();
+    let bytes = b.to_bytes();
+    let b2 = parse_bytes(&bytes).unwrap();
+    assert_eq!(b.original(), b2.original());
+    assert_eq!(b.modified(), b2.modified());
+}
+
+#[test]
+fn escaped_filename_roundtrip_octal() {
+    // Octal escapes for control chars without named escapes
+    // and for high bytes (> 0x7f).
+    let s = r#"\
+--- "a\001\002\037\177"
++++ "b\001\002\037\177"
+@@ -1,1 +1,1 @@
+-old
++new
+"#;
+    let p = parse(s).unwrap();
+    let formatted = p.to_string();
+    let p2 = parse(&formatted).unwrap();
+    assert_eq!(p.original(), p2.original());
+    assert_eq!(p.modified(), p2.modified());
+
+    // Bytes roundtrip with a high byte (\377 = 0xFF).
+    let s = r#"\
+--- "a\377"
++++ "b\377"
+@@ -1,1 +1,1 @@
+-old
++new
+"#;
+    let b = parse_bytes(s.as_ref()).unwrap();
+    let bytes = b.to_bytes();
+    let b2 = parse_bytes(&bytes).unwrap();
+    assert_eq!(b.original(), b2.original());
+    assert_eq!(b.modified(), b2.modified());
+}
+
+// Filenames without special characters should not be quoted.
+#[test]
+fn plain_filename_roundtrip() {
+    let s = "\
+--- a/normal.txt
++++ b/normal.txt
+@@ -1,1 +1,1 @@
+-old
++new
+";
+    let p = parse(s).unwrap();
+    let formatted = p.to_string();
+    assert!(!formatted.contains('"'));
+    let p2 = parse(&formatted).unwrap();
+    assert_eq!(p.original(), p2.original());
+    assert_eq!(p.modified(), p2.modified());
+}
