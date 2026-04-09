@@ -1,5 +1,5 @@
 use super::error::ParsePatchErrorKind;
-use super::parse::{parse, parse_bytes};
+use super::parse::{parse, parse_bytes, parse_bytes_strict, parse_strict};
 
 #[test]
 fn trailing_garbage_after_complete_hunk() {
@@ -141,8 +141,6 @@ trailing garbage
 
 // Strict mode (git-apply behavior): rejects orphaned hunk headers
 // hidden behind trailing content, but allows plain trailing junk.
-// Currently all use permissive `parse`; the next commit introduces
-// `parse_strict` and updates assertions where behavior diverges.
 mod strict_mode {
     use super::*;
 
@@ -157,7 +155,7 @@ mod strict_mode {
 +new
 this is trailing garbage
 ";
-        let patch = parse(s).unwrap();
+        let patch = parse_strict(s).unwrap();
         assert_eq!(patch.hunks().len(), 1);
     }
 
@@ -171,15 +169,14 @@ this is trailing garbage
 +new
 this is trailing garbage
 ";
-        let patch = parse_bytes(&s[..]).unwrap();
+        let patch = parse_bytes_strict(&s[..]).unwrap();
         assert_eq!(patch.hunks().len(), 1);
     }
 
     #[test]
     fn orphaned_hunk_header_after_junk() {
-        // Junk between hunks hides the second @@ — strict should reject this
+        // Junk between hunks hides the second @@ — strict rejects this
         // since git apply errors with "patch fragment without header".
-        // Currently permissive: succeeds with 1 hunk.
         let s = "\
 --- a/file.txt
 +++ b/file.txt
@@ -191,8 +188,10 @@ not a hunk line
 -b
 +B
 ";
-        let patch = parse(s).unwrap();
-        assert_eq!(patch.hunks().len(), 1);
+        assert_eq!(
+            parse_strict(s).unwrap_err().kind,
+            ParsePatchErrorKind::OrphanedHunkHeader,
+        );
     }
 
     #[test]
@@ -204,7 +203,7 @@ not a hunk line
 -old
 +new
 ";
-        let patch = parse(s).unwrap();
+        let patch = parse_strict(s).unwrap();
         assert_eq!(patch.hunks().len(), 1);
     }
 
@@ -220,7 +219,7 @@ not a hunk line
 -b
 +B
 ";
-        let patch = parse(s).unwrap();
+        let patch = parse_strict(s).unwrap();
         assert_eq!(patch.hunks().len(), 2);
     }
 
@@ -236,7 +235,7 @@ garbage before hunk complete
  line 3
 ";
         assert_eq!(
-            parse(s).unwrap_err().kind,
+            parse_strict(s).unwrap_err().kind,
             ParsePatchErrorKind::UnexpectedHunkLine,
         );
     }

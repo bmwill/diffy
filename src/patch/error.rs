@@ -107,6 +107,9 @@ pub(crate) enum ParsePatchErrorKind {
 
     /// Missing newline at end of line.
     MissingNewline,
+
+    /// Orphaned hunk header found after trailing content.
+    OrphanedHunkHeader,
 }
 
 impl fmt::Display for ParsePatchErrorKind {
@@ -132,6 +135,7 @@ impl fmt::Display for ParsePatchErrorKind {
             Self::UnexpectedNoNewlineMarker => "unexpected 'No newline at end of file' line",
             Self::UnexpectedHunkLine => "unexpected line in hunk body",
             Self::MissingNewline => "missing newline",
+            Self::OrphanedHunkHeader => "orphaned hunk header after trailing content",
         };
         write!(f, "{msg}")
     }
