@@ -156,7 +156,10 @@ fn verify_hunks_in_order<T: ?Sized>(hunks: &[Hunk<'_, T>]) -> bool {
 
 fn hunks<'a, T: Text + ?Sized>(parser: &mut Parser<'a, T>) -> Result<Vec<Hunk<'a, T>>> {
     let mut hunks = Vec::new();
-    while parser.peek().is_some() {
+    // Following GNU patch behavior: stop at non-@@ content.
+    // Any trailing content (including hidden @@ headers) is silently ignored.
+    // This is more permissive than git apply, which errors on junk between hunks.
+    while parser.peek().is_some_and(|line| line.starts_with("@@ ")) {
         hunks.push(hunk(parser)?);
     }
 
@@ -173,13 +176,7 @@ fn hunk<'a, T: Text + ?Sized>(parser: &mut Parser<'a, T>) -> Result<Hunk<'a, T>>
     let header_line = parser.next()?;
     let (range1, range2, function_context) =
         hunk_header(header_line).map_err(|e| parser.error_at(e.kind, hunk_start))?;
-    let lines = hunk_lines(parser)?;
-
-    // check counts of lines to see if they match the ranges in the hunk header
-    let (len1, len2) = super::hunk_lines_count(&lines);
-    if len1 != range1.len || len2 != range2.len {
-        return Err(parser.error_at(ParsePatchErrorKind::HunkMismatch, hunk_start));
-    }
+    let lines = hunk_lines(parser, range1.len, range2.len, hunk_start)?;
 
     Ok(Hunk::new(range1, range2, function_context, lines))
 }
@@ -223,36 +220,61 @@ fn range<T: Text + ?Sized>(s: &T) -> Result<HunkRange> {
     Ok(HunkRange::new(start, len))
 }
 
-fn hunk_lines<'a, T: Text + ?Sized>(parser: &mut Parser<'a, T>) -> Result<Vec<Line<'a, T>>> {
+fn hunk_lines<'a, T: Text + ?Sized>(
+    parser: &mut Parser<'a, T>,
+    expected_old: usize,
+    expected_new: usize,
+    hunk_start: usize,
+) -> Result<Vec<Line<'a, T>>> {
     let mut lines: Vec<Line<'a, T>> = Vec::new();
     let mut no_newline_context = false;
     let mut no_newline_delete = false;
     let mut no_newline_insert = false;
 
+    let mut old_count = 0;
+    let mut new_count = 0;
+
     while let Some(line) = parser.peek() {
+        let hunk_complete = old_count >= expected_old && new_count >= expected_new;
+
         let line = if line.starts_with("@") {
             break;
         } else if no_newline_context {
+            if hunk_complete {
+                break;
+            }
             return Err(parser.error(ParsePatchErrorKind::ExpectedEndOfHunk));
         } else if let Some(line) = line.strip_prefix(" ") {
+            if hunk_complete {
+                break;
+            }
             Line::Context(line)
         } else if line.starts_with("\n") {
+            if hunk_complete {
+                break;
+            }
             Line::Context(*line)
         } else if let Some(line) = line.strip_prefix("-") {
             if no_newline_delete {
                 return Err(parser.error(ParsePatchErrorKind::TooManyDeletedLines));
+            }
+            if hunk_complete {
+                break;
             }
             Line::Delete(line)
         } else if let Some(line) = line.strip_prefix("+") {
             if no_newline_insert {
                 return Err(parser.error(ParsePatchErrorKind::TooManyInsertedLines));
             }
+            if hunk_complete {
+                break;
+            }
             Line::Insert(line)
         } else if line.starts_with(NO_NEWLINE_AT_EOF) {
             let last_line = lines
                 .pop()
                 .ok_or_else(|| parser.error(ParsePatchErrorKind::UnexpectedNoNewlineMarker))?;
-            match last_line {
+            let modified = match last_line {
                 Line::Context(line) => {
                     no_newline_context = true;
                     Line::Context(strip_newline(line)?)
@@ -265,13 +287,36 @@ fn hunk_lines<'a, T: Text + ?Sized>(parser: &mut Parser<'a, T>) -> Result<Vec<Li
                     no_newline_insert = true;
                     Line::Insert(strip_newline(line)?)
                 }
-            }
+            };
+            lines.push(modified);
+            parser.next()?;
+            continue;
         } else {
+            if hunk_complete {
+                break;
+            }
             return Err(parser.error(ParsePatchErrorKind::UnexpectedHunkLine));
         };
 
+        match &line {
+            Line::Context(_) => {
+                old_count += 1;
+                new_count += 1;
+            }
+            Line::Delete(_) => {
+                old_count += 1;
+            }
+            Line::Insert(_) => {
+                new_count += 1;
+            }
+        }
+
         lines.push(line);
         parser.next()?;
+    }
+
+    if old_count != expected_old || new_count != expected_new {
+        return Err(parser.error_at(ParsePatchErrorKind::HunkMismatch, hunk_start));
     }
 
     Ok(lines)
