@@ -3,6 +3,8 @@ mod format;
 mod parse;
 #[cfg(feature = "color")]
 mod style;
+#[cfg(test)]
+mod tests;
 
 pub use error::ParsePatchError;
 pub use format::PatchFormatter;
