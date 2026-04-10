@@ -1,6 +1,6 @@
 pub(crate) mod error;
 mod format;
-mod parse;
+pub(crate) mod parse;
 #[cfg(feature = "color")]
 mod style;
 #[cfg(test)]
