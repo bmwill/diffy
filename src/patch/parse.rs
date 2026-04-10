@@ -54,21 +54,32 @@ impl<'a, T: Text + ?Sized> Parser<'a, T> {
 }
 
 pub fn parse(input: &str) -> Result<Patch<'_, str>> {
-    parse_one(input).map(|(patch, _)| patch)
+    let (result, _consumed) = parse_one(input);
+    result
 }
 
-/// Parses one patch from input and returns bytes consumed.
-pub(crate) fn parse_one(input: &str) -> Result<(Patch<'_, str>, usize)> {
+/// Parses one patch from input.
+///
+/// Always returns consumed bytes alongside the result
+/// so callers can advance past the parsed or partially parsed content.
+pub(crate) fn parse_one(input: &str) -> (Result<Patch<'_, str>>, usize) {
     let mut parser = Parser::new(input);
-    let header = patch_header(&mut parser)?;
-    let hunks = hunks(&mut parser)?;
+
+    let header = match patch_header(&mut parser) {
+        Ok(h) => h,
+        Err(e) => return (Err(e), parser.offset()),
+    };
+    let hunks = match hunks(&mut parser) {
+        Ok(h) => h,
+        Err(e) => return (Err(e), parser.offset()),
+    };
 
     let patch = Patch::new(
         header.0.map(convert_cow_to_str),
         header.1.map(convert_cow_to_str),
         hunks,
     );
-    Ok((patch, parser.offset()))
+    (Ok(patch), parser.offset())
 }
 
 pub fn parse_strict(input: &str) -> Result<Patch<'_, str>> {
