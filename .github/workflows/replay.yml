@@ -1,0 +1,74 @@
+name: Replay
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      name:
+        description: 'Display name (if set, job shows only parse_mode)'
+        required: false
+        default: ''
+        type: string
+      repo_url:
+        description: 'Git repository URL to clone and test against'
+        required: false
+        default: ''
+        type: string
+      commits:
+        description: 'Commits to replay: number (e.g., 200), range (e.g., abc..def), or 0 for all'
+        required: true
+        type: string
+
+  workflow_dispatch:
+    inputs:
+      repo_url:
+        description: 'Git repository URL to clone and test against'
+        required: true
+        type: string
+      commits:
+        description: 'Commits to replay: number (e.g., 200), range (e.g., abc..def), or 0 for all'
+        required: true
+        default: '200'
+        type: string
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+  CLICOLOR: 1
+  CI: 1
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        parse_mode: [unidiff]
+    name: ${{ inputs.name && matrix.parse_mode || format('{0} ({1}, {2})', inputs.repo_url, matrix.parse_mode, inputs.commits) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: ${{ inputs.repo_url && 1 || 0 }}
+      - if: inputs.repo_url != ''
+        env:
+          REPO_URL: ${{ inputs.repo_url }}
+          COMMITS: ${{ inputs.commits }}
+        run: |
+          set -euo pipefail
+          # Guard against non-numeric values when computing --depth.
+          # Range syntax (a..b) and "0" both require full history.
+          if [[ "$COMMITS" == *".."* || "$COMMITS" == "0" ]]; then
+            git clone "$REPO_URL" target/test-repo
+          elif [[ "$COMMITS" =~ ^[0-9]+$ ]]; then
+            git clone "$REPO_URL" --depth "$((COMMITS + 1))" target/test-repo
+          else
+            echo "invalid commits value: $COMMITS" >&2
+            exit 1
+          fi
+      - run: rustup toolchain install stable --profile minimal
+      - run: cargo test --release --test replay -- --nocapture
+        env:
+          DIFFY_TEST_REPO: ${{ inputs.repo_url == '' && '.' || 'target/test-repo' }}
+          DIFFY_TEST_COMMITS: ${{ inputs.commits }}
+          DIFFY_TEST_PARSE_MODE: ${{ matrix.parse_mode }}

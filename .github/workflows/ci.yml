@@ -48,3 +48,23 @@ jobs:
       - uses: actions/checkout@v6
       - name: Check semver
         uses: obi1kenobi/cargo-semver-checks-action@v2
+
+  replay:
+    strategy:
+      matrix:
+        include:
+          - name: diffy
+            repo_url: ''
+            commits: '0'
+          - name: rust-lang/cargo
+            repo_url: https://github.com/rust-lang/cargo
+            commits: '200'
+          - name: rust-lang/rust
+            repo_url: https://github.com/rust-lang/rust
+            commits: '30'
+    name: replay (${{ matrix.name }})
+    uses: ./.github/workflows/replay.yml
+    with:
+      name: ${{ matrix.name }}
+      repo_url: ${{ matrix.repo_url }}
+      commits: ${{ matrix.commits }}

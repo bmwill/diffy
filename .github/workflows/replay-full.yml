@@ -1,0 +1,29 @@
+name: Replay (Full History)
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  replay-full:
+    strategy:
+      matrix:
+        include:
+          - name: rust-lang/cargo
+            repo_url: https://github.com/rust-lang/cargo
+          - name: rust-lang/rustup
+            repo_url: https://github.com/rust-lang/rustup
+          - name: rust-lang/rust-analyzer
+            repo_url: https://github.com/rust-lang/rust-analyzer
+          - name: rust-lang/rust-clippy
+            repo_url: https://github.com/rust-lang/rust-clippy
+    name: ${{ matrix.name }}
+    uses: ./.github/workflows/replay.yml
+    with:
+      name: ${{ matrix.name }}
+      repo_url: ${{ matrix.repo_url }}
+      commits: '0'
