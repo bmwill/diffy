@@ -1,0 +1,25 @@
+diff --git a/mir-test.diff b/mir-test.diff
+deleted file mode 100644
+index 98012d7..0000000
+--- a/mir-test.diff
++++ /dev/null
+@@ -1,12 +0,0 @@
+-- // MIR before
+-+ // MIR after
+-
+-  fn opt() {
+-      bb0: {
+--         nop;
+--     }
+-- 
+--     bb1: {
+--         nop;
+-      }
+-  }
+diff --git a/example.rs b/example.rs
+index 8f3b7ef..2a40712 100644
+--- a/example.rs
++++ b/example.rs
+@@ -1 +1,2 @@
+ fn foo() {}
++fn bar() {}

@@ -1,0 +1,13 @@
+--- foo.txt
++++ foo.txt
+@@ -1 +1 @@
+-foo line1
++FOO LINE1
+JUNK BETWEEN FILES!!!!
+This preamble text should be ignored
+by both GNU patch and diffy
+--- bar.txt
++++ bar.txt
+@@ -1 +1 @@
+-bar line1
++BAR LINE1

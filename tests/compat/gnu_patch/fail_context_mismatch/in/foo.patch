@@ -1,0 +1,8 @@
+--- file.txt
++++ file.txt
+@@ -1,4 +1,4 @@
+ This is line one.
+-This is WRONG context.
++This is the replacement.
+ This is line three.
+ This is line four.

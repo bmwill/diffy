@@ -1,0 +1,11 @@
+--- file1.rs
++++ file1.rs
+@@ -1,2 +1,2 @@
+ line1
+-old
++++ foo
+--- file2.rs
++++ file2.rs
+@@ -1 +1 @@
+-a
++b

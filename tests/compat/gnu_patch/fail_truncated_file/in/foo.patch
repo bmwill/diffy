@@ -1,0 +1,9 @@
+--- file.txt
++++ file.txt
+@@ -1,5 +1,5 @@
+ Line one.
+ Line two.
+-Line three.
++Line THREE.
+ Line four.
+ Line five.
