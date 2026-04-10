@@ -192,6 +192,9 @@ fn reject_orphaned_hunk_headers<T: Text + ?Sized>(parser: &mut Parser<'_, T>) ->
 
 fn hunks<'a, T: Text + ?Sized>(parser: &mut Parser<'a, T>) -> Result<Vec<Hunk<'a, T>>> {
     let mut hunks = Vec::new();
+
+    // Parse hunks while we see @@ headers.
+    //
     // Following GNU patch behavior: stop at non-@@ content.
     // Any trailing content (including hidden @@ headers) is silently ignored.
     // This is more permissive than git apply, which errors on junk between hunks.
@@ -267,15 +270,20 @@ fn hunk_lines<'a, T: Text + ?Sized>(
     let mut no_newline_delete = false;
     let mut no_newline_insert = false;
 
+    // Track current line counts (old = context + delete, new = context + insert)
     let mut old_count = 0;
     let mut new_count = 0;
 
     while let Some(line) = parser.peek() {
+        // Check if hunk is complete
         let hunk_complete = old_count >= expected_old && new_count >= expected_new;
 
         let line = if line.starts_with("@") {
             break;
         } else if no_newline_context {
+            // After `\ No newline at end of file` on a context line,
+            // only a new hunk header is valid. Any other line means
+            // the hunk should be complete, or it's an error.
             if hunk_complete {
                 break;
             }
@@ -307,6 +315,13 @@ fn hunk_lines<'a, T: Text + ?Sized>(
             }
             Line::Insert(line)
         } else if line.starts_with(NO_NEWLINE_AT_EOF) {
+            // The `\ No newline at end of file` marker indicates
+            // the previous line doesn't end with a newline.
+            // It's not a content line itself.
+            // Therefore, we
+            //
+            // * strip the newline character of the previous line
+            // * don't increment line counts and continue to next directly
             let last_line = lines
                 .pop()
                 .ok_or_else(|| parser.error(ParsePatchErrorKind::UnexpectedNoNewlineMarker))?;
@@ -328,7 +343,9 @@ fn hunk_lines<'a, T: Text + ?Sized>(
             parser.next()?;
             continue;
         } else {
+            // Non-hunk line encountered
             if hunk_complete {
+                // Hunk is complete, treat remaining content as garbage
                 break;
             }
             return Err(parser.error(ParsePatchErrorKind::UnexpectedHunkLine));
@@ -351,6 +368,7 @@ fn hunk_lines<'a, T: Text + ?Sized>(
         parser.next()?;
     }
 
+    // Final check: ensure we got the expected number of lines
     if old_count != expected_old || new_count != expected_new {
         return Err(parser.error_at(ParsePatchErrorKind::HunkMismatch, hunk_start));
     }
