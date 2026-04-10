@@ -19,6 +19,7 @@ color = ["dep:anstyle"]
 anstyle = { version = "1.0.13", optional = true }
 
 [dev-dependencies]
+rayon = "1.10.0"
 snapbox = { version = "0.6.24", features = ["dir"] }
 
 [[example]]
