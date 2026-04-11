@@ -141,6 +141,16 @@ fn false_positive_plus_plus_in_hunk() {
     Case::gnu_patch("false_positive_plus_plus_in_hunk").run();
 }
 
+// Single-file patch with junk between hunks.
+//
+// - GNU patch: succeeds, ignores trailing junk, applies first hunk only
+// - git apply: errors ("patch fragment without header")
+// - diffy: succeeds, matches GNU patch behavior
+#[test]
+fn junk_between_hunks() {
+    Case::gnu_patch("junk_between_hunks").run();
+}
+
 // Failure cases
 
 #[test]
@@ -162,16 +172,6 @@ fn fail_truncated_file() {
     Case::gnu_patch("fail_truncated_file")
         .expect_success(false)
         .run();
-}
-
-// Single-file patch with junk between hunks.
-//
-// - GNU patch: succeeds, ignores trailing junk, applies first hunk only
-// - git apply: errors ("patch fragment without header")
-// - diffy: succeeds, matches GNU patch behavior
-#[test]
-fn junk_between_hunks() {
-    Case::gnu_patch("junk_between_hunks").run();
 }
 
 // Patch with ---/+++ headers but no @@ hunks.
