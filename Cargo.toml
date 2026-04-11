@@ -25,7 +25,3 @@ snapbox = { version = "0.6.24", features = ["dir"] }
 [[example]]
 name = "patch_formatter"
 required-features = ["color"]
-
-[[test]]
-name = "replay"
-test = false
