@@ -33,9 +33,7 @@ fn path_quoted_named_escape() {
 //   $ patch -p0 < test.patch   # with +++ "tl\033"
 //   patching file tl<ESC>
 //
-// diffy currently misparsed \033: the \0 is consumed as a standalone NUL
-// byte, leaving "33" as literal characters.
-//
+// diffy decodes these correctly.
 #[test]
 fn path_quoted_octal_escape() {
     Case::gnu_patch("path_quoted_octal_escape").run();
