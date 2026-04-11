@@ -6,7 +6,7 @@
 //! ## Usage
 //!
 //! ```console
-//! $ cargo test --test replay -- --nocapture
+//! $ cargo test --test replay -- --ignored --nocapture
 //! ```
 //!
 //! ## Environment Variables
