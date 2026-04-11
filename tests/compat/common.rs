@@ -260,7 +260,9 @@ pub fn apply_diffy(
             PatchKind::Text(patch) => {
                 let original = if let Some(name) = original_name {
                     let original_path = in_dir.join(name);
-                    fs::read_to_string(&original_path).unwrap_or_default()
+                    fs::read_to_string(&original_path).unwrap_or_else(|e| {
+                        panic!("failed to read {}: {e}", original_path.display())
+                    })
                 } else {
                     String::new()
                 };
