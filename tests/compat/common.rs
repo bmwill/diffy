@@ -2,16 +2,27 @@
 
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     sync::Once,
 };
 
 use diffy::patch_set::{FileOperation, ParseOptions, PatchKind, PatchSet, PatchSetParseError};
 
+/// Which external tool to compare against.
+#[derive(Clone, Copy)]
+pub enum CompatMode {
+    /// `git apply` with `ParseOptions::gitdiff()`
+    Git,
+    /// GNU `patch` with `ParseOptions::unidiff()`
+    GnuPatch,
+}
+
 /// A test case with fluent builder API.
 pub struct Case<'a> {
     case_name: &'a str,
+    mode: CompatMode,
     /// Strip level for path prefixes (default: 0)
     strip_level: u32,
     /// Whether diffy is expected to succeed (default: true)
@@ -21,20 +32,37 @@ pub struct Case<'a> {
 }
 
 impl<'a> Case<'a> {
-    /// Create a test case for GNU patch comparison.
-    pub fn gnu_patch(name: &'a str) -> Self {
+    /// Create a test case for `git apply` comparison.
+    pub fn git(name: &'a str) -> Self {
         Self {
             case_name: name,
+            mode: CompatMode::Git,
             strip_level: 0,
             expect_success: true,
             expect_compat: true,
         }
     }
 
-    /// Get the case directory path.
+    /// Create a test case for GNU patch comparison.
+    pub fn gnu_patch(name: &'a str) -> Self {
+        Self {
+            case_name: name,
+            mode: CompatMode::GnuPatch,
+            strip_level: 0,
+            expect_success: true,
+            expect_compat: true,
+        }
+    }
+
+    /// Get the case directory path based on mode.
     fn case_dir(&self) -> PathBuf {
+        let subdir = match self.mode {
+            CompatMode::Git => "git",
+            CompatMode::GnuPatch => "gnu_patch",
+        };
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/compat/gnu_patch")
+            .join("tests/compat")
+            .join(subdir)
             .join(self.case_name)
     }
 
@@ -62,12 +90,19 @@ impl<'a> Case<'a> {
             .unwrap_or_else(|e| panic!("failed to read {}: {e}", patch_path.display()));
 
         let case_name = self.case_name;
+        let prefix = match self.mode {
+            CompatMode::Git => "git",
+            CompatMode::GnuPatch => "gnu",
+        };
         let temp_base = temp_base();
 
-        let diffy_output = temp_base.join(format!("gnu-{case_name}-diffy"));
+        let diffy_output = temp_base.join(format!("{prefix}-{case_name}-diffy"));
         create_output_dir(&diffy_output);
 
-        let opts = ParseOptions::unidiff();
+        let opts = match self.mode {
+            CompatMode::Git => ParseOptions::gitdiff(),
+            CompatMode::GnuPatch => ParseOptions::unidiff(),
+        };
 
         // Apply with diffy
         let diffy_result = apply_diffy(&in_dir, &patch, &diffy_output, opts, self.strip_level);
@@ -81,12 +116,19 @@ impl<'a> Case<'a> {
 
         // In CI mode, also verify external tool behavior
         if is_ci() {
-            let external_output = temp_base.join(format!("gnu-{case_name}-external"));
+            let external_output = temp_base.join(format!("{prefix}-{case_name}-external"));
             create_output_dir(&external_output);
 
-            print_patch_version();
-            let external_result =
-                gnu_patch_apply(&in_dir, &patch_path, &external_output, self.strip_level);
+            let external_result = match self.mode {
+                CompatMode::Git => {
+                    print_git_version();
+                    git_apply(&external_output, &patch, self.strip_level, &in_dir)
+                }
+                CompatMode::GnuPatch => {
+                    print_patch_version();
+                    gnu_patch_apply(&in_dir, &patch_path, &external_output, self.strip_level)
+                }
+            };
 
             // For success cases where both succeed and are expected to be compatible,
             // verify outputs match
@@ -120,6 +162,39 @@ impl<'a> Case<'a> {
 
 // External tool invocations
 
+fn git_apply(
+    output_dir: &Path,
+    patch: &str,
+    strip_level: u32,
+    in_dir: &Path,
+) -> Result<(), String> {
+    copy_input_files(in_dir, output_dir, &["patch"]);
+
+    let mut cmd = Command::new("git");
+    cmd.env("GIT_CONFIG_NOSYSTEM", "1");
+    cmd.env("GIT_CONFIG_GLOBAL", "/dev/null");
+    cmd.current_dir(output_dir);
+    cmd.args(["apply", &format!("-p{strip_level}"), "-"]);
+    cmd.stdin(Stdio::piped());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    let mut child = cmd.spawn().expect("failed to spawn git apply");
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(patch.as_bytes())
+        .unwrap();
+
+    let output = child.wait_with_output().unwrap();
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
 fn gnu_patch_apply(
     in_dir: &Path,
     patch_path: &Path,
@@ -147,6 +222,24 @@ fn gnu_patch_apply(
             String::from_utf8_lossy(&output.stderr)
         ))
     }
+}
+
+fn print_git_version() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let output = Command::new("git").arg("--version").output();
+        match output {
+            Ok(o) if o.status.success() => {
+                let version = String::from_utf8_lossy(&o.stdout);
+                eprintln!(
+                    "git version: {}",
+                    version.lines().next().unwrap_or("unknown")
+                );
+            }
+            Ok(o) => eprintln!("git --version failed: {}", o.status),
+            Err(e) => eprintln!("git command not found: {e}"),
+        }
+    });
 }
 
 fn print_patch_version() {

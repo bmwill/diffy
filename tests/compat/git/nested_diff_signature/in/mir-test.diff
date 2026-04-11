@@ -1,0 +1,12 @@
+- // MIR before
++ // MIR after
+
+  fn opt() {
+      bb0: {
+-         nop;
+-     }
+- 
+-     bb1: {
+-         nop;
+      }
+  }

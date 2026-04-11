@@ -1,0 +1,7 @@
+diff --git a/foo bar.txt b/foo bar.txt
+index 3367afd..3e75765 100644
+--- a/foo bar.txt
++++ b/foo bar.txt
+@@ -1 +1 @@
+-old
++new
