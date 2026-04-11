@@ -19,7 +19,7 @@ color = ["dep:anstyle"]
 anstyle = { version = "1.0.13", optional = true }
 
 [dev-dependencies]
-snapbox = "0.6.24"
+snapbox = { version = "0.6.24", features = ["dir"] }
 
 [[example]]
 name = "patch_formatter"

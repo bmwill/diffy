@@ -1,0 +1,8 @@
+--- file.txt
++++ file.txt
+@@ -1,4 +1,4 @@
+ Alpha
+-This line does not exist
++Replacement line
+ Gamma
+ Delta
