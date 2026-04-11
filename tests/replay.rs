@@ -445,7 +445,11 @@ fn process_commit(repo: &Path, parent: &str, child: &str, mode: TestMode) -> Com
     }
 }
 
+// Ignored by default so `cargo test` stays fast; CI opts in via `--ignored`.
+// Using `#[ignore]` instead of `test = false` keeps the file in clippy's
+// `--all-targets` view so lints still fire here.
 #[test]
+#[ignore = "replay test runs git subprocesses; opt in via --ignored"]
 fn replay() {
     let repo = repo_path();
     let selection = commit_selection();
