@@ -17,18 +17,30 @@ type Result<T, E = ParsePatchError> = std::result::Result<T, E>;
 /// Defaults match the [`parse`]/[`parse_bytes`] behavior.
 #[derive(Clone, Copy)]
 pub(crate) struct ParseOpts {
+    skip_preamble: bool,
     reject_orphaned_hunks: bool,
 }
 
 impl Default for ParseOpts {
     fn default() -> Self {
         Self {
+            skip_preamble: true,
             reject_orphaned_hunks: false,
         }
     }
 }
 
 impl ParseOpts {
+    /// Don't skip preamble lines before `---`/`+++`/`@@`.
+    ///
+    /// Useful when the caller has already positioned the input
+    /// at the start of the patch content.
+    #[allow(dead_code)] // will be used by patch_set parser
+    pub(crate) fn no_skip_preamble(mut self) -> Self {
+        self.skip_preamble = false;
+        self
+    }
+
     /// Reject orphaned `@@ ` hunk headers after parsed hunks,
     /// matching `git apply` behavior.
     pub(crate) fn reject_orphaned_hunks(mut self) -> Self {
@@ -90,7 +102,7 @@ pub fn parse(input: &str) -> Result<Patch<'_, str>> {
 pub(crate) fn parse_one(input: &str, opts: ParseOpts) -> (Result<Patch<'_, str>>, usize) {
     let mut parser = Parser::new(input);
 
-    let header = match patch_header(&mut parser) {
+    let header = match patch_header(&mut parser, &opts) {
         Ok(h) => h,
         Err(e) => return (Err(e), parser.offset()),
     };
@@ -123,7 +135,7 @@ pub fn parse_strict(input: &str) -> Result<Patch<'_, str>> {
 
 pub fn parse_bytes(input: &[u8]) -> Result<Patch<'_, [u8]>> {
     let mut parser = Parser::new(input);
-    let header = patch_header(&mut parser)?;
+    let header = patch_header(&mut parser, &ParseOpts::default())?;
     let hunks = hunks(&mut parser)?;
 
     Ok(Patch::new(header.0, header.1, hunks))
@@ -131,7 +143,7 @@ pub fn parse_bytes(input: &[u8]) -> Result<Patch<'_, [u8]>> {
 
 pub fn parse_bytes_strict(input: &[u8]) -> Result<Patch<'_, [u8]>> {
     let mut parser = Parser::new(input);
-    let header = patch_header(&mut parser)?;
+    let header = patch_header(&mut parser, &ParseOpts::default())?;
     let hunks = hunks(&mut parser)?;
     reject_orphaned_hunk_headers(&mut parser)?;
 
@@ -153,8 +165,11 @@ fn convert_cow_to_str(cow: Cow<'_, [u8]>) -> Result<Cow<'_, str>> {
 #[allow(clippy::type_complexity)]
 fn patch_header<'a, T: Text + ToOwned + ?Sized>(
     parser: &mut Parser<'a, T>,
+    opts: &ParseOpts,
 ) -> Result<(Option<Cow<'a, [u8]>>, Option<Cow<'a, [u8]>>)> {
-    skip_header_preamble(parser)?;
+    if opts.skip_preamble {
+        skip_header_preamble(parser)?;
+    }
 
     let mut filename1 = None;
     let mut filename2 = None;
