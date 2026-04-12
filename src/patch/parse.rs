@@ -95,6 +95,28 @@ pub fn parse(input: &str) -> Result<Patch<'_, str>> {
     result
 }
 
+pub fn parse_strict(input: &str) -> Result<Patch<'_, str>> {
+    let (result, _consumed) = parse_one(input, ParseOpts::default().reject_orphaned_hunks());
+    result
+}
+
+pub fn parse_bytes(input: &[u8]) -> Result<Patch<'_, [u8]>> {
+    let mut parser = Parser::new(input);
+    let header = patch_header(&mut parser, &ParseOpts::default())?;
+    let hunks = hunks(&mut parser)?;
+
+    Ok(Patch::new(header.0, header.1, hunks))
+}
+
+pub fn parse_bytes_strict(input: &[u8]) -> Result<Patch<'_, [u8]>> {
+    let mut parser = Parser::new(input);
+    let header = patch_header(&mut parser, &ParseOpts::default())?;
+    let hunks = hunks(&mut parser)?;
+    reject_orphaned_hunk_headers(&mut parser)?;
+
+    Ok(Patch::new(header.0, header.1, hunks))
+}
+
 /// Parses one patch from input.
 ///
 /// Always returns consumed bytes alongside the result
@@ -126,28 +148,6 @@ pub(crate) fn parse_one(input: &str, opts: ParseOpts) -> (Result<Patch<'_, str>>
     };
 
     (Ok(Patch::new(original, modified, hunks)), parser.offset())
-}
-
-pub fn parse_strict(input: &str) -> Result<Patch<'_, str>> {
-    let (result, _consumed) = parse_one(input, ParseOpts::default().reject_orphaned_hunks());
-    result
-}
-
-pub fn parse_bytes(input: &[u8]) -> Result<Patch<'_, [u8]>> {
-    let mut parser = Parser::new(input);
-    let header = patch_header(&mut parser, &ParseOpts::default())?;
-    let hunks = hunks(&mut parser)?;
-
-    Ok(Patch::new(header.0, header.1, hunks))
-}
-
-pub fn parse_bytes_strict(input: &[u8]) -> Result<Patch<'_, [u8]>> {
-    let mut parser = Parser::new(input);
-    let header = patch_header(&mut parser, &ParseOpts::default())?;
-    let hunks = hunks(&mut parser)?;
-    reject_orphaned_hunk_headers(&mut parser)?;
-
-    Ok(Patch::new(header.0, header.1, hunks))
 }
 
 // This is only used when the type originated as a utf8 string
