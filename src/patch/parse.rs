@@ -12,6 +12,31 @@ use std::borrow::Cow;
 
 type Result<T, E = ParsePatchError> = std::result::Result<T, E>;
 
+/// Options that control parsing behavior.
+///
+/// Defaults match the [`parse`]/[`parse_bytes`] behavior.
+#[derive(Clone, Copy)]
+pub(crate) struct ParseOpts {
+    reject_orphaned_hunks: bool,
+}
+
+impl Default for ParseOpts {
+    fn default() -> Self {
+        Self {
+            reject_orphaned_hunks: false,
+        }
+    }
+}
+
+impl ParseOpts {
+    /// Reject orphaned `@@ ` hunk headers after parsed hunks,
+    /// matching `git apply` behavior.
+    pub(crate) fn reject_orphaned_hunks(mut self) -> Self {
+        self.reject_orphaned_hunks = true;
+        self
+    }
+}
+
 struct Parser<'a, T: Text + ?Sized> {
     lines: std::iter::Peekable<LineIter<'a, T>>,
     offset: usize,
@@ -54,7 +79,7 @@ impl<'a, T: Text + ?Sized> Parser<'a, T> {
 }
 
 pub fn parse(input: &str) -> Result<Patch<'_, str>> {
-    let (result, _consumed) = parse_one(input);
+    let (result, _consumed) = parse_one(input, ParseOpts::default());
     result
 }
 
@@ -62,7 +87,7 @@ pub fn parse(input: &str) -> Result<Patch<'_, str>> {
 ///
 /// Always returns consumed bytes alongside the result
 /// so callers can advance past the parsed or partially parsed content.
-pub(crate) fn parse_one(input: &str) -> (Result<Patch<'_, str>>, usize) {
+pub(crate) fn parse_one(input: &str, opts: ParseOpts) -> (Result<Patch<'_, str>>, usize) {
     let mut parser = Parser::new(input);
 
     let header = match patch_header(&mut parser) {
@@ -73,6 +98,11 @@ pub(crate) fn parse_one(input: &str) -> (Result<Patch<'_, str>>, usize) {
         Ok(h) => h,
         Err(e) => return (Err(e), parser.offset()),
     };
+    if opts.reject_orphaned_hunks {
+        if let Err(e) = reject_orphaned_hunk_headers(&mut parser) {
+            return (Err(e), parser.offset());
+        }
+    }
 
     let original = match header.0.map(convert_cow_to_str).transpose() {
         Ok(o) => o,
@@ -87,16 +117,8 @@ pub(crate) fn parse_one(input: &str) -> (Result<Patch<'_, str>>, usize) {
 }
 
 pub fn parse_strict(input: &str) -> Result<Patch<'_, str>> {
-    let mut parser = Parser::new(input);
-    let header = patch_header(&mut parser)?;
-    let hunks = hunks(&mut parser)?;
-    reject_orphaned_hunk_headers(&mut parser)?;
-
-    Ok(Patch::new(
-        header.0.map(convert_cow_to_str),
-        header.1.map(convert_cow_to_str),
-        hunks,
-    ))
+    let (result, _consumed) = parse_one(input, ParseOpts::default().reject_orphaned_hunks());
+    result
 }
 
 pub fn parse_bytes(input: &[u8]) -> Result<Patch<'_, [u8]>> {
