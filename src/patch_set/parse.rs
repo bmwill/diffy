@@ -83,7 +83,8 @@ impl<'a> PatchSet<'a> {
 
         let patch_input = &remaining[patch_start..];
 
-        let (result, consumed) = parse_one(patch_input);
+        let opts = crate::patch::parse::ParseOpts::default();
+        let (result, consumed) = parse_one(patch_input, opts);
         // Always advance so the iterator makes progress even on error.
         let abs_patch_start = self.offset + patch_start;
         self.offset += patch_start + consumed;
