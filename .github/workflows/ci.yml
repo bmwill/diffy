@@ -56,11 +56,20 @@ jobs:
           - name: diffy
             repo_url: ''
             commits: '0'
-          - name: rust-lang/cargo
-            repo_url: https://github.com/rust-lang/cargo
+          - name: golang/go
+            repo_url: https://github.com/golang/go
             commits: '200'
+          - name: git/git
+            repo_url: https://github.com/git/git
+            commits: '100'
           - name: rust-lang/rust
             repo_url: https://github.com/rust-lang/rust
+            commits: '30'
+          - name: torvalds/linux
+            repo_url: https://github.com/torvalds/linux
+            commits: '30'
+          - name: llvm/llvm-project
+            repo_url: https://github.com/llvm/llvm-project
             commits: '30'
     name: replay (${{ matrix.name }})
     uses: ./.github/workflows/replay.yml
