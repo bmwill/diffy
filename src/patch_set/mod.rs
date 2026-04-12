@@ -13,11 +13,25 @@ use std::borrow::Cow;
 use crate::Patch;
 
 pub use error::PatchSetParseError;
+use error::PatchSetParseErrorKind;
 pub use parse::PatchSet;
 
 /// Options for parsing patch content.
 ///
-/// Use [`ParseOptions::unidiff()`] to create options for the desired format.
+/// Use [`ParseOptions::unidiff()`] or [`ParseOptions::gitdiff()`]
+/// to create options for the desired format.
+///
+/// ## Binary Files
+///
+/// When parsing git diffs, binary file changes are detected by:
+///
+/// * `Binary files a/path and b/path differ` (`git diff` without `--binary` flag)
+/// * `GIT binary patch` (from `git diff --binary`)
+///
+/// Note that this is not a documented Git behavior,
+/// so the implementation here is subject to change if Git changes.
+///
+/// By default, binary diffs are skipped.
 ///
 /// ## Example
 ///
@@ -40,12 +54,26 @@ pub use parse::PatchSet;
 #[derive(Debug, Clone)]
 pub struct ParseOptions {
     pub(crate) format: Format,
+    pub(crate) binary: Binary,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub(crate) enum Format {
     /// Standard unified diff format.
+    #[default]
     UniDiff,
+    /// Git extended diff format.
+    GitDiff,
+}
+
+/// How to handle binary diffs in GitDiff mode.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) enum Binary {
+    /// Skip binary diffs silently.
+    #[default]
+    Skip,
+    /// Return error if binary diff encountered.
+    Fail,
 }
 
 impl ParseOptions {
@@ -64,7 +92,37 @@ impl ParseOptions {
     pub fn unidiff() -> Self {
         Self {
             format: Format::UniDiff,
+            binary: Default::default(),
         }
+    }
+
+    /// Parse as [git extended diff format][git-diff-format].
+    ///
+    /// Supports all features of [`unidiff()`](Self::unidiff) plus:
+    ///
+    /// * `diff --git` headers
+    /// * Extended headers (`new file mode`, `deleted file mode`, etc.)
+    /// * Rename/copy detection (`rename from`/`rename to`, `copy from`/`copy to`)
+    /// * Binary file detection (skipped by default)
+    ///
+    /// [git-diff-format]: https://git-scm.com/docs/diff-format
+    pub fn gitdiff() -> Self {
+        Self {
+            format: Format::GitDiff,
+            binary: Default::default(),
+        }
+    }
+
+    /// Skip binary diffs silently.
+    pub fn skip_binary(mut self) -> Self {
+        self.binary = Binary::Skip;
+        self
+    }
+
+    /// Return an error if a binary diff is encountered.
+    pub fn fail_on_binary(mut self) -> Self {
+        self.binary = Binary::Fail;
+        self
     }
 }
 
@@ -79,6 +137,20 @@ pub enum FileMode {
     Symlink,
     /// `160000` gitlink (submodule)
     Gitlink,
+}
+
+impl std::str::FromStr for FileMode {
+    type Err = PatchSetParseError;
+
+    fn from_str(mode: &str) -> Result<Self, Self::Err> {
+        match mode {
+            "100644" => Ok(Self::Regular),
+            "100755" => Ok(Self::Executable),
+            "120000" => Ok(Self::Symlink),
+            "160000" => Ok(Self::Gitlink),
+            _ => Err(PatchSetParseErrorKind::InvalidFileMode(mode.to_owned()).into()),
+        }
+    }
 }
 
 /// The kind of patch content in a [`FilePatch`].

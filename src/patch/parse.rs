@@ -35,7 +35,6 @@ impl ParseOpts {
     ///
     /// Useful when the caller has already positioned the input
     /// at the start of the patch content.
-    #[allow(dead_code)] // will be used by patch_set parser
     pub(crate) fn no_skip_preamble(mut self) -> Self {
         self.skip_preamble = false;
         self

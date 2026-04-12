@@ -70,6 +70,15 @@ pub(crate) enum PatchSetParseErrorKind {
 
     /// Create patch missing modified path.
     CreateMissingModifiedPath,
+
+    /// Invalid file mode string.
+    InvalidFileMode(String),
+
+    /// Invalid `diff --git` path.
+    InvalidDiffGitPath,
+
+    /// Binary diff not supported in current configuration.
+    BinaryNotSupported { path: String },
 }
 
 impl fmt::Display for PatchSetParseErrorKind {
@@ -81,6 +90,11 @@ impl fmt::Display for PatchSetParseErrorKind {
             Self::BothDevNull => write!(f, "patch has both original and modified as /dev/null"),
             Self::DeleteMissingOriginalPath => write!(f, "delete patch has no original path"),
             Self::CreateMissingModifiedPath => write!(f, "create patch has no modified path"),
+            Self::InvalidFileMode(mode) => write!(f, "invalid file mode: {mode}"),
+            Self::InvalidDiffGitPath => write!(f, "invalid diff --git path"),
+            Self::BinaryNotSupported { path } => {
+                write!(f, "binary diff not supported: {path}")
+            }
         }
     }
 }

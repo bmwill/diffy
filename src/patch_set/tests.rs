@@ -463,3 +463,124 @@ In a hole in the ground there lived a hobbit
         );
     }
 }
+
+mod patchset_gitdiff {
+    use super::*;
+    use crate::patch_set::PatchKind;
+
+    fn parse_gitdiff(input: &str) -> Vec<super::super::FilePatch<'_, str>> {
+        PatchSet::parse(input, ParseOptions::gitdiff())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    }
+
+    /// `parse_one` must stop at `diff --git` boundaries so that
+    /// back-to-back patches are split correctly.
+    /// Without this, the second patch's `diff --git` line would be
+    /// swallowed as trailing junk by the first patch's hunk parser.
+    #[test]
+    fn multi_file_stops_at_diff_git_boundary() {
+        let input = "\
+diff --git a/foo b/foo
+--- a/foo
++++ b/foo
+@@ -1 +1 @@
+-old foo
++new foo
+diff --git a/bar b/bar
+--- a/bar
++++ b/bar
+@@ -1 +1 @@
+-old bar
++new bar
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 2);
+    }
+
+    #[test]
+    fn pure_rename() {
+        let input = "\
+diff --git a/old.rs b/new.rs
+similarity index 100%
+rename from old.rs
+rename to new.rs
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Rename {
+                from: "old.rs".into(),
+                to: "new.rs".into(),
+            }
+        );
+    }
+
+    /// Empty file creation has no ---/+++ headers, so the path comes
+    /// from the `diff --git` line and retains the `b/` prefix.
+    /// Callers use `strip_prefix(1)` to remove it.
+    #[test]
+    fn new_empty_file() {
+        let input = "\
+diff --git a/empty b/empty
+new file mode 100644
+index 0000000..e69de29
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Create("b/empty".into())
+        );
+        match patches[0].patch() {
+            PatchKind::Text(p) => assert!(p.hunks().is_empty()),
+        }
+    }
+
+    #[test]
+    fn rename_then_modify() {
+        // Rename with no hunks followed by a modify with hunks.
+        // Tests that offset advances correctly across both.
+        let input = "\
+diff --git a/old.rs b/new.rs
+similarity index 100%
+rename from old.rs
+rename to new.rs
+diff --git a/foo b/foo
+--- a/foo
++++ b/foo
+@@ -1 +1 @@
+-old
++new
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 2);
+        assert!(matches!(
+            patches[0].operation(),
+            FileOperation::Rename { .. }
+        ));
+        assert!(matches!(
+            patches[1].operation(),
+            FileOperation::Modify { .. }
+        ));
+    }
+
+    #[test]
+    fn binary_skip_does_not_stall() {
+        // Binary marker must be skipped and offset must advance
+        // to the next patch without infinite loop.
+        let input = "\
+diff --git a/img.png b/img.png
+Binary files a/img.png and b/img.png differ
+diff --git a/foo b/foo
+--- a/foo
++++ b/foo
+@@ -1 +1 @@
+-old
++new
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1, "binary should be skipped, text parsed");
+    }
+}

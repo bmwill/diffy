@@ -1,10 +1,12 @@
 //! Parse multiple file patches from a unified diff.
 
 use super::{
-    error::PatchSetParseErrorKind, FileOperation, FilePatch, Format, ParseOptions,
-    PatchSetParseError,
+    error::PatchSetParseErrorKind, Binary, FileMode, FileOperation, FilePatch, Format,
+    ParseOptions, PatchSetParseError,
 };
 use crate::patch::parse::parse_one;
+use crate::utils::escaped_filename;
+use crate::Patch;
 
 use std::borrow::Cow;
 
@@ -72,6 +74,71 @@ impl<'a> PatchSet<'a> {
         PatchSetParseError::new(kind, self.offset..self.offset)
     }
 
+    fn next_gitdiff_patch(&mut self) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
+        let remaining = &self.input[self.offset..];
+        let patch_start = find_gitdiff_start(remaining)?;
+        self.offset += patch_start;
+        self.found_any = true;
+
+        let abs_patch_start = self.offset;
+
+        // Parse extended headers incrementally — stops at first unrecognized line
+        let (header, header_consumed) = GitHeader::parse(&self.input[self.offset..]);
+        self.offset += header_consumed;
+
+        // Handle binary markers ("Binary files ... differ")
+        if header.is_binary_marker || header.is_binary_patch {
+            match self.opts.binary {
+                Binary::Skip => {
+                    return self.next_gitdiff_patch();
+                }
+                Binary::Fail => {
+                    let path = header.diff_git_line.unwrap_or("<unknown>").to_owned();
+                    return Some(Err(PatchSetParseError::new(
+                        PatchSetParseErrorKind::BinaryNotSupported { path },
+                        abs_patch_start..abs_patch_start,
+                    )));
+                }
+            }
+        }
+
+        // `git diff` output format is stricter.
+        // There is no preamble between Git headers and unidiff patch portion,
+        // so we safely don't perform the preamble skipping.
+        //
+        // If we did, it would fail the pure rename/mode-change operation
+        // since those ops have no unidiff patch portion
+        // and is directly followed by the next `diff --git` header.
+        let opts = crate::patch::parse::ParseOpts::default().no_skip_preamble();
+        let remaining = &self.input[self.offset..];
+        let (result, consumed) = parse_one(remaining, opts);
+        self.offset += consumed;
+        let patch = match result {
+            Ok(patch) => patch,
+            Err(e) => return Some(Err(e.into())),
+        };
+
+        // FIXME: error spans point at `diff --git` line, not the specific offending line
+        let operation = match extract_file_op_gitdiff(&header, &patch) {
+            Ok(op) => op,
+            Err(mut e) => {
+                e.set_span(abs_patch_start..abs_patch_start);
+                return Some(Err(e));
+            }
+        };
+
+        // FIXME: error spans point at `diff --git` line, not the specific offending line
+        let (old_mode, new_mode) = match parse_file_modes(&header) {
+            Ok(modes) => modes,
+            Err(mut e) => {
+                e.set_span(abs_patch_start..abs_patch_start);
+                return Some(Err(e));
+            }
+        };
+
+        Some(Ok(FilePatch::new(operation, patch, old_mode, new_mode)))
+    }
+
     fn next_unidiff_patch(&mut self) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
         let remaining = &self.input[self.offset..];
         if remaining.is_empty() {
@@ -117,6 +184,16 @@ impl<'a> Iterator for PatchSet<'a> {
         let result = match self.opts.format {
             Format::UniDiff => {
                 let result = self.next_unidiff_patch();
+                if result.is_none() {
+                    self.finished = true;
+                    if !self.found_any {
+                        return Some(Err(self.error(PatchSetParseErrorKind::NoPatchesFound)));
+                    }
+                }
+                result
+            }
+            Format::GitDiff => {
+                let result = self.next_gitdiff_patch();
                 if result.is_none() {
                     self.finished = true;
                     if !self.found_any {
@@ -172,6 +249,356 @@ fn strip_email_preamble(input: &str) -> &str {
         Some(pos) => &input[pos + EMAIL_PREAMBLE_SEPARATOR.len()..],
         None => input,
     }
+}
+
+/// Finds the byte offset of the first `diff --git` line in `input`.
+fn find_gitdiff_start(input: &str) -> Option<usize> {
+    let mut offset = 0;
+    for line in input.lines() {
+        if line.starts_with("diff --git ") {
+            return Some(offset);
+        }
+        offset += line.len();
+        offset += line_ending_len(&input[offset..]);
+    }
+    None
+}
+
+/// Git extended header metadata.
+///
+/// Extracted from lines between `diff --git` and `---` (or end of patch).
+/// See [git-diff format documentation](https://git-scm.com/docs/diff-format).
+#[derive(Debug, Default)]
+struct GitHeader<'a> {
+    /// Raw content after "diff --git " prefix.
+    ///
+    /// Only parsed in fallback when `---`/`+++` is absent (mode-only, binary, empty file).
+    diff_git_line: Option<&'a str>,
+    /// Source path from `rename from <path>`.
+    rename_from: Option<&'a str>,
+    /// Destination path from `rename to <path>`.
+    rename_to: Option<&'a str>,
+    /// Source path from `copy from <path>`.
+    copy_from: Option<&'a str>,
+    /// Destination path from `copy to <path>`.
+    copy_to: Option<&'a str>,
+    /// File mode from `old mode <mode>`.
+    old_mode: Option<&'a str>,
+    /// File mode from `new mode <mode>`.
+    new_mode: Option<&'a str>,
+    /// File mode from `new file mode <mode>`.
+    new_file_mode: Option<&'a str>,
+    /// File mode from `deleted file mode <mode>`.
+    deleted_file_mode: Option<&'a str>,
+    /// Whether this is a binary diff with no actual patch content.
+    ///
+    /// Observed `git diff` output (without `--binary`):
+    ///
+    /// ```text
+    /// diff --git a/image.png b/image.png
+    /// new file mode 100644
+    /// index 0000000..7c4530c
+    /// Binary files /dev/null and b/image.png differ
+    /// ```
+    is_binary_marker: bool,
+    /// Whether this is a binary diff with actual patch content.
+    ///
+    /// Observed `git diff --binary` output:
+    ///
+    /// ```text
+    /// diff --git a/image.png b/image.png
+    /// new file mode 100644
+    /// index 0000000..7c4530c
+    /// GIT binary patch
+    /// literal 67
+    /// zcmV-J0KET+...
+    ///
+    /// literal 0
+    /// KcmV+b0RR6000031
+    /// ```
+    is_binary_patch: bool,
+}
+
+impl<'a> GitHeader<'a> {
+    /// Parses git extended headers incrementally from the current position.
+    ///
+    /// Consumes the `diff --git` line and all recognized extended header lines,
+    /// stopping at the first unrecognized line (typically `---`/`+++`/`@@`
+    /// or the next `diff --git`).
+    ///
+    /// Returns the parsed header and the number of bytes consumed.
+    fn parse(input: &'a str) -> (Self, usize) {
+        let mut header = GitHeader::default();
+        let mut consumed = 0;
+
+        for line in input.lines() {
+            if let Some(rest) = line.strip_prefix("diff --git ") {
+                // Only accept the first `diff --git` line.
+                // A second one means we've reached the next patch.
+                if header.diff_git_line.is_some() {
+                    break;
+                }
+                header.diff_git_line = Some(rest);
+            } else if let Some(path) = line.strip_prefix("rename from ") {
+                header.rename_from = Some(path);
+            } else if let Some(path) = line.strip_prefix("rename to ") {
+                header.rename_to = Some(path);
+            } else if let Some(path) = line.strip_prefix("copy from ") {
+                header.copy_from = Some(path);
+            } else if let Some(path) = line.strip_prefix("copy to ") {
+                header.copy_to = Some(path);
+            } else if let Some(mode) = line.strip_prefix("old mode ") {
+                header.old_mode = Some(mode);
+            } else if let Some(mode) = line.strip_prefix("new mode ") {
+                header.new_mode = Some(mode);
+            } else if let Some(mode) = line.strip_prefix("new file mode ") {
+                header.new_file_mode = Some(mode);
+            } else if let Some(mode) = line.strip_prefix("deleted file mode ") {
+                header.deleted_file_mode = Some(mode);
+            } else if line.starts_with("index ")
+                || line.starts_with("similarity index ")
+                || line.starts_with("dissimilarity index ")
+            {
+                // Recognized but nothing to extract.
+            } else if line.starts_with("Binary files ") {
+                header.is_binary_marker = true;
+            } else if line.starts_with("GIT binary patch") {
+                header.is_binary_patch = true;
+            } else {
+                // Unrecognized line: End of extended headers
+                // (typically `---`/`+++`/`@@` or trailing content).
+                break;
+            }
+
+            consumed += line.len();
+            consumed += line_ending_len(&input[consumed..]);
+        }
+
+        (header, consumed)
+    }
+}
+
+/// Determines the file operation from git headers and patch paths.
+fn extract_file_op_gitdiff<'a>(
+    header: &GitHeader<'a>,
+    patch: &Patch<'a, str>,
+) -> Result<FileOperation<'a>, PatchSetParseError> {
+    // Git headers are authoritative for rename/copy
+    if let (Some(from), Some(to)) = (header.rename_from, header.rename_to) {
+        return Ok(FileOperation::Rename {
+            from: Cow::Borrowed(from),
+            to: Cow::Borrowed(to),
+        });
+    }
+    if let (Some(from), Some(to)) = (header.copy_from, header.copy_to) {
+        return Ok(FileOperation::Copy {
+            from: Cow::Borrowed(from),
+            to: Cow::Borrowed(to),
+        });
+    }
+
+    // Try ---/+++ paths first
+    if patch.original().is_some() || patch.modified().is_some() {
+        return extract_file_op_unidiff(patch.original_path(), patch.modified_path());
+    }
+
+    // Fall back to `diff --git <old> <new>` for mode-only and empty file changes
+    let Some((original, modified)) = header.diff_git_line.and_then(parse_diff_git_path) else {
+        return Err(PatchSetParseErrorKind::InvalidDiffGitPath.into());
+    };
+
+    if header.new_file_mode.is_some() {
+        Ok(FileOperation::Create(modified))
+    } else if header.deleted_file_mode.is_some() {
+        Ok(FileOperation::Delete(original))
+    } else {
+        Ok(FileOperation::Modify { original, modified })
+    }
+}
+
+/// Parses file modes from git extended headers.
+fn parse_file_modes(
+    header: &GitHeader<'_>,
+) -> Result<(Option<FileMode>, Option<FileMode>), PatchSetParseError> {
+    let old_mode = header
+        .old_mode
+        .or(header.deleted_file_mode)
+        .map(str::parse::<FileMode>)
+        .transpose()?;
+    let new_mode = header
+        .new_mode
+        .or(header.new_file_mode)
+        .map(str::parse::<FileMode>)
+        .transpose()?;
+    Ok((old_mode, new_mode))
+}
+
+/// Extracts both old and new paths from `diff --git` line content.
+///
+/// ## Assumption #1: old and new paths are the same
+///
+/// This extraction has one strong assumption:
+/// Beside their prefixes, old and new paths are the same.
+///
+/// From [git-diff format documentation]:
+///
+/// > The `a/` and `b/` filenames are the same unless rename/copy is involved.
+/// > Especially, even for a creation or a deletion, `/dev/null` is not used
+/// > in place of the `a/` or `b/` filenames.
+/// >
+/// > When a rename/copy is involved, file1 and file2 show the name of the
+/// > source file of the rename/copy and the name of the file that the
+/// > rename/copy produces, respectively.
+///
+/// Since rename/copy operations use `rename from/to` and `copy from/to` headers
+/// we have handled earlier in [`extract_file_op_gitdiff`],
+/// (which have no `a/`/`b/` prefix per git spec),
+///
+/// this extraction is only used
+/// * when unified diff headers (`---`/`+++`) are absent
+/// * Only for mode-only and empty file cases
+///
+/// [git-diff format documentation]: https://git-scm.com/docs/diff-format
+///
+/// ## Assumption #2: the longest common path suffix is the shared path
+///
+/// When custom prefixes contain spaces,
+/// multiple splits may produce valid path suffixes.
+///
+/// Example: `src/foo.rs src/foo.rs src/foo.rs src/foo.rs`
+///
+/// Three splits all produce valid path suffixes (contain `/`):
+///
+/// * Position 10
+///   * old path: `src/foo.rs`
+///   * new path: `src/foo.rs src/foo.rs src/foo.rs`
+///   * common suffix: `foo.rs`
+/// * Position 21
+///   * old path: `src/foo.rs src/foo.rs`
+///   * new path: `src/foo.rs src/foo.rs`
+///   * common suffix: `foo.rs src/foo.rs`
+/// * Position 32
+///   * old path: `src/foo.rs src/foo.rs src/foo.rs`
+///   * new path: `src/foo.rs`
+///   * common suffix: `foo.rs`
+///
+/// We observed that `git apply` would pick position 21,
+/// which has the longest path suffix,
+/// hence this heuristic.
+///
+/// ## Supported formats
+///
+/// * `a/<path> b/<path>` (default prefix)
+/// * `<path> <path>` (`git diff --no-prefix`)
+/// * `<src-prefix><path> <dst-prefix><path>` (custom prefix)
+/// * `"<prefix><path>" "<prefix><path>"` (quoted, with escapes)
+/// * Mixed quoted/unquoted
+fn parse_diff_git_path(line: &str) -> Option<(Cow<'_, str>, Cow<'_, str>)> {
+    if line.starts_with('"') || line.ends_with('"') {
+        parse_quoted_diff_git_path(line)
+    } else {
+        parse_unquoted_diff_git_path(line)
+    }
+}
+
+/// See [`parse_diff_git_path`].
+fn parse_unquoted_diff_git_path(line: &str) -> Option<(Cow<'_, str>, Cow<'_, str>)> {
+    let mut best_match = None;
+    let mut longest_path = "";
+
+    for (i, _) in line.match_indices(' ') {
+        let left = &line[..i];
+        let right = &line[i + 1..];
+        if left.is_empty() || right.is_empty() {
+            continue;
+        }
+        // Select split with longest common path suffix (matches Git behavior)
+        if let Some(path) = longest_common_path_suffix(left, right) {
+            if path.len() > longest_path.len() {
+                longest_path = path;
+                best_match = Some((left, right));
+            }
+        }
+    }
+
+    best_match.map(|(l, r)| (Cow::Borrowed(l), Cow::Borrowed(r)))
+}
+
+/// See [`parse_diff_git_path`].
+fn parse_quoted_diff_git_path(line: &str) -> Option<(Cow<'_, str>, Cow<'_, str>)> {
+    let (left_raw, right_raw) = if line.starts_with('"') {
+        // First token is quoted.
+        let bytes = line.as_bytes();
+        let mut i = 1; // skip starting `"`
+        let end = loop {
+            match bytes.get(i)? {
+                b'"' => break i + 1,
+                b'\\' => i += 2,
+                _ => i += 1,
+            }
+        };
+        let (first, rest) = line.split_at(end);
+        let rest = rest.strip_prefix(' ')?;
+        (first, rest)
+    } else if let Some(pos) = line.find(" \"") {
+        // First token is unquoted. The second must be quoted.
+        (&line[..pos], &line[pos + 1..])
+    } else {
+        // Malformed: ends with `"` but no valid quoted path found
+        return None;
+    };
+
+    let left = escaped_filename(left_raw).ok().and_then(|cow| match cow {
+        Cow::Borrowed(b) => std::str::from_utf8(b).ok().map(Cow::Borrowed),
+        Cow::Owned(v) => String::from_utf8(v).ok().map(Cow::Owned),
+    })?;
+    let right = escaped_filename(right_raw).ok().and_then(|cow| match cow {
+        Cow::Borrowed(b) => std::str::from_utf8(b).ok().map(Cow::Borrowed),
+        Cow::Owned(v) => String::from_utf8(v).ok().map(Cow::Owned),
+    })?;
+
+    // Verify both sides share the same path.
+    longest_common_path_suffix(&left, &right)?;
+    Some((left, right))
+}
+
+/// Extracts the longest common path suffix starting at a path component boundary.
+///
+/// Returns `None` if no valid common path exists.
+///
+/// Path component boundary means:
+///
+/// * At `/` character (e.g., `foo/bar.rs` vs `fooo/bar.rs` → `bar.rs`)
+/// * Or the entire string is identical
+fn longest_common_path_suffix<'a>(a: &'a str, b: &'a str) -> Option<&'a str> {
+    if a.is_empty() || b.is_empty() {
+        return None;
+    }
+
+    let suffix_len = a
+        .as_bytes()
+        .iter()
+        .rev()
+        .zip(b.as_bytes().iter().rev())
+        .take_while(|(x, y)| x == y)
+        .count();
+
+    if suffix_len == 0 {
+        return None;
+    }
+
+    // Identical strings
+    if suffix_len == a.len() && a.len() == b.len() {
+        return Some(a);
+    }
+
+    // Find first '/' in suffix and return path after it
+    let suffix_start = a.len() - suffix_len;
+    let suffix = &a[suffix_start..];
+    suffix
+        .split_once('/')
+        .map(|(_, path)| path)
+        .filter(|p| !p.is_empty())
 }
 
 /// Extracts the file operation from a patch based on its header paths.
