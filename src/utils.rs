@@ -132,7 +132,7 @@ impl<'a, T: Text + ?Sized> Iterator for LineIter<'a, T> {
 
 /// A helper trait for processing text like `str` and `[u8]`
 /// Useful for abstracting over those types for parsing as well as breaking input into lines
-pub trait Text: Eq + Hash {
+pub trait Text: Eq + Hash + ToOwned {
     fn is_empty(&self) -> bool;
     fn len(&self) -> usize;
     fn starts_with(&self, prefix: &str) -> bool;
@@ -147,6 +147,9 @@ pub trait Text: Eq + Hash {
     fn as_bytes(&self) -> &[u8];
     #[allow(unused)]
     fn lines(&self) -> LineIter<'_, Self>;
+
+    /// Converts a byte-oriented `Cow` into a `Cow` of `Self`.
+    fn from_bytes_cow(cow: Cow<'_, [u8]>) -> Cow<'_, Self>;
 
     fn parse<T: std::str::FromStr>(&self) -> Option<T> {
         self.as_str().and_then(|s| s.parse().ok())
@@ -202,6 +205,13 @@ impl Text for str {
     fn lines(&self) -> LineIter<'_, Self> {
         LineIter::new(self)
     }
+
+    fn from_bytes_cow(cow: Cow<'_, [u8]>) -> Cow<'_, Self> {
+        match cow {
+            Cow::Borrowed(b) => Cow::Borrowed(std::str::from_utf8(b).unwrap()),
+            Cow::Owned(o) => Cow::Owned(String::from_utf8(o).unwrap()),
+        }
+    }
 }
 
 impl Text for [u8] {
@@ -252,6 +262,10 @@ impl Text for [u8] {
     fn lines(&self) -> LineIter<'_, Self> {
         LineIter::new(self)
     }
+
+    fn from_bytes_cow(cow: Cow<'_, [u8]>) -> Cow<'_, Self> {
+        cow
+    }
 }
 
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -292,7 +306,7 @@ fn find_byte(haystack: &[u8], byte: u8) -> Option<usize> {
 ///
 /// See [`byte_needs_quoting`] for the set of characters that
 /// require quoting.
-pub(crate) fn escaped_filename<T: Text + ToOwned + ?Sized>(
+pub(crate) fn escaped_filename<T: Text + ?Sized>(
     filename: &T,
 ) -> Result<Cow<'_, [u8]>, ParsePatchError> {
     if let Some(inner) = filename
@@ -309,9 +323,7 @@ pub(crate) fn escaped_filename<T: Text + ToOwned + ?Sized>(
     }
 }
 
-fn decode_escaped<T: Text + ToOwned + ?Sized>(
-    escaped: &T,
-) -> Result<Cow<'_, [u8]>, ParsePatchError> {
+fn decode_escaped<T: Text + ?Sized>(escaped: &T) -> Result<Cow<'_, [u8]>, ParsePatchError> {
     let bytes = escaped.as_bytes();
     let mut result = Vec::new();
     let mut i = 0;
