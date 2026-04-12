@@ -10,6 +10,7 @@ mod tests;
 
 use std::borrow::Cow;
 
+use crate::binary::BinaryPatch;
 use crate::Patch;
 
 pub use error::PatchSetParseError;
@@ -31,7 +32,7 @@ pub use parse::PatchSet;
 /// Note that this is not a documented Git behavior,
 /// so the implementation here is subject to change if Git changes.
 ///
-/// By default, binary diffs are skipped.
+/// By default, binary diffs are kept in the output.
 ///
 /// ## Example
 ///
@@ -70,10 +71,12 @@ pub(crate) enum Format {
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) enum Binary {
     /// Skip binary diffs silently.
-    #[default]
     Skip,
     /// Return error if binary diff encountered.
     Fail,
+    /// Keep binary diffs in the output.
+    #[default]
+    Keep,
 }
 
 impl ParseOptions {
@@ -103,7 +106,7 @@ impl ParseOptions {
     /// * `diff --git` headers
     /// * Extended headers (`new file mode`, `deleted file mode`, etc.)
     /// * Rename/copy detection (`rename from`/`rename to`, `copy from`/`copy to`)
-    /// * Binary file detection (skipped by default)
+    /// * Binary file detection (kept by default)
     ///
     /// [git-diff-format]: https://git-scm.com/docs/diff-format
     pub fn gitdiff() -> Self {
@@ -158,6 +161,8 @@ impl std::str::FromStr for FileMode {
 pub enum PatchKind<'a, T: ToOwned + ?Sized> {
     /// Text patch with hunks.
     Text(Patch<'a, T>),
+    /// Binary patch (literal or delta encoded, or marker-only).
+    Binary(BinaryPatch<'a>),
 }
 
 impl<T: ?Sized, O> std::fmt::Debug for PatchKind<'_, T>
@@ -168,6 +173,7 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PatchKind::Text(patch) => f.debug_tuple("Text").field(patch).finish(),
+            PatchKind::Binary(patch) => f.debug_tuple("Binary").field(patch).finish(),
         }
     }
 }
@@ -177,6 +183,15 @@ impl<'a, T: ToOwned + ?Sized> PatchKind<'a, T> {
     pub fn as_text(&self) -> Option<&Patch<'a, T>> {
         match self {
             PatchKind::Text(patch) => Some(patch),
+            PatchKind::Binary(_) => None,
+        }
+    }
+
+    /// Returns the binary patch, or `None` if this is a text patch.
+    pub fn as_binary(&self) -> Option<&BinaryPatch<'a>> {
+        match self {
+            PatchKind::Binary(patch) => Some(patch),
+            PatchKind::Text(_) => None,
         }
     }
 }
@@ -219,6 +234,20 @@ impl<'a, T: ToOwned + ?Sized> FilePatch<'a, T> {
         Self {
             operation,
             kind: PatchKind::Text(patch),
+            old_mode,
+            new_mode,
+        }
+    }
+
+    fn new_binary(
+        operation: FileOperation<'a>,
+        patch: BinaryPatch<'a>,
+        old_mode: Option<FileMode>,
+        new_mode: Option<FileMode>,
+    ) -> Self {
+        Self {
+            operation,
+            kind: PatchKind::Binary(patch),
             old_mode,
             new_mode,
         }

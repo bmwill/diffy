@@ -8,7 +8,10 @@ use std::{
     sync::Once,
 };
 
-use diffy::patch_set::{FileOperation, ParseOptions, PatchKind, PatchSet, PatchSetParseError};
+use diffy::{
+    binary::BinaryPatch,
+    patch_set::{FileOperation, ParseOptions, PatchKind, PatchSet, PatchSetParseError},
+};
 
 /// Which external tool to compare against.
 #[derive(Clone, Copy)]
@@ -367,6 +370,13 @@ pub fn apply_diffy(
                     fs::create_dir_all(parent).unwrap();
                 }
                 fs::write(&result_path, result.as_bytes()).unwrap();
+            }
+            PatchKind::Binary(BinaryPatch::Marker) => {
+                // Dont do anything if it is just a binary patch marker.[
+            }
+            PatchKind::Binary(_) => {
+                // Binary patch application requires the `binary` feature.
+                // Will be wired up when that feature is added.
             }
         }
     }

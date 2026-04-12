@@ -535,6 +535,7 @@ index 0000000..e69de29
         );
         match patches[0].patch() {
             PatchKind::Text(p) => assert!(p.hunks().is_empty()),
+            PatchKind::Binary(_) => panic!("expected text patch"),
         }
     }
 
@@ -567,6 +568,25 @@ diff --git a/foo b/foo
     }
 
     #[test]
+    fn binary_marker_kept_by_default() {
+        // Default is Keep: binary marker is returned as BinaryPatch::Marker.
+        let input = "\
+diff --git a/img.png b/img.png
+Binary files a/img.png and b/img.png differ
+diff --git a/foo b/foo
+--- a/foo
++++ b/foo
+@@ -1 +1 @@
+-old
++new
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 2);
+        assert!(patches[0].patch().as_binary().is_some());
+        assert!(patches[1].patch().as_text().is_some());
+    }
+
+    #[test]
     fn binary_skip_does_not_stall() {
         // Binary marker must be skipped and offset must advance
         // to the next patch without infinite loop.
@@ -580,7 +600,9 @@ diff --git a/foo b/foo
 -old
 +new
 ";
-        let patches = parse_gitdiff(input);
+        let patches: Vec<_> = PatchSet::parse(input, ParseOptions::gitdiff().skip_binary())
+            .collect::<Result<_, _>>()
+            .unwrap();
         assert_eq!(patches.len(), 1, "binary should be skipped, text parsed");
     }
 }

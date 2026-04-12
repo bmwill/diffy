@@ -3,6 +3,7 @@
 use std::fmt;
 use std::ops::Range;
 
+use crate::binary::BinaryPatchParseError;
 use crate::patch::ParsePatchError;
 
 /// An error returned when parsing patches fails.
@@ -79,6 +80,9 @@ pub(crate) enum PatchSetParseErrorKind {
 
     /// Binary diff not supported in current configuration.
     BinaryNotSupported { path: String },
+
+    /// Binary patch parsing failed.
+    BinaryParse(BinaryPatchParseError),
 }
 
 impl fmt::Display for PatchSetParseErrorKind {
@@ -95,6 +99,7 @@ impl fmt::Display for PatchSetParseErrorKind {
             Self::BinaryNotSupported { path } => {
                 write!(f, "binary diff not supported: {path}")
             }
+            Self::BinaryParse(e) => write!(f, "{e}"),
         }
     }
 }
@@ -102,5 +107,11 @@ impl fmt::Display for PatchSetParseErrorKind {
 impl From<ParsePatchError> for PatchSetParseError {
     fn from(e: ParsePatchError) -> Self {
         PatchSetParseErrorKind::Patch(e).into()
+    }
+}
+
+impl From<BinaryPatchParseError> for PatchSetParseError {
+    fn from(e: BinaryPatchParseError) -> Self {
+        PatchSetParseErrorKind::BinaryParse(e).into()
     }
 }
