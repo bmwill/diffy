@@ -142,12 +142,7 @@ fn find_patch_start(input: &str) -> Option<usize> {
             return Some(offset);
         }
         offset += line.len();
-        // Account for the line ending that `.lines()` strips
-        if input[offset..].starts_with("\r\n") {
-            offset += 2;
-        } else if input[offset..].starts_with('\n') {
-            offset += 1;
-        }
+        offset += line_ending_len(&input[offset..]);
     }
     None
 }
@@ -220,5 +215,19 @@ pub(crate) fn extract_file_op_unidiff<'a>(
             }
             (None, None) => Err(PatchSetParseErrorKind::NoFilePath.into()),
         }
+    }
+}
+
+/// Returns the length of the line ending at the start of `s`.
+///
+/// `.lines()` strips line endings, so callers tracking byte offsets need to
+/// account for the `\r\n` or `\n` that was consumed.
+fn line_ending_len(s: &str) -> usize {
+    if s.starts_with("\r\n") {
+        2
+    } else if s.starts_with('\n') {
+        1
+    } else {
+        0
     }
 }
