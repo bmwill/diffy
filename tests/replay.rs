@@ -54,13 +54,108 @@
 
 use std::{
     env,
+    io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     sync::Mutex,
 };
 
 use diffy::patch_set::{FileOperation, ParseOptions, PatchKind, PatchSet};
 use rayon::prelude::*;
+
+/// Persistent `git cat-file --batch` process for fast object lookups.
+///
+/// See <https://git-scm.com/docs/git-cat-file> for more.
+struct CatFile {
+    // Field order matters: stdin must drop (close) before child is reaped.
+    stdin: std::process::ChildStdin,
+    stdout: BufReader<std::process::ChildStdout>,
+    #[allow(dead_code)] // held for drop order: reaped after stdin closes
+    child: std::process::Child,
+}
+
+impl CatFile {
+    fn new(repo: &Path) -> Self {
+        let mut child = Command::new("git")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .arg("-C")
+            .arg(repo)
+            .args(["cat-file", "--batch"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("failed to spawn git cat-file --batch");
+        let stdin = child.stdin.take().unwrap();
+        let stdout = BufReader::new(child.stdout.take().unwrap());
+        Self {
+            stdin,
+            stdout,
+            child,
+        }
+    }
+
+    /// Look up an object by `<rev>:<path>`.
+    ///
+    /// Returns `None` for submodules, commit/tree/tag object types, and missing objects.
+    fn get(&mut self, rev: &str, path: &str) -> Option<Vec<u8>> {
+        writeln!(self.stdin, "{rev}:{path}").expect("cat-file stdin write failed");
+
+        let mut header = String::new();
+        self.stdout
+            .read_line(&mut header)
+            .expect("cat-file stdout read failed");
+
+        // Response formats:
+        //
+        // * regular file: `<oid> blob <size>\n<content>\n`
+        // * submodule:
+        //   * `<oid> commit <size>\n<content>\n`
+        //   * `<oid> submodule\n`
+        // * not found: `<oid> missing\n`
+        //
+        // `tag` and `tree` object type are not relevant here.
+        //
+        // See <https://git-scm.com/docs/git-cat-file#_batch_output>
+
+        let header = header.trim_end();
+        let mut it = header.splitn(3, ' ');
+
+        let Some(_oid) = it.next() else {
+            panic!("unexpected cat-file header on {rev}: {header}");
+        };
+        let Some(ty) = it.next() else {
+            panic!("unexpected cat-file header on {rev}: {header}");
+        };
+
+        // Types may have no `size` field, like "missing" or "submodule"
+        let size: usize = it
+            .next()?
+            .parse()
+            .unwrap_or_else(|e| panic!("invalid size in cat-file header on {rev}: {header}: {e}"));
+
+        let mut buf = vec![0u8; size];
+        self.stdout.read_exact(&mut buf).expect("short read");
+
+        let mut nl = [0];
+        self.stdout
+            .read_exact(&mut nl)
+            .expect("missing trailing LF");
+
+        // Only blobs are regular file content
+        if ty != "blob" {
+            return None;
+        }
+
+        Some(buf)
+    }
+
+    /// Like [`CatFile::get`] but returns only UTF-8 string.
+    fn get_text(&mut self, rev: &str, path: &str) -> Option<String> {
+        self.get(rev, path).and_then(|b| String::from_utf8(b).ok())
+    }
+}
 
 /// Local enum for test configuration (maps to ParseOptions).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,57 +249,6 @@ fn git(repo: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
-/// Check if a path is a submodule at a specific commit.
-fn is_submodule(repo: &Path, commit: &str, path: &str) -> bool {
-    let mut cmd = Command::new("git");
-    cmd.env("GIT_CONFIG_NOSYSTEM", "1");
-    cmd.env("GIT_CONFIG_GLOBAL", "/dev/null");
-    cmd.arg("-C").arg(repo);
-    cmd.args(["ls-tree", "--format=%(objectmode)", commit, "--", path]);
-
-    let output = cmd.output().expect("failed to execute git ls-tree");
-
-    if !output.status.success() {
-        return false;
-    }
-
-    String::from_utf8_lossy(&output.stdout).trim() == "160000"
-}
-
-/// Get file content at a specific commit as bytes.
-///
-/// Returns `None` if the path is a submodule.
-fn file_at_commit_bytes(repo: &Path, commit: &str, path: &str) -> Option<Vec<u8>> {
-    if is_submodule(repo, commit, path) {
-        return None;
-    }
-
-    let mut cmd = Command::new("git");
-    cmd.env("GIT_CONFIG_NOSYSTEM", "1");
-    cmd.env("GIT_CONFIG_GLOBAL", "/dev/null");
-    cmd.arg("-C").arg(repo);
-    cmd.args(["show", &format!("{commit}:{path}")]);
-
-    let output = cmd.output().expect("failed to execute git show");
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        panic!("file {path} doesn't exist at {commit}: {stderr}");
-    }
-
-    Some(output.stdout)
-}
-
-/// Get file content at a specific commit as text.
-///
-/// Returns `None` if:
-///
-/// * The path is a submodule
-/// * The file is binary (not valid UTF-8)
-fn file_at_commit(repo: &Path, commit: &str, path: &str) -> Option<String> {
-    file_at_commit_bytes(repo, commit, path).and_then(|b| String::from_utf8(b).ok())
-}
-
 /// Get the list of commits from oldest to newest.
 fn commit_history(repo: &Path, selection: &CommitSelection) -> Vec<String> {
     match selection {
@@ -268,7 +312,13 @@ fn count_type_changes(raw: &str) -> usize {
         .count()
 }
 
-fn process_commit(repo: &Path, parent: &str, child: &str, mode: TestMode) -> CommitResult {
+fn process_commit(
+    cat: &mut CatFile,
+    repo: &Path,
+    parent: &str,
+    child: &str,
+    mode: TestMode,
+) -> CommitResult {
     let parent_short = parent[..8].to_string();
     let child_short = child[..8].to_string();
     let mut files = Vec::new();
@@ -391,7 +441,7 @@ fn process_commit(repo: &Path, parent: &str, child: &str, mode: TestMode) -> Com
         match file_patch.patch() {
             PatchKind::Text(patch) => {
                 let base_content = if let Some(path) = base_path {
-                    let Some(content) = file_at_commit(repo, parent, path) else {
+                    let Some(content) = cat.get_text(parent, path) else {
                         skipped += 1;
                         continue;
                     };
@@ -401,7 +451,7 @@ fn process_commit(repo: &Path, parent: &str, child: &str, mode: TestMode) -> Com
                 };
 
                 let expected_content = if let Some(path) = target_path {
-                    let Some(content) = file_at_commit(repo, child, path) else {
+                    let Some(content) = cat.get_text(child, path) else {
                         skipped += 1;
                         continue;
                     };
@@ -482,25 +532,28 @@ fn replay() {
         total_skipped: 0,
     });
 
-    (0..total_diffs).into_par_iter().for_each(|i| {
-        let result = process_commit(&repo, &commits[i], &commits[i + 1], mode);
+    (0..total_diffs).into_par_iter().for_each_init(
+        || CatFile::new(&repo),
+        |cat, i| {
+            let result = process_commit(cat, &repo, &commits[i], &commits[i + 1], mode);
 
-        let completed = {
-            let mut p = progress.lock().unwrap();
-            p.completed += 1;
-            p.total_applied += result.applied;
-            p.total_skipped += result.skipped;
-            p.completed
-        };
+            let completed = {
+                let mut p = progress.lock().unwrap();
+                p.completed += 1;
+                p.total_applied += result.applied;
+                p.total_skipped += result.skipped;
+                p.completed
+            };
 
-        eprintln!(
-            "[{completed}/{total_diffs}] ({repo_name}, {mode_name}) Processing {}..{}",
-            result.parent_short, result.child_short
-        );
-        for desc in &result.files {
-            eprintln!("  ✓ {desc}");
-        }
-    });
+            eprintln!(
+                "[{completed}/{total_diffs}] ({repo_name}, {mode_name}) Processing {}..{}",
+                result.parent_short, result.child_short
+            );
+            for desc in &result.files {
+                eprintln!("  ✓ {desc}");
+            }
+        },
+    );
 
     let p = progress.lock().unwrap();
     eprintln!(
