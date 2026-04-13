@@ -281,7 +281,7 @@ fn commit_history(repo: &Path, selection: &CommitSelection) -> Vec<String> {
     }
 }
 
-/// Count type-change entries (`T` status) in `git diff --raw` output.
+/// Check if a `git diff --raw` line is a type change (status `T`).
 ///
 /// Type changes (e.g., symlink → regular file) produce two patches
 /// (delete + create) but only one `--raw` line.
@@ -300,16 +300,12 @@ fn commit_history(repo: &Path, selection: &CommitSelection) -> Vec<String> {
 ///
 /// See <https://git-scm.com/docs/diff-format#_raw_output_format> for
 /// the `--raw` format specification.
-fn count_type_changes(raw: &str) -> usize {
-    raw.lines()
-        .filter(|l| !l.is_empty())
-        .filter(|line| {
-            // --raw format: `:old_mode new_mode old_hash new_hash status\tpath`
-            line.split('\t')
-                .next()
-                .is_some_and(|meta| meta.ends_with(" T"))
-        })
-        .count()
+fn is_type_change(raw_line: &str) -> bool {
+    // --raw format: `:old_mode new_mode old_hash new_hash status\tpath`
+    raw_line
+        .split('\t')
+        .next()
+        .is_some_and(|meta| meta.ends_with(" T"))
 }
 
 fn process_commit(
@@ -352,24 +348,29 @@ fn process_commit(
     // 2b08718b..06c93976 for examples.
     let expected_file_count = match mode {
         TestMode::UniDiff => {
+            // Combine `--raw` and `--numstat` into a single git call.
+            // Output: raw lines (start with `:`) followed by numstat lines.
+            //
             // `--numstat` format:
             // - `added\tdeleted\tpath` for text files
             // - `-\t-\tpath` for binary files (skipped - no patch data in unidiff)
             // - `0\t0\tpath` for empty/no-content changes (skipped)
-            let numstat = git(repo, &["diff", "--numstat", "--no-renames", parent, child]);
-            let text_files = numstat
-                .lines()
-                .filter(|l| !l.is_empty())
-                .fold(0, |count, line| {
-                    if line.starts_with("-\t-\t") || line.starts_with("0\t0\t") {
-                        skipped += 1;
-                        count
-                    } else {
-                        count + 1
+            let raw_numstat = git(
+                repo,
+                &["diff", "--raw", "--numstat", "--no-renames", parent, child],
+            );
+            let (mut type_changes, mut text_files) = (0, 0);
+            for line in raw_numstat.lines().filter(|l| !l.is_empty()) {
+                if line.starts_with(':') {
+                    if is_type_change(line) {
+                        type_changes += 1;
                     }
-                });
-            let raw = git(repo, &["diff", "--raw", "--no-renames", parent, child]);
-            let type_changes = count_type_changes(&raw);
+                } else if line.starts_with("-\t-\t") || line.starts_with("0\t0\t") {
+                    skipped += 1;
+                } else {
+                    text_files += 1;
+                }
+            }
             text_files + type_changes
         }
     };
