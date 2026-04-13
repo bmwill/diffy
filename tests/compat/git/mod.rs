@@ -125,6 +125,75 @@ fn junk_between_hunks() {
         .run();
 }
 
+// Mixed binary and text patch.
+//
+// Both git apply and diffy should apply both the binary and text changes.
+#[test]
+fn binary_and_text_mixed() {
+    Case::git("binary_and_text_mixed").strip(1).run();
+}
+
+// Binary patch in literal format (new file creation).
+#[test]
+#[cfg(feature = "binary")]
+fn binary_literal() {
+    Case::git("binary_literal").strip(1).run();
+}
+
+// Binary patch in delta format (modify existing file).
+#[test]
+#[cfg(feature = "binary")]
+fn binary_delta() {
+    Case::git("binary_delta").strip(1).run();
+}
+
+// Binary literal patch applied to wrong original content.
+//
+// This documents a behavioral difference:
+// - diffy: succeeds (skips validation, ignores original for literal format)
+// - git: fails (validates original content via index hash before applying)
+//
+// diffy's behavior is intentional - we don't have access to git's object database
+// to verify hashes, and for literal format the original content isn't needed anyway.
+#[test]
+#[cfg(feature = "binary")]
+fn binary_literal_wrong_original() {
+    Case::git("binary_literal_wrong_original")
+        .strip(1)
+        .expect_compat(false)
+        .run();
+}
+
+// Binary delta patch applied to wrong original content.
+//
+// Both diffy and git fail, but for different reasons:
+// - diffy: fails because delta instructions reference wrong offsets/sizes
+// - git: fails because index hash doesn't match before even trying to apply
+//
+// This test verifies diffy correctly rejects invalid delta applications.
+#[test]
+#[cfg(feature = "binary")]
+fn binary_delta_wrong_original() {
+    Case::git("binary_delta_wrong_original")
+        .strip(1)
+        .expect_success(false)
+        .run();
+}
+
+// Binary patch with mixed delta/literal format.
+//
+// Git can choose different encodings for forward and reverse transformations
+// based on which is more efficient. This patch has:
+// - forward (original -> modified): delta
+// - reverse (modified -> original): literal
+//
+// From rust-lang/rust@ad46af24 (favicon-32x32.png update).
+#[test]
+#[cfg(feature = "binary")]
+fn binary_mixed_delta_literal() {
+    Case::git("binary_mixed_delta_literal").strip(1).run();
+}
+
 // Multi-file patch with junk/preamble text between different files.
 //
 // git apply behavior: Ignores content between `diff --git` boundaries.
