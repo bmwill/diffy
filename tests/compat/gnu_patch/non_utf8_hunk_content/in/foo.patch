@@ -1,0 +1,5 @@
+--- file.bin
++++ file.bin
+@@ -1 +1 @@
+-hello €ÿ world
++hello €ÿ universe

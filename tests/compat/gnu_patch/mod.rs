@@ -151,6 +151,13 @@ fn junk_between_hunks() {
     Case::gnu_patch("junk_between_hunks").run();
 }
 
+// Patch with non-UTF-8 bytes (0x80, 0xff) in hunk content.
+// Both GNU patch and diffy handle raw bytes correctly.
+#[test]
+fn non_utf8_hunk_content() {
+    Case::gnu_patch("non_utf8_hunk_content").run();
+}
+
 // Failure cases
 
 #[test]

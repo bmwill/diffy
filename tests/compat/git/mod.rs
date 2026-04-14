@@ -194,6 +194,13 @@ fn binary_mixed_delta_literal() {
     Case::git("binary_mixed_delta_literal").strip(1).run();
 }
 
+// Patch with non-UTF-8 bytes (0x80, 0xff) in hunk content.
+// Both git apply and diffy handle raw bytes correctly.
+#[test]
+fn non_utf8_hunk_content() {
+    Case::git("non_utf8_hunk_content").strip(1).run();
+}
+
 // Multi-file patch with junk/preamble text between different files.
 //
 // git apply behavior: Ignores content between `diff --git` boundaries.

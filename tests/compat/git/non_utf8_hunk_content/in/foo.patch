@@ -1,0 +1,6 @@
+diff --git a/file.bin b/file.bin
+--- a/file.bin
++++ b/file.bin
+@@ -1 +1 @@
+-hello €ÿ world
++hello €ÿ universe
