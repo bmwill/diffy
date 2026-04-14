@@ -152,11 +152,6 @@ impl CatFile {
 
         Some(buf)
     }
-
-    /// Like [`CatFile::get`] but returns only UTF-8 string.
-    fn get_text(&mut self, rev: &str, path: &str) -> Option<String> {
-        self.get(rev, path).and_then(|b| String::from_utf8(b).ok())
-    }
 }
 
 /// Local enum for test configuration (maps to ParseOptions).
@@ -237,7 +232,7 @@ fn test_mode() -> TestMode {
     }
 }
 
-fn git(repo: &Path, args: &[&str]) -> String {
+fn git_bytes(repo: &Path, args: &[&str]) -> Vec<u8> {
     let mut cmd = Command::new("git");
     cmd.env("GIT_CONFIG_NOSYSTEM", "1");
     cmd.env("GIT_CONFIG_GLOBAL", "/dev/null");
@@ -251,7 +246,11 @@ fn git(repo: &Path, args: &[&str]) -> String {
         panic!("git {args:?} failed: {stderr}");
     }
 
-    String::from_utf8_lossy(&output.stdout).into_owned()
+    output.stdout
+}
+
+fn git(repo: &Path, args: &[&str]) -> String {
+    String::from_utf8_lossy(&git_bytes(repo, args)).into_owned()
 }
 
 /// Get the list of commits from oldest to newest.
@@ -330,8 +329,8 @@ fn process_commit(
     // Use `--no-renames` to represent them as delete + create instead.
     // GitDiff mode uses `--binary` to get actual binary patch data.
     let diff_output = match mode {
-        TestMode::UniDiff => git(repo, &["diff", "--no-renames", parent, child]),
-        TestMode::GitDiff => git(repo, &["diff", "--binary", parent, child]),
+        TestMode::UniDiff => git_bytes(repo, &["diff", "--no-renames", parent, child]),
+        TestMode::GitDiff => git_bytes(repo, &["diff", "--binary", parent, child]),
     };
 
     if diff_output.is_empty() {
@@ -404,9 +403,10 @@ fn process_commit(
         };
     }
 
-    let patchset: Vec<_> = match PatchSet::parse(&diff_output, mode.into()).collect() {
+    let patchset: Vec<_> = match PatchSet::parse_bytes(&diff_output, mode.into()).collect() {
         Ok(ps) => ps,
         Err(e) => {
+            let diff_output = String::from_utf8_lossy(&diff_output);
             panic!(
                 "Failed to parse patch for {parent_short}..{child_short}: {e}\n\n\
                 Diff:\n{diff_output}"
@@ -418,6 +418,7 @@ fn process_commit(
     // This catches both missing and spurious patches.
     if patchset.len() != expected_file_count {
         let n = patchset.len();
+        let diff_output = String::from_utf8_lossy(&diff_output);
         panic!(
             "Patch count mismatch for {parent_short}..{child_short}: \
              expected {expected_file_count} files, parsed {n} patches\n\n\
@@ -461,42 +462,43 @@ fn process_commit(
         match file_patch.patch() {
             PatchKind::Text(patch) => {
                 let base_content = if let Some(path) = base_path {
-                    let Some(content) = cat.get_text(parent, path) else {
+                    let Some(content) = cat.get(parent, path) else {
                         skipped += 1;
                         continue;
                     };
                     content
                 } else {
-                    String::new()
+                    Vec::new()
                 };
 
                 let expected_content = if let Some(path) = target_path {
-                    let Some(content) = cat.get_text(child, path) else {
+                    let Some(content) = cat.get(child, path) else {
                         skipped += 1;
                         continue;
                     };
                     content
                 } else {
-                    String::new()
+                    Vec::new()
                 };
 
-                let result = match diffy::apply(&base_content, patch) {
+                let result = match diffy::apply_bytes(&base_content, patch) {
                     Ok(r) => r,
                     Err(e) => {
+                        let base_content = String::from_utf8_lossy(&base_content);
                         panic!(
                             "Failed to apply patch at {parent_short}..{child_short} for {desc}: {e}\n\n\
-                            Patch:\n{patch}\n\n\
                             Base content:\n{base_content}"
                         );
                     }
                 };
 
                 if result != expected_content {
+                    let expected_content = String::from_utf8_lossy(&expected_content);
+                    let result = String::from_utf8_lossy(&result);
                     panic!(
                         "Content mismatch at {parent_short}..{child_short} for {desc}\n\n\
                         --- Expected ---\n{expected_content}\n\n\
-                        --- Got ---\n{result}\n\n\
-                        --- Patch ---\n{patch}"
+                        --- Got ---\n{result}"
                     );
                 }
             }
