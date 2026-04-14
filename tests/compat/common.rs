@@ -89,7 +89,7 @@ impl<'a> Case<'a> {
         let case_dir = self.case_dir();
         let in_dir = case_dir.join("in");
         let patch_path = in_dir.join("foo.patch");
-        let patch = fs::read_to_string(&patch_path)
+        let patch = fs::read(&patch_path)
             .unwrap_or_else(|e| panic!("failed to read {}: {e}", patch_path.display()));
 
         let case_name = self.case_name;
@@ -167,7 +167,7 @@ impl<'a> Case<'a> {
 
 fn git_apply(
     output_dir: &Path,
-    patch: &str,
+    patch: &[u8],
     strip_level: u32,
     in_dir: &Path,
 ) -> Result<(), String> {
@@ -183,12 +183,7 @@ fn git_apply(
     cmd.stderr(Stdio::piped());
 
     let mut child = cmd.spawn().expect("failed to spawn git apply");
-    child
-        .stdin
-        .as_mut()
-        .unwrap()
-        .write_all(patch.as_bytes())
-        .unwrap();
+    child.stdin.as_mut().unwrap().write_all(patch).unwrap();
 
     let output = child.wait_with_output().unwrap();
     if output.status.success() {
@@ -331,12 +326,12 @@ fn copy_input_files_impl(src: &Path, dst: &Path, base: &Path, skip_extensions: &
 /// Apply patch using diffy to output directory.
 pub fn apply_diffy(
     in_dir: &Path,
-    patch: &str,
+    patch: &[u8],
     output_dir: &Path,
     opts: ParseOptions,
     strip_prefix: u32,
 ) -> Result<(), TestError> {
-    let patches: Vec<_> = PatchSet::parse(patch, opts)
+    let patches: Vec<_> = PatchSet::parse_bytes(patch, opts)
         .collect::<Result<_, _>>()
         .map_err(TestError::Parse)?;
 
@@ -373,11 +368,11 @@ pub fn apply_diffy(
 
         match file_patch.patch() {
             PatchKind::Text(patch) => {
-                let original = String::from_utf8(read_original()).unwrap();
+                let original = read_original();
 
-                let result = diffy::apply(&original, patch).map_err(TestError::Apply)?;
+                let result = diffy::apply_bytes(&original, patch).map_err(TestError::Apply)?;
 
-                write_modified(result.as_bytes());
+                write_modified(&result);
             }
             PatchKind::Binary(BinaryPatch::Marker) => {
                 // Dont do anything if it is just a binary patch marker.
