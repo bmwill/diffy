@@ -48,15 +48,15 @@ const EMAIL_PREAMBLE_SEPARATOR: &str = "\n---\n";
 ///     println!("{:?}", patch.operation());
 /// }
 /// ```
-pub struct PatchSet<'a> {
-    input: &'a str,
+pub struct PatchSet<'a, T: ?Sized = str> {
+    input: &'a T,
     offset: usize,
     opts: ParseOptions,
     finished: bool,
     found_any: bool,
 }
 
-impl<'a> PatchSet<'a> {
+impl<'a> PatchSet<'a, str> {
     /// Creates a streaming parser for multiple file patches.
     pub fn parse(input: &'a str, opts: ParseOptions) -> Self {
         // Strip email preamble once at construction
@@ -71,7 +71,7 @@ impl<'a> PatchSet<'a> {
     }
 }
 
-impl<'a> Iterator for PatchSet<'a> {
+impl<'a> Iterator for PatchSet<'a, str> {
     type Item = Result<FilePatch<'a, str>, PatchSetParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -79,7 +79,9 @@ impl<'a> Iterator for PatchSet<'a> {
     }
 }
 
-fn next_patch<'a>(ps: &mut PatchSet<'a>) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
+fn next_patch<'a, T: Text + ?Sized>(
+    ps: &mut PatchSet<'a, T>,
+) -> Option<Result<FilePatch<'a, T>, PatchSetParseError>> {
     if ps.finished {
         return None;
     }
@@ -103,9 +105,9 @@ fn next_patch<'a>(ps: &mut PatchSet<'a>) -> Option<Result<FilePatch<'a, str>, Pa
     result
 }
 
-fn next_gitdiff_patch<'a>(
-    ps: &mut PatchSet<'a>,
-) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
+fn next_gitdiff_patch<'a, T: Text + ?Sized>(
+    ps: &mut PatchSet<'a, T>,
+) -> Option<Result<FilePatch<'a, T>, PatchSetParseError>> {
     let patch_start = find_gitdiff_start(remaining(ps))?;
     ps.offset += patch_start;
     ps.found_any = true;
@@ -171,7 +173,9 @@ fn next_gitdiff_patch<'a>(
             Binary::Keep => {
                 // GitHeader::parse consumed the marker line but not the payload.
                 // Use the recorded offset to pass input from the marker onward.
-                let binary_input = &ps.input[abs_patch_start + binary_patch_start..];
+                let (_, binary_input) = ps.input.split_at(abs_patch_start + binary_patch_start);
+                // Binary patch data is always ASCII (base85-encoded).
+                let binary_input = binary_input.as_str_prefix();
                 let (binary_patch, consumed) = match parse_binary_patch(binary_input) {
                     Ok(result) => result,
                     Err(e) => return Some(Err(e.into())),
@@ -239,9 +243,9 @@ fn next_gitdiff_patch<'a>(
     Some(Ok(FilePatch::new(operation, patch, old_mode, new_mode)))
 }
 
-fn next_unidiff_patch<'a>(
-    ps: &mut PatchSet<'a>,
-) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
+fn next_unidiff_patch<'a, T: Text + ?Sized>(
+    ps: &mut PatchSet<'a, T>,
+) -> Option<Result<FilePatch<'a, T>, PatchSetParseError>> {
     let remaining = remaining(ps);
     if remaining.is_empty() {
         return None;
@@ -250,7 +254,7 @@ fn next_unidiff_patch<'a>(
     let patch_start = find_patch_start(remaining)?;
     ps.found_any = true;
 
-    let patch_input = &remaining[patch_start..];
+    let (_, patch_input) = remaining.split_at(patch_start);
 
     let opts = crate::patch::parse::ParseOpts::default();
     let (result, consumed) = parse_one(patch_input, opts);
@@ -454,9 +458,9 @@ impl<'a> GitHeader<'a> {
 }
 
 /// Determines the file operation from git headers and patch paths.
-fn extract_file_op_gitdiff<'a>(
+fn extract_file_op_gitdiff<'a, T: Text + ?Sized>(
     header: &GitHeader<'a>,
-    patch: &Patch<'a, str>,
+    patch: &Patch<'a, T>,
 ) -> Result<FileOperation<'a>, PatchSetParseError> {
     // Git headers are authoritative for rename/copy
     if let (Some(from), Some(to)) = (header.rename_from, header.rename_to) {
@@ -709,12 +713,29 @@ fn longest_common_path_suffix<'a>(a: &'a str, b: &'a str) -> Option<&'a str> {
 }
 
 /// Extracts the file operation from a patch based on its header paths.
-pub(crate) fn extract_file_op_unidiff<'a>(
-    original: Option<&Cow<'a, str>>,
-    modified: Option<&Cow<'a, str>>,
+///
+/// Converts paths from `Cow<'a, T>` to `Cow<'a, str>` via [`Text::as_str`],
+/// since [`FileOperation`] always uses `Cow<str>` for paths.
+fn extract_file_op_unidiff<'a, T: Text + ?Sized>(
+    original: Option<&Cow<'a, T>>,
+    modified: Option<&Cow<'a, T>>,
 ) -> Result<FileOperation<'a>, PatchSetParseError> {
-    let is_create = original.map(Cow::as_ref) == Some(DEV_NULL);
-    let is_delete = modified.map(Cow::as_ref) == Some(DEV_NULL);
+    let to_str = |cow: &Cow<'a, T>| -> Option<Cow<'a, str>> {
+        match cow {
+            Cow::Borrowed(b) => b.as_str().map(Cow::Borrowed),
+            Cow::Owned(_) => cow.as_ref().as_str().map(|s| Cow::Owned(s.to_owned())),
+        }
+    };
+    // TODO: support non-UTF8 paths
+    let original = original
+        .map(|cow| to_str(cow).ok_or(PatchSetParseErrorKind::InvalidUtf8Path))
+        .transpose()?;
+    let modified = modified
+        .map(|cow| to_str(cow).ok_or(PatchSetParseErrorKind::InvalidUtf8Path))
+        .transpose()?;
+
+    let is_create = original.as_deref() == Some(DEV_NULL);
+    let is_delete = modified.as_deref() == Some(DEV_NULL);
 
     if is_create && is_delete {
         return Err(PatchSetParseErrorKind::BothDevNull.into());
@@ -722,29 +743,26 @@ pub(crate) fn extract_file_op_unidiff<'a>(
 
     if is_delete {
         let path = original.ok_or(PatchSetParseErrorKind::DeleteMissingOriginalPath)?;
-        Ok(FileOperation::Delete(path.clone()))
+        Ok(FileOperation::Delete(path))
     } else if is_create {
         let path = modified.ok_or(PatchSetParseErrorKind::CreateMissingModifiedPath)?;
-        Ok(FileOperation::Create(path.clone()))
+        Ok(FileOperation::Create(path))
     } else {
         match (original, modified) {
-            (Some(original), Some(modified)) => Ok(FileOperation::Modify {
-                original: original.clone(),
-                modified: modified.clone(),
-            }),
+            (Some(original), Some(modified)) => Ok(FileOperation::Modify { original, modified }),
             (None, Some(modified)) => {
                 // No original path, but has modified path.
                 // Observed that GNU patch reads from the modified path in this case.
                 Ok(FileOperation::Modify {
                     original: modified.clone(),
-                    modified: modified.clone(),
+                    modified,
                 })
             }
             (Some(original), None) => {
                 // No modified path, but has original path.
                 Ok(FileOperation::Modify {
                     modified: original.clone(),
-                    original: original.clone(),
+                    original,
                 })
             }
             (None, None) => Err(PatchSetParseErrorKind::NoFilePath.into()),
@@ -762,7 +780,7 @@ fn strip_line_ending<T: Text + ?Sized>(line: &T) -> &T {
     line.strip_suffix("\n").unwrap_or(line)
 }
 
-fn remaining<'a>(ps: &PatchSet<'a>) -> &'a str {
+fn remaining<'a, T: Text + ?Sized>(ps: &PatchSet<'a, T>) -> &'a T {
     let (_, rest) = ps.input.split_at(ps.offset);
     rest
 }

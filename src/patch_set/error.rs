@@ -78,6 +78,9 @@ pub(crate) enum PatchSetParseErrorKind {
     /// Invalid `diff --git` path.
     InvalidDiffGitPath,
 
+    /// File path contains invalid UTF-8.
+    InvalidUtf8Path,
+
     /// Binary diff not supported in current configuration.
     BinaryNotSupported { path: String },
 
@@ -96,6 +99,7 @@ impl fmt::Display for PatchSetParseErrorKind {
             Self::CreateMissingModifiedPath => write!(f, "create patch has no modified path"),
             Self::InvalidFileMode(mode) => write!(f, "invalid file mode: {mode}"),
             Self::InvalidDiffGitPath => write!(f, "invalid diff --git path"),
+            Self::InvalidUtf8Path => write!(f, "file path is not valid UTF-8"),
             Self::BinaryNotSupported { path } => {
                 write!(f, "binary diff not supported: {path}")
             }
