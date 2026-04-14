@@ -606,3 +606,53 @@ diff --git a/foo b/foo
         assert_eq!(patches.len(), 1, "binary should be skipped, text parsed");
     }
 }
+
+mod patchset_parse_bytes {
+    use super::*;
+
+    #[test]
+    fn non_utf8_hunk_content() {
+        // Hunk lines contain invalid UTF-8 bytes (0x80, 0xff).
+        let mut input: Vec<u8> = Vec::new();
+        input.extend(b"--- a/file.bin\n");
+        input.extend(b"+++ b/file.bin\n");
+        input.extend(b"@@ -1,3 +1,3 @@\n");
+        input.extend(b" valid ascii\n");
+        input.extend(b"-old \x80\xff bytes\n");
+        input.extend(b"+new \x80\xff bytes\n");
+        input.extend(b" more ascii\n");
+
+        let patches = PatchSet::parse_bytes(&input, ParseOptions::unidiff())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(patches.len(), 1);
+
+        let patch = patches[0].patch().as_text().expect("expected text patch");
+        let hunks = patch.hunks();
+        assert_eq!(hunks.len(), 1);
+
+        use crate::patch::Line;
+        let lines = hunks[0].lines();
+        assert_eq!(lines.len(), 4);
+        assert_eq!(lines[0], Line::Context(b"valid ascii\n" as &[u8]));
+        assert_eq!(lines[1], Line::Delete(b"old \x80\xff bytes\n" as &[u8]));
+        assert_eq!(lines[2], Line::Insert(b"new \x80\xff bytes\n" as &[u8]));
+        assert_eq!(lines[3], Line::Context(b"more ascii\n" as &[u8]));
+    }
+
+    #[test]
+    fn non_utf8_path_returns_error() {
+        // File paths (currently) must be valid UTF-8 even in byte mode.
+        let mut input: Vec<u8> = Vec::new();
+        input.extend(b"--- a/bad\xffpath\n");
+        input.extend(b"+++ b/good\n");
+        input.extend(b"@@ -1 +1 @@\n");
+        input.extend(b"-old\n");
+        input.extend(b"+new\n");
+
+        let result: Result<Vec<_>, _> =
+            PatchSet::parse_bytes(&input, ParseOptions::unidiff()).collect();
+        let err = result.unwrap_err();
+        assert_eq!(err.kind, PatchSetParseErrorKind::InvalidUtf8Path);
+    }
+}
