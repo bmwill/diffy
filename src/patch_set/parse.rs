@@ -79,6 +79,31 @@ impl<'a> Iterator for PatchSet<'a, str> {
     }
 }
 
+impl<'a> PatchSet<'a, [u8]> {
+    /// Creates a streaming parser for multiple file patches from raw bytes.
+    ///
+    /// Unlike [`PatchSet::parse`], this preserves non-UTF-8 content in hunks
+    /// (e.g., binary files that git misdetects as text).
+    pub fn parse_bytes(input: &'a [u8], opts: ParseOptions) -> Self {
+        let input = strip_email_preamble(input);
+        Self {
+            input,
+            offset: 0,
+            opts,
+            finished: false,
+            found_any: false,
+        }
+    }
+}
+
+impl<'a> Iterator for PatchSet<'a, [u8]> {
+    type Item = Result<FilePatch<'a, [u8]>, PatchSetParseError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        next_patch(self)
+    }
+}
+
 fn next_patch<'a, T: Text + ?Sized>(
     ps: &mut PatchSet<'a, T>,
 ) -> Option<Result<FilePatch<'a, T>, PatchSetParseError>> {
