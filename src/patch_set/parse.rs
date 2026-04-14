@@ -401,42 +401,51 @@ impl<'a> GitHeader<'a> {
     /// or the next `diff --git`).
     ///
     /// Returns the parsed header and the number of bytes consumed.
-    fn parse(input: &'a str) -> (Self, usize) {
+    ///
+    /// Assumption: Header lines are always ASCII
+    /// (with `core.quotePath=true`, git's default).
+    fn parse<T: Text + ?Sized>(input: &'a T) -> (Self, usize) {
         let mut header = GitHeader::default();
         let mut consumed = 0;
 
         for line in input.lines() {
-            if let Some(rest) = line.strip_prefix("diff --git ") {
+            let trimmed = strip_line_ending(line);
+            let Some(s) = trimmed.as_str() else {
+                // Non-UTF-8 line — not a recognized header
+                break;
+            };
+
+            if let Some(rest) = s.strip_prefix("diff --git ") {
                 // Only accept the first `diff --git` line.
                 // A second one means we've reached the next patch.
                 if header.diff_git_line.is_some() {
                     break;
                 }
                 header.diff_git_line = Some(rest);
-            } else if let Some(path) = line.strip_prefix("rename from ") {
+            } else if let Some(path) = s.strip_prefix("rename from ") {
                 header.rename_from = Some(path);
-            } else if let Some(path) = line.strip_prefix("rename to ") {
+            } else if let Some(path) = s.strip_prefix("rename to ") {
                 header.rename_to = Some(path);
-            } else if let Some(path) = line.strip_prefix("copy from ") {
+            } else if let Some(path) = s.strip_prefix("copy from ") {
                 header.copy_from = Some(path);
-            } else if let Some(path) = line.strip_prefix("copy to ") {
+            } else if let Some(path) = s.strip_prefix("copy to ") {
                 header.copy_to = Some(path);
-            } else if let Some(mode) = line.strip_prefix("old mode ") {
+            } else if let Some(mode) = s.strip_prefix("old mode ") {
                 header.old_mode = Some(mode);
-            } else if let Some(mode) = line.strip_prefix("new mode ") {
+            } else if let Some(mode) = s.strip_prefix("new mode ") {
                 header.new_mode = Some(mode);
-            } else if let Some(mode) = line.strip_prefix("new file mode ") {
+            } else if let Some(mode) = s.strip_prefix("new file mode ") {
                 header.new_file_mode = Some(mode);
-            } else if let Some(mode) = line.strip_prefix("deleted file mode ") {
+            } else if let Some(mode) = s.strip_prefix("deleted file mode ") {
                 header.deleted_file_mode = Some(mode);
-            } else if line.starts_with("index ")
-                || line.starts_with("similarity index ")
-                || line.starts_with("dissimilarity index ")
+            } else if s.starts_with("index ")
+                || s.starts_with("similarity index ")
+                || s.starts_with("dissimilarity index ")
             {
                 // Recognized but nothing to extract.
-            } else if line.starts_with("Binary files ") {
+            } else if s.starts_with("Binary files ") {
                 header.is_binary_marker = true;
-            } else if line.starts_with("GIT binary patch") {
+            } else if s.starts_with("GIT binary patch") {
                 header.binary_patch_offset = Some(consumed);
             } else {
                 // Unrecognized line: End of extended headers
@@ -445,7 +454,6 @@ impl<'a> GitHeader<'a> {
             }
 
             consumed += line.len();
-            consumed += line_ending_len(&input[consumed..]);
         }
 
         (header, consumed)
@@ -751,16 +759,12 @@ pub(crate) fn extract_file_op_unidiff<'a>(
     }
 }
 
-/// Returns the length of the line ending at the start of `s`.
+/// Strips the trailing `\n` from a line yielded by [`Text::lines`].
 ///
-/// `.lines()` strips line endings, so callers tracking byte offsets need to
-/// account for the `\r\n` or `\n` that was consumed.
-fn line_ending_len(s: &str) -> usize {
-    if s.starts_with("\r\n") {
-        2
-    } else if s.starts_with('\n') {
-        1
-    } else {
-        0
-    }
+/// [`Text::lines`] includes line endings; strip for matching.
+fn strip_line_ending<T: Text + ?Sized>(line: &T) -> &T {
+    // TODO: GNU patch strips trailing CRs from CRLF patches automatically.
+    // We should consider adding compat tests for GNU patch.
+    // And `git apply` seems to reject. Worth adding tests as well.
+    line.strip_suffix("\n").unwrap_or(line)
 }
