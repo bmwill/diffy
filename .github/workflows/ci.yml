@@ -58,19 +58,19 @@ jobs:
             commits: '0'
           - name: golang/go
             repo_url: https://github.com/golang/go
-            commits: '200'
+            commits: '2000'
           - name: git/git
             repo_url: https://github.com/git/git
-            commits: '100'
+            commits: '1000'
           - name: rust-lang/rust
             repo_url: https://github.com/rust-lang/rust
-            commits: '30'
+            commits: '50'
           - name: torvalds/linux
             repo_url: https://github.com/torvalds/linux
-            commits: '30'
+            commits: '40'
           - name: llvm/llvm-project
             repo_url: https://github.com/llvm/llvm-project
-            commits: '30'
+            commits: '50'
     name: replay (${{ matrix.name }})
     uses: ./.github/workflows/replay.yml
     with:
