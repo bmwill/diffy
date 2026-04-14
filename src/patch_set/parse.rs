@@ -69,215 +69,208 @@ impl<'a> PatchSet<'a> {
             found_any: false,
         }
     }
-
-    /// Creates an error with the current offset as span.
-    fn error(&self, kind: PatchSetParseErrorKind) -> PatchSetParseError {
-        PatchSetParseError::new(kind, self.offset..self.offset)
-    }
-
-    fn next_gitdiff_patch(&mut self) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
-        let remaining = &self.input[self.offset..];
-        let patch_start = find_gitdiff_start(remaining)?;
-        self.offset += patch_start;
-        self.found_any = true;
-
-        let abs_patch_start = self.offset;
-
-        // Parse extended headers incrementally — stops at first unrecognized line
-        let (header, header_consumed) = GitHeader::parse(&self.input[self.offset..]);
-        self.offset += header_consumed;
-
-        // Handle "Binary files ... differ" (no patch data)
-        if header.is_binary_marker {
-            match self.opts.binary {
-                Binary::Skip => {
-                    return self.next_gitdiff_patch();
-                }
-                Binary::Fail => {
-                    let path = header.diff_git_line.unwrap_or("<unknown>").to_owned();
-                    return Some(Err(PatchSetParseError::new(
-                        PatchSetParseErrorKind::BinaryNotSupported { path },
-                        abs_patch_start..abs_patch_start,
-                    )));
-                }
-                Binary::Keep => {
-                    // FIXME: error spans point at `diff --git` line, not the specific offending line
-                    let operation = match extract_file_op_binary(&header) {
-                        Ok(op) => op,
-                        Err(mut e) => {
-                            e.set_span(abs_patch_start..abs_patch_start);
-                            return Some(Err(e));
-                        }
-                    };
-                    let (old_mode, new_mode) = match parse_file_modes(&header) {
-                        Ok(modes) => modes,
-                        Err(mut e) => {
-                            e.set_span(abs_patch_start..abs_patch_start);
-                            return Some(Err(e));
-                        }
-                    };
-                    return Some(Ok(FilePatch::new_binary(
-                        operation,
-                        BinaryPatch::Marker,
-                        old_mode,
-                        new_mode,
-                    )));
-                }
-            }
-        }
-
-        // Handle "GIT binary patch" (has patch data)
-        if let Some(binary_patch_start) = header.binary_patch_offset {
-            match self.opts.binary {
-                Binary::Skip => {
-                    return self.next_gitdiff_patch();
-                }
-                Binary::Fail => {
-                    let path = header.diff_git_line.unwrap_or("<unknown>").to_owned();
-                    return Some(Err(PatchSetParseError::new(
-                        PatchSetParseErrorKind::BinaryNotSupported { path },
-                        abs_patch_start..abs_patch_start,
-                    )));
-                }
-                Binary::Keep => {
-                    // GitHeader::parse consumed the marker line but not the payload.
-                    // Use the recorded offset to pass input from the marker onward.
-                    let binary_input = &self.input[abs_patch_start + binary_patch_start..];
-                    let (binary_patch, consumed) = match parse_binary_patch(binary_input) {
-                        Ok(result) => result,
-                        Err(e) => return Some(Err(e.into())),
-                    };
-                    self.offset = abs_patch_start + binary_patch_start + consumed;
-
-                    // FIXME: error spans point at `diff --git` line, not the specific offending line
-                    let operation = match extract_file_op_binary(&header) {
-                        Ok(op) => op,
-                        Err(mut e) => {
-                            e.set_span(abs_patch_start..abs_patch_start);
-                            return Some(Err(e));
-                        }
-                    };
-                    let (old_mode, new_mode) = match parse_file_modes(&header) {
-                        Ok(modes) => modes,
-                        Err(mut e) => {
-                            e.set_span(abs_patch_start..abs_patch_start);
-                            return Some(Err(e));
-                        }
-                    };
-                    return Some(Ok(FilePatch::new_binary(
-                        operation,
-                        binary_patch,
-                        old_mode,
-                        new_mode,
-                    )));
-                }
-            }
-        }
-
-        // `git diff` output format is stricter.
-        // There is no preamble between Git headers and unidiff patch portion,
-        // so we safely don't perform the preamble skipping.
-        //
-        // If we did, it would fail the pure rename/mode-change operation
-        // since those ops have no unidiff patch portion
-        // and is directly followed by the next `diff --git` header.
-        let opts = crate::patch::parse::ParseOpts::default().no_skip_preamble();
-        let remaining = &self.input[self.offset..];
-        let (result, consumed) = parse_one(remaining, opts);
-        self.offset += consumed;
-        let patch = match result {
-            Ok(patch) => patch,
-            Err(e) => return Some(Err(e.into())),
-        };
-
-        // FIXME: error spans point at `diff --git` line, not the specific offending line
-        let operation = match extract_file_op_gitdiff(&header, &patch) {
-            Ok(op) => op,
-            Err(mut e) => {
-                e.set_span(abs_patch_start..abs_patch_start);
-                return Some(Err(e));
-            }
-        };
-
-        // FIXME: error spans point at `diff --git` line, not the specific offending line
-        let (old_mode, new_mode) = match parse_file_modes(&header) {
-            Ok(modes) => modes,
-            Err(mut e) => {
-                e.set_span(abs_patch_start..abs_patch_start);
-                return Some(Err(e));
-            }
-        };
-
-        Some(Ok(FilePatch::new(operation, patch, old_mode, new_mode)))
-    }
-
-    fn next_unidiff_patch(&mut self) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
-        let remaining = &self.input[self.offset..];
-        if remaining.is_empty() {
-            return None;
-        }
-
-        let patch_start = find_patch_start(remaining)?;
-        self.found_any = true;
-
-        let patch_input = &remaining[patch_start..];
-
-        let opts = crate::patch::parse::ParseOpts::default();
-        let (result, consumed) = parse_one(patch_input, opts);
-        // Always advance so the iterator makes progress even on error.
-        let abs_patch_start = self.offset + patch_start;
-        self.offset += patch_start + consumed;
-
-        let patch = match result {
-            Ok(patch) => patch,
-            Err(e) => return Some(Err(e.into())),
-        };
-        let operation = match extract_file_op_unidiff(patch.original_path(), patch.modified_path())
-        {
-            Ok(op) => op,
-            Err(mut e) => {
-                e.set_span(abs_patch_start..abs_patch_start);
-                return Some(Err(e));
-            }
-        };
-
-        Some(Ok(FilePatch::new(operation, patch, None, None)))
-    }
 }
 
 impl<'a> Iterator for PatchSet<'a> {
     type Item = Result<FilePatch<'a, str>, PatchSetParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.finished {
-            return None;
-        }
-
-        let result = match self.opts.format {
-            Format::UniDiff => {
-                let result = self.next_unidiff_patch();
-                if result.is_none() {
-                    self.finished = true;
-                    if !self.found_any {
-                        return Some(Err(self.error(PatchSetParseErrorKind::NoPatchesFound)));
-                    }
-                }
-                result
-            }
-            Format::GitDiff => {
-                let result = self.next_gitdiff_patch();
-                if result.is_none() {
-                    self.finished = true;
-                    if !self.found_any {
-                        return Some(Err(self.error(PatchSetParseErrorKind::NoPatchesFound)));
-                    }
-                }
-                result
-            }
-        };
-
-        result
+        next_patch(self)
     }
+}
+
+fn next_patch<'a>(ps: &mut PatchSet<'a>) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
+    if ps.finished {
+        return None;
+    }
+
+    let result = match ps.opts.format {
+        Format::UniDiff => next_unidiff_patch(ps),
+        Format::GitDiff => next_gitdiff_patch(ps),
+    };
+
+    if result.is_none() {
+        ps.finished = true;
+        if !ps.found_any {
+            let err = PatchSetParseError::new(
+                PatchSetParseErrorKind::NoPatchesFound,
+                ps.offset..ps.offset,
+            );
+            return Some(Err(err));
+        }
+    }
+
+    result
+}
+
+fn next_gitdiff_patch<'a>(
+    ps: &mut PatchSet<'a>,
+) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
+    let patch_start = find_gitdiff_start(remaining(ps))?;
+    ps.offset += patch_start;
+    ps.found_any = true;
+
+    let abs_patch_start = ps.offset;
+
+    // Parse extended headers incrementally — stops at first unrecognized line
+    let (header, header_consumed) = GitHeader::parse(remaining(ps));
+    ps.offset += header_consumed;
+
+    // Handle "Binary files ... differ" (no patch data)
+    if header.is_binary_marker {
+        match ps.opts.binary {
+            Binary::Skip => {
+                return next_gitdiff_patch(ps);
+            }
+            Binary::Fail => {
+                let path = header.diff_git_line.unwrap_or("<unknown>").to_owned();
+                return Some(Err(PatchSetParseError::new(
+                    PatchSetParseErrorKind::BinaryNotSupported { path },
+                    abs_patch_start..abs_patch_start,
+                )));
+            }
+            Binary::Keep => {
+                // FIXME: error spans point at `diff --git` line, not the specific offending line
+                let operation = match extract_file_op_binary(&header) {
+                    Ok(op) => op,
+                    Err(mut e) => {
+                        e.set_span(abs_patch_start..abs_patch_start);
+                        return Some(Err(e));
+                    }
+                };
+                let (old_mode, new_mode) = match parse_file_modes(&header) {
+                    Ok(modes) => modes,
+                    Err(mut e) => {
+                        e.set_span(abs_patch_start..abs_patch_start);
+                        return Some(Err(e));
+                    }
+                };
+                return Some(Ok(FilePatch::new_binary(
+                    operation,
+                    BinaryPatch::Marker,
+                    old_mode,
+                    new_mode,
+                )));
+            }
+        }
+    }
+
+    // Handle "GIT binary patch" (has patch data)
+    if let Some(binary_patch_start) = header.binary_patch_offset {
+        match ps.opts.binary {
+            Binary::Skip => {
+                return next_gitdiff_patch(ps);
+            }
+            Binary::Fail => {
+                let path = header.diff_git_line.unwrap_or("<unknown>").to_owned();
+                return Some(Err(PatchSetParseError::new(
+                    PatchSetParseErrorKind::BinaryNotSupported { path },
+                    abs_patch_start..abs_patch_start,
+                )));
+            }
+            Binary::Keep => {
+                // GitHeader::parse consumed the marker line but not the payload.
+                // Use the recorded offset to pass input from the marker onward.
+                let binary_input = &ps.input[abs_patch_start + binary_patch_start..];
+                let (binary_patch, consumed) = match parse_binary_patch(binary_input) {
+                    Ok(result) => result,
+                    Err(e) => return Some(Err(e.into())),
+                };
+                ps.offset = abs_patch_start + binary_patch_start + consumed;
+
+                // FIXME: error spans point at `diff --git` line, not the specific offending line
+                let operation = match extract_file_op_binary(&header) {
+                    Ok(op) => op,
+                    Err(mut e) => {
+                        e.set_span(abs_patch_start..abs_patch_start);
+                        return Some(Err(e));
+                    }
+                };
+                let (old_mode, new_mode) = match parse_file_modes(&header) {
+                    Ok(modes) => modes,
+                    Err(mut e) => {
+                        e.set_span(abs_patch_start..abs_patch_start);
+                        return Some(Err(e));
+                    }
+                };
+                return Some(Ok(FilePatch::new_binary(
+                    operation,
+                    binary_patch,
+                    old_mode,
+                    new_mode,
+                )));
+            }
+        }
+    }
+
+    // `git diff` output format is stricter.
+    // There is no preamble between Git headers and unidiff patch portion,
+    // so we safely don't perform the preamble skipping.
+    //
+    // If we did, it would fail the pure rename/mode-change operation
+    // since those ops have no unidiff patch portion
+    // and is directly followed by the next `diff --git` header.
+    let opts = crate::patch::parse::ParseOpts::default().no_skip_preamble();
+    let (result, consumed) = parse_one(remaining(ps), opts);
+    ps.offset += consumed;
+    let patch = match result {
+        Ok(patch) => patch,
+        Err(e) => return Some(Err(e.into())),
+    };
+
+    // FIXME: error spans point at `diff --git` line, not the specific offending line
+    let operation = match extract_file_op_gitdiff(&header, &patch) {
+        Ok(op) => op,
+        Err(mut e) => {
+            e.set_span(abs_patch_start..abs_patch_start);
+            return Some(Err(e));
+        }
+    };
+
+    // FIXME: error spans point at `diff --git` line, not the specific offending line
+    let (old_mode, new_mode) = match parse_file_modes(&header) {
+        Ok(modes) => modes,
+        Err(mut e) => {
+            e.set_span(abs_patch_start..abs_patch_start);
+            return Some(Err(e));
+        }
+    };
+
+    Some(Ok(FilePatch::new(operation, patch, old_mode, new_mode)))
+}
+
+fn next_unidiff_patch<'a>(
+    ps: &mut PatchSet<'a>,
+) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
+    let remaining = remaining(ps);
+    if remaining.is_empty() {
+        return None;
+    }
+
+    let patch_start = find_patch_start(remaining)?;
+    ps.found_any = true;
+
+    let patch_input = &remaining[patch_start..];
+
+    let opts = crate::patch::parse::ParseOpts::default();
+    let (result, consumed) = parse_one(patch_input, opts);
+    // Always advance so the iterator makes progress even on error.
+    let abs_patch_start = ps.offset + patch_start;
+    ps.offset += patch_start + consumed;
+
+    let patch = match result {
+        Ok(patch) => patch,
+        Err(e) => return Some(Err(e.into())),
+    };
+    let operation = match extract_file_op_unidiff(patch.original_path(), patch.modified_path()) {
+        Ok(op) => op,
+        Err(mut e) => {
+            e.set_span(abs_patch_start..abs_patch_start);
+            return Some(Err(e));
+        }
+    };
+
+    Some(Ok(FilePatch::new(operation, patch, None, None)))
 }
 
 /// Finds the byte offset of the first patch header in the input.
@@ -767,4 +760,9 @@ fn strip_line_ending<T: Text + ?Sized>(line: &T) -> &T {
     // We should consider adding compat tests for GNU patch.
     // And `git apply` seems to reject. Worth adding tests as well.
     line.strip_suffix("\n").unwrap_or(line)
+}
+
+fn remaining<'a>(ps: &PatchSet<'a>) -> &'a str {
+    let (_, rest) = ps.input.split_at(ps.offset);
+    rest
 }
