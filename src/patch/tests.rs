@@ -618,6 +618,25 @@ fn plain_filename_roundtrip() {
     assert_eq!(p.modified(), p2.modified());
 }
 
+// Octal escape \377 decodes to 0xFF, which is not valid UTF-8.
+// When parsing into `Patch<'_, str>`, `convert_cow_to_str` panics
+// via `unwrap()` instead of returning a parse error.
+//
+// This documents the pre-existing bug that the reviewer flagged:
+// https://github.com/bmwill/diffy/pull/59#r3089024322
+#[test]
+#[should_panic]
+fn non_utf8_escaped_filename_panics_on_str_parse() {
+    let s = r#"\
+--- "a/foo\377"
++++ "b/foo\377"
+@@ -1 +1 @@
+-x
++y
+"#;
+    let _ = parse(s);
+}
+
 mod error_display {
     use crate::patch::error::ParsePatchErrorKind;
     use crate::Patch;
