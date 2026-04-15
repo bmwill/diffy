@@ -185,12 +185,14 @@ fn strip_email_preamble<T: Text + ?Sized>(input: &T) -> &T {
 }
 
 /// Extracts the file operation from a patch based on its header paths.
-pub(crate) fn extract_file_op_unidiff<'a>(
-    original: Option<&Cow<'a, str>>,
-    modified: Option<&Cow<'a, str>>,
-) -> Result<FileOperation<'a>, PatchSetParseError> {
-    let is_create = original.map(Cow::as_ref) == Some(DEV_NULL);
-    let is_delete = modified.map(Cow::as_ref) == Some(DEV_NULL);
+fn extract_file_op_unidiff<'a, T: Text + ?Sized>(
+    original: Option<&Cow<'a, T>>,
+    modified: Option<&Cow<'a, T>>,
+) -> Result<FileOperation<'a, T>, PatchSetParseError> {
+    let is_dev_null = |cow: &Cow<'_, T>| cow.as_ref().as_bytes() == DEV_NULL.as_bytes();
+
+    let is_create = original.is_some_and(is_dev_null);
+    let is_delete = modified.is_some_and(is_dev_null);
 
     if is_create && is_delete {
         return Err(PatchSetParseErrorKind::BothDevNull.into());
