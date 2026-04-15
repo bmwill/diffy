@@ -5,6 +5,7 @@ use super::{
     PatchSetParseError,
 };
 use crate::patch::parse::parse_one;
+use crate::utils::Text;
 
 use std::borrow::Cow;
 
@@ -135,19 +136,13 @@ impl<'a> Iterator for PatchSet<'a> {
 ///
 /// A patch header starts with `--- ` or `+++ ` (the file path lines).
 /// Returns `None` if no header is found.
-fn find_patch_start(input: &str) -> Option<usize> {
+fn find_patch_start<T: Text + ?Sized>(input: &T) -> Option<usize> {
     let mut offset = 0;
     for line in input.lines() {
         if line.starts_with(ORIGINAL_PREFIX) || line.starts_with(MODIFIED_PREFIX) {
             return Some(offset);
         }
         offset += line.len();
-        // Account for the line ending that `.lines()` strips
-        if input[offset..].starts_with("\r\n") {
-            offset += 2;
-        } else if input[offset..].starts_with('\n') {
-            offset += 1;
-        }
     }
     None
 }
@@ -167,14 +162,17 @@ fn find_patch_start(input: &str) -> Option<usize> {
 /// > The log message and the patch are separated by a line with a three-dash line.
 ///
 /// [`git format-patch`]: https://git-scm.com/docs/git-format-patch
-fn strip_email_preamble(input: &str) -> &str {
+fn strip_email_preamble<T: Text + ?Sized>(input: &T) -> &T {
     // only strip preamble for mbox-formatted input
     if !input.starts_with("From ") {
         return input;
     }
 
     match input.find(EMAIL_PREAMBLE_SEPARATOR) {
-        Some(pos) => &input[pos + EMAIL_PREAMBLE_SEPARATOR.len()..],
+        Some(pos) => {
+            let (_, rest) = input.split_at(pos + EMAIL_PREAMBLE_SEPARATOR.len());
+            rest
+        }
         None => input,
     }
 }
