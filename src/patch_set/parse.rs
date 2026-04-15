@@ -21,7 +21,7 @@ const EMAIL_PREAMBLE_SEPARATOR: &str = "\n---\n";
 
 /// Streaming iterator for parsing patches one at a time.
 ///
-/// Created by [`PatchSet::parse`].
+/// Created by [`PatchSet::parse`] or [`PatchSet::parse_bytes`].
 ///
 /// # Example
 ///
@@ -46,16 +46,16 @@ const EMAIL_PREAMBLE_SEPARATOR: &str = "\n---\n";
 ///     println!("{:?}", patch.operation());
 /// }
 /// ```
-pub struct PatchSet<'a> {
-    input: &'a str,
+pub struct PatchSet<'a, T: ?Sized> {
+    input: &'a T,
     offset: usize,
     opts: ParseOptions,
     finished: bool,
     found_any: bool,
 }
 
-impl<'a> PatchSet<'a> {
-    /// Creates a streaming parser for multiple file patches.
+impl<'a> PatchSet<'a, str> {
+    /// Creates a streaming parser for multiple file patches from a string.
     pub fn parse(input: &'a str, opts: ParseOptions) -> Self {
         // Strip email preamble once at construction
         let input = strip_email_preamble(input);
@@ -69,7 +69,25 @@ impl<'a> PatchSet<'a> {
     }
 }
 
-impl<'a> Iterator for PatchSet<'a> {
+impl<'a> PatchSet<'a, [u8]> {
+    /// Creates a streaming parser for multiple file patches from raw bytes.
+    ///
+    /// This is useful when the diff output may contain non-UTF-8 content,
+    /// such as patches produced by `git diff --binary` on files that git
+    /// misdetects as text.
+    pub fn parse_bytes(input: &'a [u8], opts: ParseOptions) -> Self {
+        let input = strip_email_preamble(input);
+        Self {
+            input,
+            offset: 0,
+            opts,
+            finished: false,
+            found_any: false,
+        }
+    }
+}
+
+impl<'a> Iterator for PatchSet<'a, str> {
     type Item = Result<FilePatch<'a, str>, PatchSetParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -77,7 +95,17 @@ impl<'a> Iterator for PatchSet<'a> {
     }
 }
 
-fn next_patch<'a>(ps: &mut PatchSet<'a>) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
+impl<'a> Iterator for PatchSet<'a, [u8]> {
+    type Item = Result<FilePatch<'a, [u8]>, PatchSetParseError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        next_patch(self)
+    }
+}
+
+fn next_patch<'a, T: Text + ?Sized>(
+    ps: &mut PatchSet<'a, T>,
+) -> Option<Result<FilePatch<'a, T>, PatchSetParseError>> {
     if ps.finished {
         return None;
     }
@@ -100,9 +128,9 @@ fn next_patch<'a>(ps: &mut PatchSet<'a>) -> Option<Result<FilePatch<'a, str>, Pa
     result
 }
 
-fn next_unidiff_patch<'a>(
-    ps: &mut PatchSet<'a>,
-) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
+fn next_unidiff_patch<'a, T: Text + ?Sized>(
+    ps: &mut PatchSet<'a, T>,
+) -> Option<Result<FilePatch<'a, T>, PatchSetParseError>> {
     let remaining = remaining(ps);
     if remaining.is_empty() {
         return None;
@@ -111,7 +139,7 @@ fn next_unidiff_patch<'a>(
     let patch_start = find_patch_start(remaining)?;
     ps.found_any = true;
 
-    let patch_input = &remaining[patch_start..];
+    let (_, patch_input) = remaining.split_at(patch_start);
 
     let opts = crate::patch::parse::ParseOpts::default();
     let (result, consumed) = parse_one(patch_input, opts);
@@ -134,7 +162,7 @@ fn next_unidiff_patch<'a>(
     Some(Ok(FilePatch::new(operation, patch, None, None)))
 }
 
-fn remaining<'a>(ps: &PatchSet<'a>) -> &'a str {
+fn remaining<'a, T: Text + ?Sized>(ps: &PatchSet<'a, T>) -> &'a T {
     let (_, rest) = ps.input.split_at(ps.offset);
     rest
 }
