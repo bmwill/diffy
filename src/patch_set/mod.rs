@@ -9,7 +9,9 @@ mod parse;
 mod tests;
 
 use std::borrow::Cow;
+use std::fmt;
 
+use crate::utils::Text;
 use crate::Patch;
 
 pub use error::PatchSetParseError;
@@ -116,7 +118,7 @@ impl<'a, T: ToOwned + ?Sized> PatchKind<'a, T> {
 /// (create, delete, modify, or rename).
 #[derive(Clone, PartialEq, Eq)]
 pub struct FilePatch<'a, T: ToOwned + ?Sized> {
-    operation: FileOperation<'a>,
+    operation: FileOperation<'a, T>,
     kind: PatchKind<'a, T>,
     old_mode: Option<FileMode>,
     new_mode: Option<FileMode>,
@@ -139,7 +141,7 @@ where
 
 impl<'a, T: ToOwned + ?Sized> FilePatch<'a, T> {
     fn new(
-        operation: FileOperation<'a>,
+        operation: FileOperation<'a, T>,
         patch: Patch<'a, T>,
         old_mode: Option<FileMode>,
         new_mode: Option<FileMode>,
@@ -153,7 +155,7 @@ impl<'a, T: ToOwned + ?Sized> FilePatch<'a, T> {
     }
 
     /// Returns the file operation for this patch.
-    pub fn operation(&self) -> &FileOperation<'a> {
+    pub fn operation(&self) -> &FileOperation<'a, T> {
         &self.operation
     }
 
@@ -192,12 +194,12 @@ impl<'a, T: ToOwned + ?Sized> FilePatch<'a, T> {
 ///
 /// This is determined by examining the `---` and `+++` header lines
 /// of a unified diff patch, and git extended headers when available.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FileOperation<'a> {
+#[derive(PartialEq, Eq)]
+pub enum FileOperation<'a, T: ToOwned + ?Sized> {
     /// Delete a file (`+++ /dev/null`).
-    Delete(Cow<'a, str>),
+    Delete(Cow<'a, T>),
     /// Create a new file (`--- /dev/null`).
-    Create(Cow<'a, str>),
+    Create(Cow<'a, T>),
     /// Modify a file.
     ///
     /// * If `original == modified`, this is an in-place modification.
@@ -205,35 +207,78 @@ pub enum FileOperation<'a> {
     ///
     /// Usually, the caller needs to strip the prefix from the paths to determine.
     Modify {
-        original: Cow<'a, str>,
-        modified: Cow<'a, str>,
+        original: Cow<'a, T>,
+        modified: Cow<'a, T>,
     },
     /// Rename a file (move from `from` to `to`, delete `from`).
     ///
     /// Only produced when git extended headers explicitly indicate a rename.
-    Rename {
-        from: Cow<'a, str>,
-        to: Cow<'a, str>,
-    },
+    Rename { from: Cow<'a, T>, to: Cow<'a, T> },
     /// Copy a file (copy from `from` to `to`, keep `from`).
     ///
     /// Only produced when git extended headers explicitly indicate a copy.
-    Copy {
-        from: Cow<'a, str>,
-        to: Cow<'a, str>,
-    },
+    Copy { from: Cow<'a, T>, to: Cow<'a, T> },
 }
 
-impl FileOperation<'_> {
+impl<T: ToOwned + ?Sized> Clone for FileOperation<'_, T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Delete(p) => Self::Delete(p.clone()),
+            Self::Create(p) => Self::Create(p.clone()),
+            Self::Modify { original, modified } => Self::Modify {
+                original: original.clone(),
+                modified: modified.clone(),
+            },
+            Self::Rename { from, to } => Self::Rename {
+                from: from.clone(),
+                to: to.clone(),
+            },
+            Self::Copy { from, to } => Self::Copy {
+                from: from.clone(),
+                to: to.clone(),
+            },
+        }
+    }
+}
+
+impl<T: ?Sized, O> fmt::Debug for FileOperation<'_, T>
+where
+    T: ToOwned<Owned = O> + fmt::Debug,
+    O: std::borrow::Borrow<T> + fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Delete(p) => f.debug_tuple("Delete").field(p).finish(),
+            Self::Create(p) => f.debug_tuple("Create").field(p).finish(),
+            Self::Modify { original, modified } => f
+                .debug_struct("Modify")
+                .field("original", original)
+                .field("modified", modified)
+                .finish(),
+            Self::Rename { from, to } => f
+                .debug_struct("Rename")
+                .field("from", from)
+                .field("to", to)
+                .finish(),
+            Self::Copy { from, to } => f
+                .debug_struct("Copy")
+                .field("from", from)
+                .field("to", to)
+                .finish(),
+        }
+    }
+}
+
+impl<T: Text + ?Sized> FileOperation<'_, T> {
     /// Strip the first `n` path components from the paths in this operation.
     ///
     /// This is similar to the `-p` option in GNU patch. For example,
     /// `strip_prefix(1)` on a path `a/src/lib.rs` would return `src/lib.rs`.
-    pub fn strip_prefix(&self, n: usize) -> FileOperation<'_> {
-        fn strip(path: &str, n: usize) -> &str {
+    pub fn strip_prefix(&self, n: usize) -> FileOperation<'_, T> {
+        fn strip<T: Text + ?Sized>(path: &T, n: usize) -> &T {
             let mut remaining = path;
             for _ in 0..n {
-                match remaining.split_once('/') {
+                match remaining.split_at_exclusive("/") {
                     Some((_first, rest)) => remaining = rest,
                     None => return remaining,
                 }
