@@ -106,12 +106,12 @@ pub fn parse_strict(input: &str) -> Result<Patch<'_, str>> {
 }
 
 pub fn parse_bytes(input: &[u8]) -> Result<Patch<'_, [u8]>> {
-    let (result, _consumed) = parse_bytes_one(input, ParseOpts::default());
+    let (result, _consumed) = parse_one(input, ParseOpts::default());
     result
 }
 
 pub fn parse_bytes_strict(input: &[u8]) -> Result<Patch<'_, [u8]>> {
-    let (result, _consumed) = parse_bytes_one(input, ParseOpts::default().reject_orphaned_hunks());
+    let (result, _consumed) = parse_one(input, ParseOpts::default().reject_orphaned_hunks());
     result
 }
 
@@ -119,37 +119,10 @@ pub fn parse_bytes_strict(input: &[u8]) -> Result<Patch<'_, [u8]>> {
 ///
 /// Always returns consumed bytes alongside the result
 /// so callers can advance past the parsed or partially parsed content.
-pub(crate) fn parse_one(input: &str, opts: ParseOpts) -> (Result<Patch<'_, str>>, usize) {
-    let mut parser = Parser::new(input);
-
-    let header = match patch_header(&mut parser, &opts) {
-        Ok(h) => h,
-        Err(e) => return (Err(e), parser.offset()),
-    };
-    let hunks = match hunks(&mut parser) {
-        Ok(h) => h,
-        Err(e) => return (Err(e), parser.offset()),
-    };
-    if opts.reject_orphaned_hunks {
-        if let Err(e) = reject_orphaned_hunk_headers(&mut parser) {
-            return (Err(e), parser.offset());
-        }
-    }
-
-    let original = match header.0.map(convert_cow_to_str).transpose() {
-        Ok(o) => o,
-        Err(e) => return (Err(e), parser.offset()),
-    };
-    let modified = match header.1.map(convert_cow_to_str).transpose() {
-        Ok(m) => m,
-        Err(e) => return (Err(e), parser.offset()),
-    };
-
-    (Ok(Patch::new(original, modified, hunks)), parser.offset())
-}
-
-/// Like [`parse_one`] but for bytes.
-pub(crate) fn parse_bytes_one(input: &[u8], opts: ParseOpts) -> (Result<Patch<'_, [u8]>>, usize) {
+pub(crate) fn parse_one<T: Text + ?Sized>(
+    input: &T,
+    opts: ParseOpts,
+) -> (Result<Patch<'_, T>>, usize) {
     let mut parser = Parser::new(input);
 
     let header = match patch_header(&mut parser, &opts) {
@@ -169,23 +142,11 @@ pub(crate) fn parse_bytes_one(input: &[u8], opts: ParseOpts) -> (Result<Patch<'_
     (Ok(Patch::new(header.0, header.1, hunks)), parser.offset())
 }
 
-// This is only used when the type originated as a utf8 string
-fn convert_cow_to_str(cow: Cow<'_, [u8]>) -> Result<Cow<'_, str>> {
-    match cow {
-        Cow::Borrowed(b) => std::str::from_utf8(b)
-            .map(Cow::Borrowed)
-            .map_err(|_| ParsePatchErrorKind::InvalidUtf8Path.into()),
-        Cow::Owned(o) => String::from_utf8(o)
-            .map(Cow::Owned)
-            .map_err(|_| ParsePatchErrorKind::InvalidUtf8Path.into()),
-    }
-}
-
 #[allow(clippy::type_complexity)]
-fn patch_header<'a, T: Text + ToOwned + ?Sized>(
+fn patch_header<'a, T: Text + ?Sized>(
     parser: &mut Parser<'a, T>,
     opts: &ParseOpts,
-) -> Result<(Option<Cow<'a, [u8]>>, Option<Cow<'a, [u8]>>)> {
+) -> Result<(Option<Cow<'a, T>>, Option<Cow<'a, T>>)> {
     if opts.skip_preamble {
         skip_header_preamble(parser)?;
     }
@@ -225,10 +186,7 @@ fn skip_header_preamble<T: Text + ?Sized>(parser: &mut Parser<'_, T>) -> Result<
     Ok(())
 }
 
-fn parse_filename<'a, T: Text + ToOwned + ?Sized>(
-    prefix: &str,
-    line: &'a T,
-) -> Result<Cow<'a, [u8]>> {
+fn parse_filename<'a, T: Text + ?Sized>(prefix: &str, line: &'a T) -> Result<Cow<'a, T>> {
     let line = line
         .strip_prefix(prefix)
         .ok_or(ParsePatchErrorKind::InvalidFilename)?;

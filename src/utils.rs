@@ -132,7 +132,7 @@ impl<'a, T: Text + ?Sized> Iterator for LineIter<'a, T> {
 
 /// A helper trait for processing text like `str` and `[u8]`
 /// Useful for abstracting over those types for parsing as well as breaking input into lines
-pub trait Text: Eq + Hash {
+pub trait Text: Eq + Hash + ToOwned {
     fn is_empty(&self) -> bool;
     fn len(&self) -> usize;
     fn starts_with(&self, prefix: &str) -> bool;
@@ -148,6 +148,12 @@ pub trait Text: Eq + Hash {
     #[allow(unused)]
     fn lines(&self) -> LineIter<'_, Self>;
 
+    /// Converts raw bytes into `Self::Owned`.
+    ///
+    /// Returns `None` if the bytes are not valid for this type
+    /// (e.g. non-UTF-8 bytes for `str`).
+    fn owned_from_bytes(bytes: Vec<u8>) -> Option<Self::Owned>;
+
     fn parse<T: std::str::FromStr>(&self) -> Option<T> {
         self.as_str().and_then(|s| s.parse().ok())
     }
@@ -156,6 +162,10 @@ pub trait Text: Eq + Hash {
 impl Text for str {
     fn is_empty(&self) -> bool {
         self.is_empty()
+    }
+
+    fn owned_from_bytes(bytes: Vec<u8>) -> Option<String> {
+        String::from_utf8(bytes).ok()
     }
 
     fn len(&self) -> usize {
@@ -207,6 +217,10 @@ impl Text for str {
 impl Text for [u8] {
     fn is_empty(&self) -> bool {
         self.is_empty()
+    }
+
+    fn owned_from_bytes(bytes: Vec<u8>) -> Option<Vec<u8>> {
+        Some(bytes)
     }
 
     fn len(&self) -> usize {
@@ -292,27 +306,29 @@ fn find_byte(haystack: &[u8], byte: u8) -> Option<usize> {
 ///
 /// See [`byte_needs_quoting`] for the set of characters that
 /// require quoting.
-pub(crate) fn escaped_filename<T: Text + ToOwned + ?Sized>(
+pub(crate) fn escaped_filename<T: Text + ?Sized>(
     filename: &T,
-) -> Result<Cow<'_, [u8]>, ParsePatchError> {
+) -> Result<Cow<'_, T>, ParsePatchError> {
     if let Some(inner) = filename
         .strip_prefix("\"")
         .and_then(|s| s.strip_suffix("\""))
     {
-        decode_escaped(inner)
+        match decode_escaped(inner.as_bytes())? {
+            None => Ok(Cow::Borrowed(inner)),
+            Some(bytes) => T::owned_from_bytes(bytes)
+                .map(Cow::Owned)
+                .ok_or_else(|| ParsePatchErrorKind::InvalidUtf8Path.into()),
+        }
     } else {
         let bytes = filename.as_bytes();
         if bytes.iter().any(|b| byte_needs_quoting(*b)) {
             return Err(ParsePatchErrorKind::InvalidCharInUnquotedFilename.into());
         }
-        Ok(bytes.into())
+        Ok(Cow::Borrowed(filename))
     }
 }
 
-fn decode_escaped<T: Text + ToOwned + ?Sized>(
-    escaped: &T,
-) -> Result<Cow<'_, [u8]>, ParsePatchError> {
-    let bytes = escaped.as_bytes();
+fn decode_escaped(bytes: &[u8]) -> Result<Option<Vec<u8>>, ParsePatchError> {
     let mut result = Vec::new();
     let mut i = 0;
     let mut last_copy = 0;
@@ -365,8 +381,8 @@ fn decode_escaped<T: Text + ToOwned + ?Sized>(
 
     if needs_allocation {
         result.extend_from_slice(&bytes[last_copy..]);
-        Ok(Cow::Owned(result))
+        Ok(Some(result))
     } else {
-        Ok(Cow::Borrowed(bytes))
+        Ok(None)
     }
 }
