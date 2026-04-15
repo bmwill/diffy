@@ -619,14 +619,10 @@ fn plain_filename_roundtrip() {
 }
 
 // Octal escape \377 decodes to 0xFF, which is not valid UTF-8.
-// When parsing into `Patch<'_, str>`, `convert_cow_to_str` panics
-// via `unwrap()` instead of returning a parse error.
-//
-// This documents the pre-existing bug that the reviewer flagged:
-// https://github.com/bmwill/diffy/pull/59#r3089024322
+// When parsing into `Patch<'_, str>`, this returns a parse error
+// instead of panicking.
 #[test]
-#[should_panic]
-fn non_utf8_escaped_filename_panics_on_str_parse() {
+fn non_utf8_escaped_filename_returns_error_on_str_parse() {
     let s = r#"\
 --- "a/foo\377"
 +++ "b/foo\377"
@@ -634,7 +630,10 @@ fn non_utf8_escaped_filename_panics_on_str_parse() {
 -x
 +y
 "#;
-    let _ = parse(s);
+    assert_eq!(
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::InvalidUtf8Path,
+    );
 }
 
 mod error_display {

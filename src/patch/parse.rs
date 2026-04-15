@@ -74,12 +74,16 @@ pub(crate) fn parse_one(input: &str) -> (Result<Patch<'_, str>>, usize) {
         Err(e) => return (Err(e), parser.offset()),
     };
 
-    let patch = Patch::new(
-        header.0.map(convert_cow_to_str),
-        header.1.map(convert_cow_to_str),
-        hunks,
-    );
-    (Ok(patch), parser.offset())
+    let original = match header.0.map(convert_cow_to_str).transpose() {
+        Ok(o) => o,
+        Err(e) => return (Err(e), parser.offset()),
+    };
+    let modified = match header.1.map(convert_cow_to_str).transpose() {
+        Ok(m) => m,
+        Err(e) => return (Err(e), parser.offset()),
+    };
+
+    (Ok(Patch::new(original, modified, hunks)), parser.offset())
 }
 
 pub fn parse_strict(input: &str) -> Result<Patch<'_, str>> {
@@ -113,10 +117,14 @@ pub fn parse_bytes_strict(input: &[u8]) -> Result<Patch<'_, [u8]>> {
 }
 
 // This is only used when the type originated as a utf8 string
-fn convert_cow_to_str(cow: Cow<'_, [u8]>) -> Cow<'_, str> {
+fn convert_cow_to_str(cow: Cow<'_, [u8]>) -> Result<Cow<'_, str>> {
     match cow {
-        Cow::Borrowed(b) => std::str::from_utf8(b).unwrap().into(),
-        Cow::Owned(o) => String::from_utf8(o).unwrap().into(),
+        Cow::Borrowed(b) => std::str::from_utf8(b)
+            .map(Cow::Borrowed)
+            .map_err(|_| ParsePatchErrorKind::InvalidUtf8Path.into()),
+        Cow::Owned(o) => String::from_utf8(o)
+            .map(Cow::Owned)
+            .map_err(|_| ParsePatchErrorKind::InvalidUtf8Path.into()),
     }
 }
 
