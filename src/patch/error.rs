@@ -110,6 +110,9 @@ pub(crate) enum ParsePatchErrorKind {
 
     /// Orphaned hunk header found after trailing content.
     OrphanedHunkHeader,
+
+    /// Filename contains invalid UTF-8 when parsing as text.
+    InvalidUtf8Path,
 }
 
 impl fmt::Display for ParsePatchErrorKind {
@@ -136,6 +139,7 @@ impl fmt::Display for ParsePatchErrorKind {
             Self::UnexpectedHunkLine => "unexpected line in hunk body",
             Self::MissingNewline => "missing newline",
             Self::OrphanedHunkHeader => "orphaned hunk header after trailing content",
+            Self::InvalidUtf8Path => "filename is not valid UTF-8",
         };
         write!(f, "{msg}")
     }
