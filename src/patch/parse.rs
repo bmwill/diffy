@@ -90,6 +90,11 @@ impl<'a, T: Text + ?Sized> Parser<'a, T> {
     }
 }
 
+// TODO: make a better API for lib consumers
+//
+// Too many different variants of `parse*` functions here.
+// And that also propogate to `Patch::from_{str,bytes}{,_strict}`.
+
 pub fn parse(input: &str) -> Result<Patch<'_, str>> {
     let (result, _consumed) = parse_one(input, ParseOpts::default());
     result
