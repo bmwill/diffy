@@ -67,69 +67,76 @@ impl<'a> PatchSet<'a> {
             found_any: false,
         }
     }
-
-    /// Creates an error with the current offset as span.
-    fn error(&self, kind: PatchSetParseErrorKind) -> PatchSetParseError {
-        PatchSetParseError::new(kind, self.offset..self.offset)
-    }
-
-    fn next_unidiff_patch(&mut self) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
-        let remaining = &self.input[self.offset..];
-        if remaining.is_empty() {
-            return None;
-        }
-
-        let patch_start = find_patch_start(remaining)?;
-        self.found_any = true;
-
-        let patch_input = &remaining[patch_start..];
-
-        let opts = crate::patch::parse::ParseOpts::default();
-        let (result, consumed) = parse_one(patch_input, opts);
-        // Always advance so the iterator makes progress even on error.
-        let abs_patch_start = self.offset + patch_start;
-        self.offset += patch_start + consumed;
-
-        let patch = match result {
-            Ok(patch) => patch,
-            Err(e) => return Some(Err(e.into())),
-        };
-        let operation = match extract_file_op_unidiff(patch.original_path(), patch.modified_path())
-        {
-            Ok(op) => op,
-            Err(mut e) => {
-                e.set_span(abs_patch_start..abs_patch_start);
-                return Some(Err(e));
-            }
-        };
-
-        Some(Ok(FilePatch::new(operation, patch, None, None)))
-    }
 }
 
 impl<'a> Iterator for PatchSet<'a> {
     type Item = Result<FilePatch<'a, str>, PatchSetParseError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.finished {
-            return None;
-        }
-
-        let result = match self.opts.format {
-            Format::UniDiff => {
-                let result = self.next_unidiff_patch();
-                if result.is_none() {
-                    self.finished = true;
-                    if !self.found_any {
-                        return Some(Err(self.error(PatchSetParseErrorKind::NoPatchesFound)));
-                    }
-                }
-                result
-            }
-        };
-
-        result
+        next_patch(self)
     }
+}
+
+fn next_patch<'a>(ps: &mut PatchSet<'a>) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
+    if ps.finished {
+        return None;
+    }
+
+    let result = match ps.opts.format {
+        Format::UniDiff => next_unidiff_patch(ps),
+    };
+
+    if result.is_none() {
+        ps.finished = true;
+        if !ps.found_any {
+            let err = PatchSetParseError::new(
+                PatchSetParseErrorKind::NoPatchesFound,
+                ps.offset..ps.offset,
+            );
+            return Some(Err(err));
+        }
+    }
+
+    result
+}
+
+fn next_unidiff_patch<'a>(
+    ps: &mut PatchSet<'a>,
+) -> Option<Result<FilePatch<'a, str>, PatchSetParseError>> {
+    let remaining = remaining(ps);
+    if remaining.is_empty() {
+        return None;
+    }
+
+    let patch_start = find_patch_start(remaining)?;
+    ps.found_any = true;
+
+    let patch_input = &remaining[patch_start..];
+
+    let opts = crate::patch::parse::ParseOpts::default();
+    let (result, consumed) = parse_one(patch_input, opts);
+    // Always advance so the iterator makes progress even on error.
+    let abs_patch_start = ps.offset + patch_start;
+    ps.offset += patch_start + consumed;
+
+    let patch = match result {
+        Ok(patch) => patch,
+        Err(e) => return Some(Err(e.into())),
+    };
+    let operation = match extract_file_op_unidiff(patch.original_path(), patch.modified_path()) {
+        Ok(op) => op,
+        Err(mut e) => {
+            e.set_span(abs_patch_start..abs_patch_start);
+            return Some(Err(e));
+        }
+    };
+
+    Some(Ok(FilePatch::new(operation, patch, None, None)))
+}
+
+fn remaining<'a>(ps: &PatchSet<'a>) -> &'a str {
+    let (_, rest) = ps.input.split_at(ps.offset);
+    rest
 }
 
 /// Finds the byte offset of the first patch header in the input.
