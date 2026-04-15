@@ -1,6 +1,6 @@
 //! Tests for patchset parsing.
 
-use super::{error::PatchSetParseErrorKind, FileOperation, ParseOptions, PatchSet};
+use super::{error::PatchSetParseErrorKind, FileOperation, PatchKind, ParseOptions, PatchSet};
 
 mod file_operation {
     use super::*;
@@ -460,6 +460,109 @@ In a hole in the ground there lived a hobbit
             err.to_string().contains("no valid patches found"),
             "unexpected error: {}",
             err
+        );
+    }
+}
+
+mod patchset_unidiff_bytes {
+    use super::*;
+    use crate::patch::Line;
+
+    #[test]
+    fn single_file_bytes() {
+        let content = b"\
+--- a/file.rs
++++ b/file.rs
+@@ -1 +1 @@
+-old
++new
+";
+        let patches = PatchSet::parse_bytes(content.as_slice(), ParseOptions::unidiff())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(patches.len(), 1);
+        assert!(patches[0].operation().is_modify());
+    }
+
+    #[test]
+    fn non_utf8_hunk_content() {
+        // Simulate a patch where hunk content has non-UTF-8 bytes.
+        // This is the primary use case for parse_bytes: git may produce
+        // text-format hunks for files it misdetects as text (e.g. small
+        // PNGs without NUL bytes).
+        let mut content = Vec::new();
+        content.extend_from_slice(b"--- a/icon.png\n");
+        content.extend_from_slice(b"+++ b/icon.png\n");
+        content.extend_from_slice(b"@@ -1 +1 @@\n");
+        content.extend_from_slice(b"-old\x89PNG\n");
+        content.extend_from_slice(b"+new\x89PNG\n");
+
+        let patches = PatchSet::parse_bytes(&content, ParseOptions::unidiff())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(patches.len(), 1);
+
+        let PatchKind::Text(patch) = patches[0].patch();
+        let lines = patch.hunks()[0].lines();
+        assert_eq!(lines[0], Line::Delete(b"old\x89PNG\n".as_slice()));
+        assert_eq!(lines[1], Line::Insert(b"new\x89PNG\n".as_slice()));
+    }
+
+    #[test]
+    fn multi_file_bytes() {
+        let content = b"\
+--- a/file1.rs
++++ b/file1.rs
+@@ -1 +1 @@
+-old1
++new1
+--- a/file2.rs
++++ b/file2.rs
+@@ -1 +1 @@
+-old2
++new2
+";
+        let patches = PatchSet::parse_bytes(content.as_slice(), ParseOptions::unidiff())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(patches.len(), 2);
+    }
+
+    #[test]
+    fn create_file_bytes() {
+        let content = b"\
+--- /dev/null
++++ b/new.rs
+@@ -0,0 +1 @@
++content
+";
+        let patches = PatchSet::parse_bytes(content.as_slice(), ParseOptions::unidiff())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(patches.len(), 1);
+        assert!(patches[0].operation().is_create());
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Create(b"b/new.rs".to_vec().into())
+        );
+    }
+
+    #[test]
+    fn delete_file_bytes() {
+        let content = b"\
+--- a/old.rs
++++ /dev/null
+@@ -1 +0,0 @@
+-content
+";
+        let patches = PatchSet::parse_bytes(content.as_slice(), ParseOptions::unidiff())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(patches.len(), 1);
+        assert!(patches[0].operation().is_delete());
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Delete(b"a/old.rs".to_vec().into())
         );
     }
 }
