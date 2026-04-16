@@ -1,6 +1,6 @@
 //! Tests for patchset parsing.
 
-use super::{error::PatchSetParseErrorKind, FileOperation, PatchKind, ParseOptions, PatchSet};
+use super::{error::PatchSetParseErrorKind, FileOperation, ParseOptions, PatchKind, PatchSet};
 
 mod file_operation {
     use super::*;

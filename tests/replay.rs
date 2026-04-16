@@ -99,8 +99,15 @@ impl CatFile {
     /// Look up an object by `<rev>:<path>`.
     ///
     /// Returns `None` for submodules, commit/tree/tag object types, and missing objects.
-    fn get(&mut self, rev: &str, path: &str) -> Option<Vec<u8>> {
-        writeln!(self.stdin, "{rev}:{path}").expect("cat-file stdin write failed");
+    fn get(&mut self, rev: &str, path: &[u8]) -> Option<Vec<u8>> {
+        // `git cat-file <rev>:<path>` accepts raw bytes
+        let mut query = rev.as_bytes().to_vec();
+        query.push(b':');
+        query.extend_from_slice(path);
+        query.push(b'\n');
+        self.stdin
+            .write_all(&query)
+            .expect("cat-file stdin write failed");
 
         let mut header = String::new();
         self.stdout
@@ -149,11 +156,6 @@ impl CatFile {
         }
 
         Some(buf)
-    }
-
-    /// Like [`CatFile::get`] but returns only UTF-8 string.
-    fn get_text(&mut self, rev: &str, path: &str) -> Option<String> {
-        self.get(rev, path).and_then(|b| String::from_utf8(b).ok())
     }
 }
 
@@ -232,7 +234,7 @@ fn test_mode() -> TestMode {
     }
 }
 
-fn git(repo: &Path, args: &[&str]) -> String {
+fn git_bytes(repo: &Path, args: &[&str]) -> Vec<u8> {
     let mut cmd = Command::new("git");
     cmd.env("GIT_CONFIG_NOSYSTEM", "1");
     cmd.env("GIT_CONFIG_GLOBAL", "/dev/null");
@@ -246,7 +248,11 @@ fn git(repo: &Path, args: &[&str]) -> String {
         panic!("git {args:?} failed: {stderr}");
     }
 
-    String::from_utf8_lossy(&output.stdout).into_owned()
+    output.stdout
+}
+
+fn git(repo: &Path, args: &[&str]) -> String {
+    String::from_utf8_lossy(&git_bytes(repo, args)).into_owned()
 }
 
 /// Get the list of commits from oldest to newest.
@@ -324,7 +330,7 @@ fn process_commit(
     // UniDiff format cannot express pure renames (no ---/+++ headers).
     // Use `--no-renames` to represent them as delete + create instead.
     let diff_output = match mode {
-        TestMode::UniDiff => git(repo, &["diff", "--no-renames", parent, child]),
+        TestMode::UniDiff => git_bytes(repo, &["diff", "--no-renames", parent, child]),
     };
 
     if diff_output.is_empty() {
@@ -385,9 +391,10 @@ fn process_commit(
         };
     }
 
-    let patchset: Vec<_> = match PatchSet::parse(&diff_output, mode.into()).collect() {
+    let patchset: Vec<_> = match PatchSet::parse_bytes(&diff_output, mode.into()).collect() {
         Ok(ps) => ps,
         Err(e) => {
+            let diff_output = String::from_utf8_lossy(&diff_output);
             panic!(
                 "Failed to parse patch for {parent_short}..{child_short}: {e}\n\n\
                 Diff:\n{diff_output}"
@@ -399,6 +406,7 @@ fn process_commit(
     // This catches both missing and spurious patches.
     if patchset.len() != expected_file_count {
         let n = patchset.len();
+        let diff_output = String::from_utf8_lossy(&diff_output);
         panic!(
             "Patch count mismatch for {parent_short}..{child_short}: \
              expected {expected_file_count} files, parsed {n} patches\n\n\
@@ -416,68 +424,102 @@ fn process_commit(
         };
         let operation = operation.strip_prefix(strip);
 
-        let (base_path, target_path, desc): (Option<&str>, Option<&str>, _) = match &operation {
-            FileOperation::Create(path) => (None, Some(path.as_ref()), format!("create {path}")),
-            FileOperation::Delete(path) => (Some(path.as_ref()), None, format!("delete {path}")),
-            FileOperation::Modify { original, modified } => {
-                let desc = if original == modified {
-                    format!("modify {original}")
-                } else {
-                    format!("modify {original} -> {modified}")
-                };
-                (Some(original.as_ref()), Some(modified.as_ref()), desc)
+        let (base_path, target_path, desc): (Option<&[u8]>, Option<&[u8]>, _) = match &operation {
+            FileOperation::Create(path) => {
+                let p = path.as_ref();
+                (
+                    None,
+                    Some(p),
+                    format!("create {}", String::from_utf8_lossy(p)),
+                )
             }
-            FileOperation::Rename { from, to } => (
-                Some(from.as_ref()),
-                Some(to.as_ref()),
-                format!("rename {from} -> {to}"),
-            ),
-            FileOperation::Copy { from, to } => (
-                Some(from.as_ref()),
-                Some(to.as_ref()),
-                format!("copy {from} -> {to}"),
-            ),
+            FileOperation::Delete(path) => {
+                let p = path.as_ref();
+                (
+                    Some(p),
+                    None,
+                    format!("delete {}", String::from_utf8_lossy(p)),
+                )
+            }
+            FileOperation::Modify { original, modified } => {
+                let (o, m) = (original.as_ref(), modified.as_ref());
+                let desc = if o == m {
+                    format!("modify {}", String::from_utf8_lossy(o))
+                } else {
+                    format!(
+                        "modify {} -> {}",
+                        String::from_utf8_lossy(o),
+                        String::from_utf8_lossy(m),
+                    )
+                };
+                (Some(o), Some(m), desc)
+            }
+            FileOperation::Rename { from, to } => {
+                let (f, t) = (from.as_ref(), to.as_ref());
+                (
+                    Some(f),
+                    Some(t),
+                    format!(
+                        "rename {} -> {}",
+                        String::from_utf8_lossy(f),
+                        String::from_utf8_lossy(t),
+                    ),
+                )
+            }
+            FileOperation::Copy { from, to } => {
+                let (f, t) = (from.as_ref(), to.as_ref());
+                (
+                    Some(f),
+                    Some(t),
+                    format!(
+                        "copy {} -> {}",
+                        String::from_utf8_lossy(f),
+                        String::from_utf8_lossy(t),
+                    ),
+                )
+            }
         };
 
         match file_patch.patch() {
             PatchKind::Text(patch) => {
                 let base_content = if let Some(path) = base_path {
-                    let Some(content) = cat.get_text(parent, path) else {
+                    let Some(content) = cat.get(parent, path) else {
                         skipped += 1;
                         continue;
                     };
                     content
                 } else {
-                    String::new()
+                    Vec::new()
                 };
 
                 let expected_content = if let Some(path) = target_path {
-                    let Some(content) = cat.get_text(child, path) else {
+                    let Some(content) = cat.get(child, path) else {
                         skipped += 1;
                         continue;
                     };
                     content
                 } else {
-                    String::new()
+                    Vec::new()
                 };
 
-                let result = match diffy::apply(&base_content, patch) {
+                let result = match diffy::apply_bytes(&base_content, patch) {
                     Ok(r) => r,
                     Err(e) => {
+                        let base_content = String::from_utf8_lossy(&base_content);
                         panic!(
                             "Failed to apply patch at {parent_short}..{child_short} for {desc}: {e}\n\n\
-                            Patch:\n{patch}\n\n\
                             Base content:\n{base_content}"
                         );
                     }
                 };
 
                 if result != expected_content {
+                    let expected_content = String::from_utf8_lossy(&expected_content);
+                    let result = String::from_utf8_lossy(&result);
                     panic!(
                         "Content mismatch at {parent_short}..{child_short} for {desc}\n\n\
                         --- Expected ---\n{expected_content}\n\n\
-                        --- Got ---\n{result}\n\n\
-                        --- Patch ---\n{patch}"
+                        --- Got ---\n{result}"
                     );
                 }
             }
