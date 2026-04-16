@@ -58,7 +58,7 @@ impl<'a> Case<'a> {
         let case_dir = self.case_dir();
         let in_dir = case_dir.join("in");
         let patch_path = in_dir.join("foo.patch");
-        let patch = fs::read_to_string(&patch_path)
+        let patch = fs::read(&patch_path)
             .unwrap_or_else(|e| panic!("failed to read {}: {e}", patch_path.display()));
 
         let case_name = self.case_name;
@@ -230,22 +230,35 @@ fn copy_input_files_impl(src: &Path, dst: &Path, base: &Path, skip_extensions: &
     }
 }
 
+fn bytes_to_path(b: &[u8]) -> &Path {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        Path::new(std::ffi::OsStr::from_bytes(b))
+    }
+    #[cfg(not(unix))]
+    {
+        // On Windows, falls back to UTF-8 conversion since `OsStr` is WTF-16.
+        Path::new(std::str::from_utf8(b).expect("non-UTF-8 path not supported on Windows"))
+    }
+}
+
 /// Apply patch using diffy to output directory.
 pub fn apply_diffy(
     in_dir: &Path,
-    patch: &str,
+    patch: &[u8],
     output_dir: &Path,
     opts: ParseOptions,
     strip_prefix: u32,
 ) -> Result<(), TestError> {
-    let patches: Vec<_> = PatchSet::parse(patch, opts)
+    let patches: Vec<_> = PatchSet::parse_bytes(patch, opts)
         .collect::<Result<_, _>>()
         .map_err(TestError::Parse)?;
 
     for file_patch in patches.iter() {
         let operation = file_patch.operation().strip_prefix(strip_prefix as usize);
 
-        let (original_name, target_name) = match &operation {
+        let (original_name, target_name): (Option<&[u8]>, &[u8]) = match &operation {
             FileOperation::Create(path) => (None, path.as_ref()),
             FileOperation::Delete(path) => (Some(path.as_ref()), path.as_ref()),
             FileOperation::Modify { original, modified } => {
@@ -259,21 +272,21 @@ pub fn apply_diffy(
         match file_patch.patch() {
             PatchKind::Text(patch) => {
                 let original = if let Some(name) = original_name {
-                    let original_path = in_dir.join(name);
-                    fs::read_to_string(&original_path).unwrap_or_else(|e| {
+                    let original_path = in_dir.join(bytes_to_path(name));
+                    fs::read(&original_path).unwrap_or_else(|e| {
                         panic!("failed to read {}: {e}", original_path.display())
                     })
                 } else {
-                    String::new()
+                    Vec::new()
                 };
 
-                let result = diffy::apply(&original, patch).map_err(TestError::Apply)?;
+                let result = diffy::apply_bytes(&original, patch).map_err(TestError::Apply)?;
 
-                let result_path = output_dir.join(target_name);
+                let result_path = output_dir.join(bytes_to_path(target_name));
                 if let Some(parent) = result_path.parent() {
                     fs::create_dir_all(parent).unwrap();
                 }
-                fs::write(&result_path, result.as_bytes()).unwrap();
+                fs::write(&result_path, &result).unwrap();
             }
         }
     }
