@@ -1,0 +1,7 @@
+diff --git "a/with\"quote.txt" "b/with\"quote.txt"
+index 3367afd..3e75765 100644
+--- "a/with\"quote.txt"
++++ "b/with\"quote.txt"
+@@ -1 +1 @@
+-old
++new
