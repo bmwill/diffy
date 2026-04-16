@@ -18,8 +18,7 @@
 //!   * A range (e.g., `abc123..def456`) for a specific commit range
 //!
 //!   Defaults to 200. Use `0` to verify entire history.
-//! * `DIFFY_TEST_PARSE_MODE`: Parse mode to use.
-//!   Currently only `unidiff` is supported.
+//! * `DIFFY_TEST_PARSE_MODE`: Parse mode to use (`unidiff` or `gitdiff`).
 //!   Defaults to `unidiff`.
 //!
 //! ## Requirements
@@ -163,12 +162,14 @@ impl CatFile {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TestMode {
     UniDiff,
+    GitDiff,
 }
 
 impl From<TestMode> for ParseOptions {
     fn from(value: TestMode) -> Self {
         match value {
             TestMode::UniDiff => ParseOptions::unidiff(),
+            TestMode::GitDiff => ParseOptions::gitdiff(),
         }
     }
 }
@@ -230,7 +231,8 @@ fn test_mode() -> TestMode {
     };
     match val.trim().to_lowercase().as_str() {
         "unidiff" => TestMode::UniDiff,
-        _ => panic!("invalid DIFFY_TEST_PARSE_MODE='{val}': expected 'unidiff'"),
+        "gitdiff" => TestMode::GitDiff,
+        _ => panic!("invalid DIFFY_TEST_PARSE_MODE='{val}': expected 'unidiff' or 'gitdiff'"),
     }
 }
 
@@ -329,8 +331,13 @@ fn process_commit(
 
     // UniDiff format cannot express pure renames (no ---/+++ headers).
     // Use `--no-renames` to represent them as delete + create instead.
+    // GitDiff mode handles renames via extended headers natively.
     let diff_output = match mode {
         TestMode::UniDiff => git_bytes(repo, &["diff", "--no-renames", parent, child]),
+        // TODO: pass `--binary` once binary patch support lands,
+        // so binary files get actual delta/literal data instead of
+        // "Binary files differ" markers.
+        TestMode::GitDiff => git_bytes(repo, &["diff", parent, child]),
     };
 
     if diff_output.is_empty() {
@@ -378,6 +385,20 @@ fn process_commit(
                 }
             }
             text_files + type_changes
+        }
+        TestMode::GitDiff => {
+            // Can't use `--numstat` for GitDiff: it shows `-\t-\t` for both
+            // actual binary diffs AND pure binary renames (100% similarity).
+            // Use `--raw` for total count instead.
+            let raw = git(repo, &["diff", "--raw", parent, child]);
+            let (mut total, mut type_changes) = (0, 0);
+            for line in raw.lines().filter(|l| !l.is_empty()) {
+                total += 1;
+                if is_type_change(line) {
+                    type_changes += 1;
+                }
+            }
+            total + type_changes
         }
     };
 
@@ -564,6 +585,7 @@ fn replay() {
         .unwrap_or_else(|| ".".to_string());
     let mode_name = match mode {
         TestMode::UniDiff => "unidiff",
+        TestMode::GitDiff => "gitdiff",
     };
 
     // Shared state for progress reporting
