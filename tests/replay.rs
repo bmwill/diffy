@@ -523,6 +523,10 @@ fn process_commit(
                     );
                 }
             }
+            PatchKind::Binary => {
+                skipped += 1;
+                continue;
+            }
         }
 
         applied += 1;

@@ -1,6 +1,6 @@
 //! Tests for patchset parsing.
 
-use super::{error::PatchSetParseErrorKind, FileOperation, ParseOptions, PatchKind, PatchSet};
+use super::{error::PatchSetParseErrorKind, FileOperation, ParseOptions, PatchSet};
 
 mod file_operation {
     use super::*;
@@ -464,6 +464,313 @@ In a hole in the ground there lived a hobbit
     }
 }
 
+mod patchset_gitdiff {
+    use super::*;
+    fn parse_gitdiff(input: &str) -> Vec<super::super::FilePatch<'_, str>> {
+        PatchSet::parse(input, ParseOptions::gitdiff())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    }
+
+    /// `parse_one` must stop at `diff --git` boundaries so that
+    /// back-to-back patches are split correctly.
+    /// Without this, the second patch's `diff --git` line would be
+    /// swallowed as trailing junk by the first patch's hunk parser.
+    #[test]
+    fn multi_file_stops_at_diff_git_boundary() {
+        let input = "\
+diff --git a/foo b/foo
+--- a/foo
++++ b/foo
+@@ -1 +1 @@
+-old foo
++new foo
+diff --git a/bar b/bar
+--- a/bar
++++ b/bar
+@@ -1 +1 @@
+-old bar
++new bar
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 2);
+    }
+
+    #[test]
+    fn pure_rename() {
+        let input = "\
+diff --git a/old.rs b/new.rs
+similarity index 100%
+rename from old.rs
+rename to new.rs
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Rename {
+                from: "old.rs".into(),
+                to: "new.rs".into(),
+            }
+        );
+    }
+
+    /// Empty file creation has no ---/+++ headers, so the path comes
+    /// from the `diff --git` line and retains the `b/` prefix.
+    /// Callers use `strip_prefix(1)` to remove it.
+    #[test]
+    fn new_empty_file() {
+        let input = "\
+diff --git a/empty b/empty
+new file mode 100644
+index 0000000..e69de29
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Create("b/empty".into())
+        );
+        let p = patches[0].patch().as_text().unwrap();
+        assert!(p.hunks().is_empty());
+    }
+
+    #[test]
+    fn rename_then_modify() {
+        // Rename with no hunks followed by a modify with hunks.
+        // Tests that offset advances correctly across both.
+        let input = "\
+diff --git a/old.rs b/new.rs
+similarity index 100%
+rename from old.rs
+rename to new.rs
+diff --git a/foo b/foo
+--- a/foo
++++ b/foo
+@@ -1 +1 @@
+-old
++new
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 2);
+        assert!(matches!(
+            patches[0].operation(),
+            FileOperation::Rename { .. }
+        ));
+        assert!(matches!(
+            patches[1].operation(),
+            FileOperation::Modify { .. }
+        ));
+    }
+
+    /// Quoted path containing an escaped quote (`\"`).
+    /// Git produces this for filenames with literal double quotes.
+    ///
+    /// Observed with git 2.53.0:
+    ///   $ printf 'x' > 'with"quote' && git add -A
+    ///   $ git diff --cached | head -1
+    ///   diff --git "a/with\"quote" "b/with\"quote"
+    #[test]
+    fn path_quoted_with_escaped_quote() {
+        let input = "\
+diff --git \"a/with\\\"quote\" \"b/with\\\"quote\"
+--- \"a/with\\\"quote\"
++++ \"b/with\\\"quote\"
+@@ -1 +1 @@
+-old
++new
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Modify {
+                original: "a/with\"quote".to_owned().into(),
+                modified: "b/with\"quote".to_owned().into(),
+            }
+        );
+    }
+
+    /// Copy operation extracted from git extended headers.
+    #[test]
+    fn copy_operation() {
+        let input = "\
+diff --git a/original.rs b/copied.rs
+similarity index 100%
+copy from original.rs
+copy to copied.rs
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Copy {
+                from: "original.rs".into(),
+                to: "copied.rs".into(),
+            }
+        );
+    }
+
+    /// Rename with both paths quoted (escapes in both).
+    #[test]
+    fn rename_both_quoted() {
+        let input = "\
+diff --git \"a/foo\\tbar.rs\" \"b/baz\\tqux.rs\"
+similarity index 100%
+rename from \"foo\\tbar.rs\"
+rename to \"baz\\tqux.rs\"
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Rename {
+                from: "foo\tbar.rs".into(),
+                to: "baz\tqux.rs".into(),
+            }
+        );
+    }
+
+    /// Rename from quoted (has escape) to unquoted (plain).
+    #[test]
+    fn rename_quoted_to_unquoted() {
+        let input = "\
+diff --git \"a/foo\\tbar.rs\" b/normal.rs
+similarity index 100%
+rename from \"foo\\tbar.rs\"
+rename to normal.rs
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Rename {
+                from: "foo\tbar.rs".into(),
+                to: "normal.rs".into(),
+            }
+        );
+    }
+
+    /// Rename from unquoted to quoted (has escape).
+    #[test]
+    fn rename_unquoted_to_quoted() {
+        let input = "\
+diff --git a/normal.rs \"b/foo\\tbar.rs\"
+similarity index 100%
+rename from normal.rs
+rename to \"foo\\tbar.rs\"
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Rename {
+                from: "normal.rs".into(),
+                to: "foo\tbar.rs".into(),
+            }
+        );
+    }
+
+    /// Deleted file: `deleted file mode` header + /dev/null in +++.
+    #[test]
+    fn deleted_file_with_mode() {
+        let input = "\
+diff --git a/gone.rs b/gone.rs
+deleted file mode 100644
+index abc1234..0000000
+--- a/gone.rs
++++ /dev/null
+@@ -1 +0,0 @@
+-content
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert!(patches[0].operation().is_delete());
+        assert_eq!(
+            patches[0].old_mode(),
+            Some(&super::super::FileMode::Regular)
+        );
+    }
+
+    /// Mode-only change: no hunks, no ---/+++ headers.
+    /// File operation falls back to `diff --git` line paths.
+    #[test]
+    fn mode_only_change() {
+        let input = "\
+diff --git a/script.sh b/script.sh
+old mode 100644
+new mode 100755
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert!(patches[0].operation().is_modify());
+        assert_eq!(
+            patches[0].old_mode(),
+            Some(&super::super::FileMode::Regular),
+        );
+        assert_eq!(
+            patches[0].new_mode(),
+            Some(&super::super::FileMode::Executable),
+        );
+        let p = patches[0].patch().as_text().unwrap();
+        assert!(p.hunks().is_empty());
+    }
+
+    /// New file with content: `new file mode` header + /dev/null in ---.
+    #[test]
+    fn new_file_with_content() {
+        let input = "\
+diff --git a/new.rs b/new.rs
+new file mode 100644
+index 0000000..abc1234
+--- /dev/null
++++ b/new.rs
+@@ -0,0 +1 @@
++hello
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert!(patches[0].operation().is_create());
+        assert_eq!(
+            patches[0].new_mode(),
+            Some(&super::super::FileMode::Regular),
+        );
+    }
+
+    /// `diff --git` line with no-prefix paths (`git diff --no-prefix`).
+    /// Fallback path parsing works when ---/+++ are absent.
+    #[test]
+    fn no_prefix_empty_file() {
+        let input = "\
+diff --git file.rs file.rs
+new file mode 100644
+index 0000000..e69de29
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 1);
+        assert!(patches[0].operation().is_create());
+    }
+
+    #[test]
+    fn binary_emits_marker() {
+        let input = "\
+diff --git a/img.png b/img.png
+Binary files a/img.png and b/img.png differ
+diff --git a/foo b/foo
+--- a/foo
++++ b/foo
+@@ -1 +1 @@
+-old
++new
+";
+        let patches = parse_gitdiff(input);
+        assert_eq!(patches.len(), 2);
+        assert!(patches[0].patch().is_binary());
+        assert!(patches[0].operation().is_modify());
+        assert!(!patches[1].patch().is_binary());
+    }
+}
+
 mod patchset_unidiff_bytes {
     use super::*;
     use crate::patch::Line;
@@ -502,7 +809,7 @@ mod patchset_unidiff_bytes {
             .unwrap();
         assert_eq!(patches.len(), 1);
 
-        let PatchKind::Text(patch) = patches[0].patch();
+        let patch = patches[0].patch().as_text().unwrap();
         let lines = patch.hunks()[0].lines();
         assert_eq!(lines[0], Line::Delete(b"old\x89PNG\n".as_slice()));
         assert_eq!(lines[1], Line::Insert(b"new\x89PNG\n".as_slice()));
