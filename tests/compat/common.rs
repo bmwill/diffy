@@ -288,6 +288,9 @@ pub fn apply_diffy(
                 }
                 fs::write(&result_path, &result).unwrap();
             }
+            PatchKind::Binary => {
+                // No patch data to apply — nothing to do.
+            }
         }
     }
 

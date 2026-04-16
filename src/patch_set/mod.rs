@@ -15,11 +15,23 @@ use crate::utils::Text;
 use crate::Patch;
 
 pub use error::PatchSetParseError;
+use error::PatchSetParseErrorKind;
 pub use parse::PatchSet;
 
 /// Options for parsing patch content.
 ///
-/// Use [`ParseOptions::unidiff()`] to create options for the desired format.
+/// Use [`ParseOptions::unidiff()`] or [`ParseOptions::gitdiff()`]
+/// to create options for the desired format.
+///
+/// ## Binary Files
+///
+/// When parsing git diffs, binary file changes are detected by:
+///
+/// * `Binary files a/path and b/path differ` (`git diff` without `--binary` flag)
+/// * `GIT binary patch` (from `git diff --binary`)
+///
+/// Note that this is not a documented Git behavior,
+/// so the implementation here is subject to change if Git changes.
 ///
 /// ## Example
 ///
@@ -48,6 +60,8 @@ pub struct ParseOptions {
 pub(crate) enum Format {
     /// Standard unified diff format.
     UniDiff,
+    /// Git extended diff format.
+    GitDiff,
 }
 
 impl ParseOptions {
@@ -68,6 +82,22 @@ impl ParseOptions {
             format: Format::UniDiff,
         }
     }
+
+    /// Parse as [git extended diff format][git-diff-format].
+    ///
+    /// Supports all features of [`unidiff()`](Self::unidiff) plus:
+    ///
+    /// * `diff --git` headers
+    /// * Extended headers (`new file mode`, `deleted file mode`, etc.)
+    /// * Rename/copy detection (`rename from`/`rename to`, `copy from`/`copy to`)
+    /// * Binary file detection (emitted a marker by defualt)
+    ///
+    /// [git-diff-format]: https://git-scm.com/docs/diff-format
+    pub fn gitdiff() -> Self {
+        Self {
+            format: Format::GitDiff,
+        }
+    }
 }
 
 /// File mode extracted from git extended headers.
@@ -83,11 +113,27 @@ pub enum FileMode {
     Gitlink,
 }
 
+impl std::str::FromStr for FileMode {
+    type Err = PatchSetParseError;
+
+    fn from_str(mode: &str) -> Result<Self, Self::Err> {
+        match mode {
+            "100644" => Ok(Self::Regular),
+            "100755" => Ok(Self::Executable),
+            "120000" => Ok(Self::Symlink),
+            "160000" => Ok(Self::Gitlink),
+            _ => Err(PatchSetParseErrorKind::InvalidFileMode(mode.to_owned()).into()),
+        }
+    }
+}
+
 /// The kind of patch content in a [`FilePatch`].
 #[derive(Clone, PartialEq, Eq)]
 pub enum PatchKind<'a, T: ToOwned + ?Sized> {
     /// Text patch with hunks.
     Text(Patch<'a, T>),
+    /// Binary patch (literal or delta encoded, or marker-only).
+    Binary,
 }
 
 impl<T: ?Sized, O> std::fmt::Debug for PatchKind<'_, T>
@@ -98,6 +144,7 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PatchKind::Text(patch) => f.debug_tuple("Text").field(patch).finish(),
+            PatchKind::Binary => f.write_str("Binary"),
         }
     }
 }
@@ -107,7 +154,13 @@ impl<'a, T: ToOwned + ?Sized> PatchKind<'a, T> {
     pub fn as_text(&self) -> Option<&Patch<'a, T>> {
         match self {
             PatchKind::Text(patch) => Some(patch),
+            PatchKind::Binary => None,
         }
+    }
+
+    /// Returns `true` if this is a binary diff.
+    pub fn is_binary(&self) -> bool {
+        matches!(self, PatchKind::Binary)
     }
 }
 
@@ -149,6 +202,19 @@ impl<'a, T: ToOwned + ?Sized> FilePatch<'a, T> {
         Self {
             operation,
             kind: PatchKind::Text(patch),
+            old_mode,
+            new_mode,
+        }
+    }
+
+    fn new_binary(
+        operation: FileOperation<'a, T>,
+        old_mode: Option<FileMode>,
+        new_mode: Option<FileMode>,
+    ) -> Self {
+        Self {
+            operation,
+            kind: PatchKind::Binary,
             old_mode,
             new_mode,
         }
