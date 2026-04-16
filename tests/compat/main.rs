@@ -39,9 +39,11 @@
 //!
 //! 1. Create `case_name/in/` with input file(s) and `foo.patch`
 //! 2. Run `SNAPSHOTS=overwrite cargo test --test compat` to generate `out/`
-//! 3. Add `#[test] fn case_name() { Case::gnu_patch(...).run(); }` in the module
+//! 3. Add `#[test] fn case_name() { Case::{gnu_patch,git}(...).run(); }` in the module
 //!
 //! For failure tests, use `.expect_success(false)` and skip step 2.
+//! For intentional compat divergence, use `.expect_compat(false)`.
 
 mod common;
+mod git;
 mod gnu_patch;

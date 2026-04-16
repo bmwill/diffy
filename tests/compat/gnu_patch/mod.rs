@@ -158,6 +158,13 @@ fn non_utf8_hunk_content() {
     Case::gnu_patch("non_utf8_hunk_content").run();
 }
 
+// Mbox stream: three concatenated `git format-patch` emails in one file.
+// GNU patch finds ---/+++ boundaries regardless of email headers.
+#[test]
+fn format_patch_mbox() {
+    Case::gnu_patch("format_patch_mbox").strip(1).run();
+}
+
 // Failure cases
 
 #[test]

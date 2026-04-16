@@ -1,0 +1,6 @@
+diff --git a/foo b/foo
+--- /dev/null
++++ /dev/null
+@@ -1 +1 @@
+-old
++new

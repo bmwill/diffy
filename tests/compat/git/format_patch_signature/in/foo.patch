@@ -1,0 +1,19 @@
+From b3bb3125eff3d2648f15af2a6e0cdcdf6ad8fce1 Mon Sep 17 00:00:00 2001
+From: Test <test@example.com>
+Date: Wed, 1 Jan 2020 00:00:00 +0000
+Subject: [PATCH] modify
+
+---
+ file.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/file.txt b/file.txt
+index 3367afd..3e75765 100644
+--- a/file.txt
++++ b/file.txt
+@@ -1 +1 @@
+-old
++new
+-- 
+2.52.0
+
