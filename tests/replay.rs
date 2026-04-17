@@ -544,7 +544,9 @@ fn process_commit(
                     );
                 }
             }
-            PatchKind::Binary => {
+            PatchKind::Binary(_) => {
+                // Binary patch application not yet wired up in replay tests.
+                // Will be done once the `binary` Cargo feature is added.
                 skipped += 1;
                 continue;
             }

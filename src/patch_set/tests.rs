@@ -752,7 +752,8 @@ index 0000000..e69de29
     }
 
     #[test]
-    fn binary_emits_marker() {
+    fn binary_marker_kept_by_default() {
+        // Default is Keep: binary marker is returned as BinaryPatch::Marker.
         let input = "\
 diff --git a/img.png b/img.png
 Binary files a/img.png and b/img.png differ
@@ -765,9 +766,9 @@ diff --git a/foo b/foo
 ";
         let patches = parse_gitdiff(input);
         assert_eq!(patches.len(), 2);
-        assert!(patches[0].patch().is_binary());
+        assert!(patches[0].patch().as_binary().is_some());
         assert!(patches[0].operation().is_modify());
-        assert!(!patches[1].patch().is_binary());
+        assert!(patches[1].patch().as_text().is_some());
     }
 }
 
