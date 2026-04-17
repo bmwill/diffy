@@ -5,6 +5,11 @@
 //!
 //! Based on [DiffX Binary Diffs specification](https://diffx.org/spec/binary-diffs.html).
 
+#[cfg(feature = "binary")]
+mod base85;
+#[cfg(feature = "binary")]
+mod delta;
+
 use std::{fmt, ops::Range};
 
 /// The type of a binary patch block.
@@ -54,7 +59,67 @@ pub enum BinaryPatch<'a> {
     ///
     /// This represents the `Binary files a/path and b/path differ` case,
     /// where git detected a binary change but didn't include the actual data.
+    ///
+    /// Calling [`apply()`](Self::apply) on this variant returns an error.
     Marker,
+}
+
+impl<'a> BinaryPatch<'a> {
+    /// Applies a binary patch forward: original -> modified.
+    ///
+    /// - If the forward block is `Literal`: returns the decoded content directly.
+    /// - If the forward block is `Delta`: applies delta instructions to `original`.
+    ///
+    /// Unlike `git apply`, this doesn't validate the original content hash.
+    #[cfg(feature = "binary")]
+    pub fn apply(&self, original: &[u8]) -> Result<Vec<u8>, BinaryPatchParseError> {
+        match self {
+            BinaryPatch::Full { forward, .. } => Self::apply_block(forward, original),
+            BinaryPatch::Marker => Err(BinaryPatchParseErrorKind::NoBinaryData.into()),
+        }
+    }
+
+    /// Applies a binary patch in reverse: modified -> original.
+    ///
+    /// - If the reverse block is `Literal`: returns the decoded content directly.
+    /// - If the reverse block is `Delta`: applies delta instructions to `modified`.
+    ///
+    /// Unlike `git apply`, this doesn't validate the modified content hash.
+    #[cfg(feature = "binary")]
+    pub fn apply_reverse(&self, modified: &[u8]) -> Result<Vec<u8>, BinaryPatchParseError> {
+        match self {
+            BinaryPatch::Full { reverse, .. } => Self::apply_block(reverse, modified),
+            BinaryPatch::Marker => Err(BinaryPatchParseErrorKind::NoBinaryData.into()),
+        }
+    }
+
+    /// Applies a single block (either literal or delta).
+    #[cfg(feature = "binary")]
+    fn apply_block(block: &BinaryBlock<'_>, base: &[u8]) -> Result<Vec<u8>, BinaryPatchParseError> {
+        match block.kind {
+            BinaryBlockKind::Literal => Self::decode_data(&block.data),
+            BinaryBlockKind::Delta => {
+                let delta_instructions = Self::decode_data(&block.data)?;
+                delta::apply(base, &delta_instructions).map_err(BinaryPatchParseError::from)
+            }
+        }
+    }
+
+    /// See [Decoding Logic](https://diffx.org/spec/binary-diffs.html#decoding-logic)
+    #[cfg(feature = "binary")]
+    fn decode_data(binary_data: &BinaryData<'_>) -> Result<Vec<u8>, BinaryPatchParseError> {
+        use std::io::Read;
+
+        let compressed = decode_base85_lines(binary_data.data)?;
+
+        let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
+        let mut decompressed = Vec::new();
+        decoder
+            .read_to_end(&mut decompressed)
+            .map_err(|e| BinaryPatchParseErrorKind::DecompressionFailed(e.to_string()))?;
+
+        Ok(decompressed)
+    }
 }
 
 /// Represents a single binary payload in a Git binary diff.
@@ -115,6 +180,20 @@ impl fmt::Display for BinaryPatchParseError {
 
 impl std::error::Error for BinaryPatchParseError {}
 
+#[cfg(feature = "binary")]
+impl From<base85::Base85Error> for BinaryPatchParseError {
+    fn from(e: base85::Base85Error) -> Self {
+        BinaryPatchParseErrorKind::Base85(e).into()
+    }
+}
+
+#[cfg(feature = "binary")]
+impl From<delta::DeltaError> for BinaryPatchParseError {
+    fn from(e: delta::DeltaError) -> Self {
+        BinaryPatchParseErrorKind::Delta(e).into()
+    }
+}
+
 impl From<BinaryPatchParseErrorKind> for BinaryPatchParseError {
     fn from(kind: BinaryPatchParseErrorKind) -> Self {
         Self { kind, span: None }
@@ -126,6 +205,8 @@ impl From<BinaryPatchParseErrorKind> for BinaryPatchParseError {
 #[non_exhaustive]
 pub(crate) enum BinaryPatchParseErrorKind {
     /// Missing or invalid "GIT binary patch" header.
+    // TODO: Switch to #[expect(dead_code)] when MSRV >= 1.81
+    #[cfg_attr(not(feature = "binary"), allow(dead_code))]
     InvalidHeader,
 
     /// First binary block (forward) not found.
@@ -135,10 +216,26 @@ pub(crate) enum BinaryPatchParseErrorKind {
     MissingReverseBlock,
 
     /// No binary data available (marker-only patch).
+    // TODO: Switch to #[expect(dead_code)] when MSRV >= 1.81
+    #[cfg_attr(not(feature = "binary"), allow(dead_code))]
     NoBinaryData,
 
     /// Invalid line length indicator in Base85 data.
+    // TODO: Switch to #[expect(dead_code)] when MSRV >= 1.81
+    #[cfg_attr(not(feature = "binary"), allow(dead_code))]
     InvalidLineLengthIndicator,
+
+    /// Base85 decoding failed.
+    #[cfg(feature = "binary")]
+    Base85(base85::Base85Error),
+
+    /// Delta application failed.
+    #[cfg(feature = "binary")]
+    Delta(delta::DeltaError),
+
+    /// Zlib decompression failed.
+    #[cfg(feature = "binary")]
+    DecompressionFailed(String),
 }
 
 impl fmt::Display for BinaryPatchParseErrorKind {
@@ -149,6 +246,12 @@ impl fmt::Display for BinaryPatchParseErrorKind {
             Self::MissingReverseBlock => write!(f, "second binary block not found"),
             Self::NoBinaryData => write!(f, "no binary data available"),
             Self::InvalidLineLengthIndicator => write!(f, "invalid line length indicator"),
+            #[cfg(feature = "binary")]
+            Self::Base85(e) => write!(f, "{e}"),
+            #[cfg(feature = "binary")]
+            Self::Delta(e) => write!(f, "{e}"),
+            #[cfg(feature = "binary")]
+            Self::DecompressionFailed(msg) => write!(f, "decompression failed: {msg}"),
         }
     }
 }
@@ -259,6 +362,62 @@ fn parse_binary_block<'a>(parser: &mut BinaryParser<'a>) -> Option<BinaryBlock<'
     })
 }
 
+/// Decodes multi-line Base85 data with length indicators.
+///
+/// Each line has the format: `<len_c><data>`
+///
+/// From [5.1.1. Binary Payloads](https://diffx.org/spec/binary-diffs.html#binary-payloads):
+///
+/// > Each line represents up to 52 bytes of pre-encoded data.
+/// > There may be an unlimited number of lines.
+/// > They contain the following fields:
+/// >
+/// >  * `len_c` is a line length character.
+/// >     This encodes the length of the (pre-encoded) data written on this line.
+/// >  * `data` is Base85-encoded data for this line.
+#[cfg(feature = "binary")]
+fn decode_base85_lines(data: &str) -> Result<Vec<u8>, BinaryPatchParseError> {
+    // A rough estimate: In Base85, 5 chars -> 4 bytes
+    let mut result = Vec::with_capacity(data.len() * 4 / 5);
+
+    for line in data.lines() {
+        if line.is_empty() {
+            continue;
+        }
+
+        let line_bytes = line.as_bytes();
+
+        let length = decode_line_length(line_bytes[0])
+            .ok_or(BinaryPatchParseErrorKind::InvalidLineLengthIndicator)?;
+        let encoded = &line[1..];
+        let start = result.len();
+        base85::decode_into(encoded, &mut result)?;
+        result.truncate(start + length);
+    }
+
+    Ok(result)
+}
+
+/// Decodes a line length character to its numeric value.
+///
+/// From [Line Length Characters](https://diffx.org/spec/binary-diffs.html#line-length-characters):
+///
+/// > Each encoded line in a binary diff payload is prefixed by a line length character.
+/// > This encodes the length of the compressed (but not encoded) data for the line.
+/// >
+/// > Line length characters always represent a value between 1 and 52:
+/// >
+/// > * A value of A-Z represents a number between 1..26.
+/// > * A value of a-z represents a number between 27..52.
+#[cfg(feature = "binary")]
+fn decode_line_length(c: u8) -> Option<usize> {
+    match c {
+        b'A'..=b'Z' => Some((c - b'A' + 1) as usize),
+        b'a'..=b'z' => Some((c - b'a' + 27) as usize),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,5 +493,56 @@ mod tests {
             }
             _ => panic!("expected Full variant"),
         }
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "binary")]
+mod apply_tests {
+    use super::*;
+
+    #[test]
+    fn decode_line_length_uppercase() {
+        assert_eq!(decode_line_length(b'A'), Some(1));
+        assert_eq!(decode_line_length(b'B'), Some(2));
+        assert_eq!(decode_line_length(b'Z'), Some(26));
+    }
+
+    #[test]
+    fn decode_line_length_lowercase() {
+        assert_eq!(decode_line_length(b'a'), Some(27));
+        assert_eq!(decode_line_length(b'b'), Some(28));
+        assert_eq!(decode_line_length(b'z'), Some(52));
+    }
+
+    #[test]
+    fn decode_line_length_invalid() {
+        assert_eq!(decode_line_length(b'0'), None);
+        assert_eq!(decode_line_length(b'!'), None);
+        assert_eq!(decode_line_length(b' '), None);
+    }
+
+    #[test]
+    fn apply_literal_patch() {
+        let input = "GIT binary patch\nliteral 10\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\nliteral 0\nKcmV+b0RR6000031\n\n";
+        let (patch, _) = parse_binary_patch(input).unwrap();
+
+        let modified = patch.apply(&[]).unwrap();
+        assert_eq!(modified.len(), 10);
+        assert_eq!(modified, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+
+        let original = patch.apply_reverse(&[]).unwrap();
+        assert_eq!(original.len(), 0);
+    }
+
+    #[test]
+    fn apply_with_crlf_line_endings() {
+        let input = "GIT binary patch\r\nliteral 10\r\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\r\n\r\nliteral 0\r\nKcmV+b0RR6000031\r\n\r\n";
+        let (patch, _) = parse_binary_patch(input).unwrap();
+
+        let modified = patch.apply(&[]).unwrap();
+        assert_eq!(modified, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        let original = patch.apply_reverse(&[]).unwrap();
+        assert_eq!(original.len(), 0);
     }
 }
