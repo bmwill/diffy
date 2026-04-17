@@ -223,6 +223,7 @@
 //! [`create_patch_bytes`]: fn.create_patch_bytes.html
 
 mod apply;
+pub mod binary;
 mod diff;
 mod merge;
 mod patch;
