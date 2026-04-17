@@ -144,6 +144,11 @@ pub trait Text: Eq + Hash + ToOwned {
     fn find(&self, needle: &str) -> Option<usize>;
     fn split_at(&self, mid: usize) -> (&Self, &Self);
     fn as_str(&self) -> Option<&str>;
+    /// Returns the longest valid UTF-8 prefix.
+    ///
+    /// For `str` this is the entire input.
+    /// For `[u8]` this returns up to the first invalid UTF-8 byte.
+    fn as_str_prefix(&self) -> &str;
     fn as_bytes(&self) -> &[u8];
     #[allow(unused)]
     fn lines(&self) -> LineIter<'_, Self>;
@@ -205,6 +210,10 @@ impl Text for str {
         Some(self)
     }
 
+    fn as_str_prefix(&self) -> &str {
+        self
+    }
+
     fn as_bytes(&self) -> &[u8] {
         self.as_bytes()
     }
@@ -257,6 +266,13 @@ impl Text for [u8] {
 
     fn as_str(&self) -> Option<&str> {
         std::str::from_utf8(self).ok()
+    }
+
+    fn as_str_prefix(&self) -> &str {
+        match std::str::from_utf8(self) {
+            Ok(s) => s,
+            Err(e) => std::str::from_utf8(&self[..e.valid_up_to()]).unwrap(),
+        }
     }
 
     fn as_bytes(&self) -> &[u8] {
