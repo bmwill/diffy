@@ -9,14 +9,16 @@ repository = "https://github.com/bmwill/diffy"
 readme = "README.md"
 keywords = ["diff", "patch", "merge"]
 categories = ["text-processing"]
-rust-version = "1.70.0"
+rust-version = "1.75.0"
 edition = "2021"
 
 [features]
+binary = ["dep:flate2"]
 color = ["dep:anstyle"]
 
 [dependencies]
 anstyle = { version = "1.0.13", optional = true }
+flate2 = { version = "1.1.9", optional = true, default-features = false, features = ["zlib-rs"] }
 
 [dev-dependencies]
 rayon = "1.10.0"
