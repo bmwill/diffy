@@ -4,6 +4,7 @@ use super::{
     error::PatchSetParseErrorKind, FileMode, FileOperation, FilePatch, Format, ParseOptions,
     PatchSetParseError,
 };
+use crate::binary::{parse_binary_patch, BinaryPatch};
 use crate::patch::parse::parse_one;
 use crate::utils::{escaped_filename, Text};
 use crate::Patch;
@@ -227,8 +228,9 @@ fn next_gitdiff_patch<'a, T: Text + ?Sized>(
     let (header, header_consumed) = GitHeader::parse(remaining(ps));
     ps.offset += header_consumed;
 
-    // Handle binary markers ("Binary files ... differ") and binary patches ("GIT binary patch")
-    if header.is_binary_marker || header.is_binary_patch {
+    // Handle "Binary files ... differ" (no patch data)
+    if header.is_binary_marker {
+        // FIXME: error spans point at `diff --git` line, not the specific offending line
         let operation = match extract_file_op_binary(&header, abs_patch_start) {
             Ok(op) => op,
             Err(e) => return Some(Err(e)),
@@ -240,7 +242,45 @@ fn next_gitdiff_patch<'a, T: Text + ?Sized>(
                 return Some(Err(e));
             }
         };
-        return Some(Ok(FilePatch::new_binary(operation, old_mode, new_mode)));
+        return Some(Ok(FilePatch::new_binary(
+            operation,
+            BinaryPatch::Marker,
+            old_mode,
+            new_mode,
+        )));
+    }
+
+    // Handle "GIT binary patch" (has patch data)
+    if let Some(binary_patch_start) = header.binary_patch_offset {
+        // GitHeader::parse consumed the marker line but not the payload.
+        // Use the recorded offset to pass input from the marker onward.
+        let (_, binary_input) = ps.input.split_at(abs_patch_start + binary_patch_start);
+        // Binary patch data is always ASCII (base85-encoded).
+        let binary_input = binary_input.as_str_prefix();
+        let (binary_patch, consumed) = match parse_binary_patch(binary_input) {
+            Ok(result) => result,
+            Err(e) => return Some(Err(e.into())),
+        };
+        ps.offset = abs_patch_start + binary_patch_start + consumed;
+
+        // FIXME: error spans point at `diff --git` line, not the specific offending line
+        let operation = match extract_file_op_binary(&header, abs_patch_start) {
+            Ok(op) => op,
+            Err(e) => return Some(Err(e)),
+        };
+        let (old_mode, new_mode) = match parse_file_modes(&header) {
+            Ok(modes) => modes,
+            Err(mut e) => {
+                e.set_span(abs_patch_start..abs_patch_start);
+                return Some(Err(e));
+            }
+        };
+        return Some(Ok(FilePatch::new_binary(
+            operation,
+            binary_patch,
+            old_mode,
+            new_mode,
+        )));
     }
 
     // `git diff` output format is stricter.
@@ -328,7 +368,8 @@ struct GitHeader<'a, T: ?Sized> {
     /// Binary files /dev/null and b/image.png differ
     /// ```
     is_binary_marker: bool,
-    /// Whether this is a binary diff with actual patch content.
+    /// Byte offset of `"GIT binary patch"` line relative to header input,
+    /// or `None` if no binary patch content was found.
     ///
     /// Observed `git diff --binary` output:
     ///
@@ -343,7 +384,7 @@ struct GitHeader<'a, T: ?Sized> {
     /// literal 0
     /// KcmV+b0RR6000031
     /// ```
-    is_binary_patch: bool,
+    binary_patch_offset: Option<usize>,
 }
 
 impl<T: ?Sized> Default for GitHeader<'_, T> {
@@ -359,7 +400,7 @@ impl<T: ?Sized> Default for GitHeader<'_, T> {
             new_file_mode: None,
             deleted_file_mode: None,
             is_binary_marker: false,
-            is_binary_patch: false,
+            binary_patch_offset: None,
         }
     }
 }
@@ -410,7 +451,7 @@ impl<'a, T: Text + ?Sized> GitHeader<'a, T> {
             } else if trimmed.starts_with("Binary files ") {
                 header.is_binary_marker = true;
             } else if trimmed.starts_with("GIT binary patch") {
-                header.is_binary_patch = true;
+                header.binary_patch_offset = Some(consumed);
             } else {
                 // Unrecognized line: End of extended headers
                 // (typically `---`/`+++`/`@@` or trailing content).

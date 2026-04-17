@@ -11,6 +11,7 @@ mod tests;
 use std::borrow::Cow;
 use std::fmt;
 
+use crate::binary::BinaryPatch;
 use crate::utils::Text;
 use crate::Patch;
 
@@ -90,7 +91,7 @@ impl ParseOptions {
     /// * `diff --git` headers
     /// * Extended headers (`new file mode`, `deleted file mode`, etc.)
     /// * Rename/copy detection (`rename from`/`rename to`, `copy from`/`copy to`)
-    /// * Binary file detection (emitted a marker by defualt)
+    /// * Binary file detection
     ///
     /// [git-diff-format]: https://git-scm.com/docs/diff-format
     pub fn gitdiff() -> Self {
@@ -133,7 +134,7 @@ pub enum PatchKind<'a, T: ToOwned + ?Sized> {
     /// Text patch with hunks.
     Text(Patch<'a, T>),
     /// Binary patch (literal or delta encoded, or marker-only).
-    Binary,
+    Binary(BinaryPatch<'a>),
 }
 
 impl<T: ?Sized, O> std::fmt::Debug for PatchKind<'_, T>
@@ -144,7 +145,7 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PatchKind::Text(patch) => f.debug_tuple("Text").field(patch).finish(),
-            PatchKind::Binary => f.write_str("Binary"),
+            PatchKind::Binary(patch) => f.debug_tuple("Binary").field(patch).finish(),
         }
     }
 }
@@ -154,13 +155,21 @@ impl<'a, T: ToOwned + ?Sized> PatchKind<'a, T> {
     pub fn as_text(&self) -> Option<&Patch<'a, T>> {
         match self {
             PatchKind::Text(patch) => Some(patch),
-            PatchKind::Binary => None,
+            PatchKind::Binary(_) => None,
+        }
+    }
+
+    /// Returns the binary patch, or `None` if this is a text patch.
+    pub fn as_binary(&self) -> Option<&BinaryPatch<'a>> {
+        match self {
+            PatchKind::Binary(patch) => Some(patch),
+            PatchKind::Text(_) => None,
         }
     }
 
     /// Returns `true` if this is a binary diff.
     pub fn is_binary(&self) -> bool {
-        matches!(self, PatchKind::Binary)
+        matches!(self, PatchKind::Binary(_))
     }
 }
 
@@ -209,12 +218,13 @@ impl<'a, T: ToOwned + ?Sized> FilePatch<'a, T> {
 
     fn new_binary(
         operation: FileOperation<'a, T>,
+        patch: BinaryPatch<'a>,
         old_mode: Option<FileMode>,
         new_mode: Option<FileMode>,
     ) -> Self {
         Self {
             operation,
-            kind: PatchKind::Binary,
+            kind: PatchKind::Binary(patch),
             old_mode,
             new_mode,
         }

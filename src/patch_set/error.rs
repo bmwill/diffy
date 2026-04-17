@@ -3,6 +3,7 @@
 use std::fmt;
 use std::ops::Range;
 
+use crate::binary::BinaryPatchParseError;
 use crate::patch::ParsePatchError;
 
 /// An error returned when parsing patches fails.
@@ -76,6 +77,9 @@ pub(crate) enum PatchSetParseErrorKind {
 
     /// Invalid `diff --git` path.
     InvalidDiffGitPath,
+
+    /// Binary patch parsing failed.
+    BinaryParse(BinaryPatchParseError),
 }
 
 impl fmt::Display for PatchSetParseErrorKind {
@@ -89,6 +93,7 @@ impl fmt::Display for PatchSetParseErrorKind {
             Self::CreateMissingModifiedPath => write!(f, "create patch has no modified path"),
             Self::InvalidFileMode(mode) => write!(f, "invalid file mode: {mode}"),
             Self::InvalidDiffGitPath => write!(f, "invalid diff --git path"),
+            Self::BinaryParse(e) => write!(f, "{e}"),
         }
     }
 }
@@ -96,5 +101,11 @@ impl fmt::Display for PatchSetParseErrorKind {
 impl From<ParsePatchError> for PatchSetParseError {
     fn from(e: ParsePatchError) -> Self {
         PatchSetParseErrorKind::Patch(e).into()
+    }
+}
+
+impl From<BinaryPatchParseError> for PatchSetParseError {
+    fn from(e: BinaryPatchParseError) -> Self {
+        PatchSetParseErrorKind::BinaryParse(e).into()
     }
 }
