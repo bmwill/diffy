@@ -24,7 +24,7 @@ pub fn apply(original: &[u8], delta: &[u8]) -> Result<Vec<u8>, DeltaError> {
         });
     }
 
-    let mut result = Vec::with_capacity(header_mod_size as usize);
+    let mut result = Vec::with_capacity(header_mod_size.min(super::MAX_PREALLOC) as usize);
 
     // Process instructions until we've consumed all delta data
     while !cursor.is_empty() {

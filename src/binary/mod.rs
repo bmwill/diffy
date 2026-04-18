@@ -12,6 +12,13 @@ mod delta;
 
 use std::{fmt, ops::Range};
 
+/// Cap preallocation when the size comes from untrusted input.
+///
+/// This prevents instant OOM from a bogus header.
+/// The vec grows as needed if the actual output is larger.
+#[cfg(feature = "binary")]
+const MAX_PREALLOC: u64 = 64 * 1024; // 64 KiB
+
 /// The type of a binary patch block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryBlockKind {
@@ -113,7 +120,7 @@ impl<'a> BinaryPatch<'a> {
         let compressed = decode_base85_lines(binary_data.data)?;
 
         let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
-        let mut decompressed = Vec::new();
+        let mut decompressed = Vec::with_capacity(binary_data.size.min(MAX_PREALLOC) as usize);
         decoder
             .read_to_end(&mut decompressed)
             .map_err(|e| BinaryPatchParseErrorKind::DecompressionFailed(e.to_string()))?;
