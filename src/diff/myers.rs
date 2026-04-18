@@ -74,6 +74,28 @@ fn max_d(len1: usize, len2: usize) -> usize {
     (len1 + len2 + 1) / 2 + 1
 }
 
+/// Tunables for the Myers middle-snake heuristic bailouts.
+struct HeuristicsConfig {
+    /// Maximum `d` (edit cost) the middle-snake search is allowed to
+    /// explore before bailing out with a heuristic split.
+    #[allow(unused)]
+    max_cost: usize,
+}
+
+impl HeuristicsConfig {
+    /// Sets the floor for the max_cost heuristic so that small inputs still get an optimal diff.
+    const MAX_COST_MINIMUM: usize = 256;
+
+    fn new(n: usize, m: usize) -> Self {
+        // Calculate a rough estimate of sqrt(n+m) to determine a max_cost
+        let nm = n + m;
+        let bits = usize::BITS - nm.leading_zeros();
+        let max_cost = (1usize << ((bits + 1) / 2)).max(Self::MAX_COST_MINIMUM);
+        // let max_cost = ((nm as f64).sqrt() as usize).max(Self::MAX_COST_MINIMUM);
+        Self { max_cost }
+    }
+}
+
 // The divide part of a divide-and-conquer strategy. A D-path has D+1 snakes some of which may
 // be empty. The divide step requires finding the ceil(D/2) + 1 or middle snake of an optimal
 // D-path. The idea for doing so is to simultaneously run the basic algorithm in both the
@@ -84,6 +106,7 @@ fn find_middle_snake<T: PartialEq>(
     new: Range<'_, [T]>,
     vf: &mut V,
     vb: &mut V,
+    _heuristic: &HeuristicsConfig,
     _need_minimal: bool,
 ) -> (isize, Snake) {
     let n = old.len();
@@ -194,6 +217,7 @@ fn conquer<'a, 'b, T: PartialEq>(
     mut new: Range<'b, [T]>,
     vf: &mut V,
     vb: &mut V,
+    heuristics: &HeuristicsConfig,
     need_minimal: bool,
     solution: &mut Vec<DiffRange<'a, 'b, [T]>>,
 ) {
@@ -229,13 +253,14 @@ fn conquer<'a, 'b, T: PartialEq>(
         solution.push(DiffRange::Delete(old));
     } else {
         // Divide & Conquer
-        let (_shortest_edit_script_len, snake) = find_middle_snake(old, new, vf, vb, need_minimal);
+        let (_shortest_edit_script_len, snake) =
+            find_middle_snake(old, new, vf, vb, heuristics, need_minimal);
 
         let (old_a, old_b) = old.split_at(snake.x_start);
         let (new_a, new_b) = new.split_at(snake.y_start);
 
-        conquer(old_a, new_a, vf, vb, need_minimal, solution);
-        conquer(old_b, new_b, vf, vb, need_minimal, solution);
+        conquer(old_a, new_a, vf, vb, heuristics, need_minimal, solution);
+        conquer(old_b, new_b, vf, vb, heuristics, need_minimal, solution);
     }
 
     if common_suffix_len > 0 {
@@ -260,11 +285,14 @@ pub fn diff<'a, 'b, T: PartialEq>(
     let mut vf = V::new(max_d);
     let mut vb = V::new(max_d);
 
+    let heuristics = HeuristicsConfig::new(old.len(), new.len());
+
     conquer(
         old_recs,
         new_recs,
         &mut vf,
         &mut vb,
+        &heuristics,
         need_minimal,
         &mut solution,
     );
@@ -283,6 +311,7 @@ mod tests {
         let max_d = max_d(a.len(), b.len());
         let mut vf = V::new(max_d);
         let mut vb = V::new(max_d);
-        find_middle_snake(a, b, &mut vf, &mut vb, true);
+        let heuristics = HeuristicsConfig::new(a.len(), b.len());
+        find_middle_snake(a, b, &mut vf, &mut vb, &heuristics, true);
     }
 }

@@ -851,8 +851,9 @@ fn minimal_is_not_larger_than_myers_on_small_input() {
 #[test]
 #[should_panic]
 fn minimal_is_smaller_than_myers_when_heuristic_fires() {
-    // Pathological input modeled on git's `t/t4071-diff-minimal.sh`
-    // pattern, scaled up so the edit cost exceeds the heuristic budget
+    // Pathological input modeled on the test case in
+    // minimal_no_spurious_edits_on_repeated_prefix,
+    // scaled up so the edit cost exceeds the heuristic budget
     // and the bail has a reason to fire. Two large disjoint blocks of
     // unique lines flank a shared block — Minimal pivots on the shared
     // block and emits two clean hunks; Myers bails out before finding
@@ -966,13 +967,7 @@ fn myers_heuristic_handles_asymmetric_inputs() {
 }
 
 #[test]
-fn minimal_t4071_no_spurious_edits_on_repeated_prefix() {
-    // Direct port of git's `t/t4071-diff-minimal.sh`: a pre/post pair
-    // where `--minimal` must not mark any of the unchanged leading
-    // `x` lines as edits. Our `compact` post-processing step makes
-    // Myers agree with Minimal on this small input too, but the test
-    // still exercises the property that made this test famous in
-    // git's suite.
+fn minimal_no_spurious_edits_on_repeated_prefix() {
     let pre = "x\nx\nx\nx\n";
     let post = "x\nx\nx\nA\nB\nC\nD\nx\nE\nF\nG\n";
 
