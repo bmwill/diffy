@@ -30,6 +30,7 @@ jobs:
       - run: rustup toolchain install ${{ matrix.rust }} --profile minimal
       - run: cargo +${{ matrix.rust }} check --all-targets --all-features
       - run: cargo +${{ matrix.rust }} test
+      - run: cargo +${{ matrix.rust }} test -F binary
 
   lint:
     runs-on: ubuntu-latest

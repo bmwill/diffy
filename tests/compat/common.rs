@@ -9,7 +9,7 @@ use std::{
 };
 
 use diffy::{
-    binary::BinaryPatch,
+    binary::{BinaryPatch, BinaryPatchParseError},
     patch_set::{FileOperation, ParseOptions, PatchKind, PatchSet, PatchSetParseError},
 };
 
@@ -298,7 +298,7 @@ fn print_patch_version() {
 pub enum TestError {
     Parse(PatchSetParseError),
     Apply(diffy::ApplyError),
-    Io(std::io::Error),
+    Binary(BinaryPatchParseError),
 }
 
 impl std::fmt::Display for TestError {
@@ -306,7 +306,7 @@ impl std::fmt::Display for TestError {
         match self {
             TestError::Parse(e) => write!(f, "parse error: {e}"),
             TestError::Apply(e) => write!(f, "apply error: {e}"),
-            TestError::Io(e) => write!(f, "io error: {e}"),
+            TestError::Binary(e) => write!(f, "binary patch error: {e}"),
         }
     }
 }
@@ -397,29 +397,40 @@ pub fn apply_diffy(
             }
         };
 
+        let read_original = || {
+            if let Some(name) = original_name {
+                let original_path = in_dir.join(bytes_to_path(name));
+                fs::read(&original_path).unwrap_or_default()
+            } else {
+                Vec::new()
+            }
+        };
+
+        let write_modified = |result: &[u8]| {
+            let result_path = output_dir.join(bytes_to_path(target_name));
+            if let Some(parent) = result_path.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            fs::write(&result_path, result).unwrap();
+        };
+
         match file_patch.patch() {
             PatchKind::Text(patch) => {
-                let original = if let Some(name) = original_name {
-                    let original_path = in_dir.join(bytes_to_path(name));
-                    fs::read(&original_path).map_err(TestError::Io)?
-                } else {
-                    Vec::new()
-                };
+                let original = read_original();
 
                 let result = diffy::apply_bytes(&original, patch).map_err(TestError::Apply)?;
 
-                let result_path = output_dir.join(bytes_to_path(target_name));
-                if let Some(parent) = result_path.parent() {
-                    fs::create_dir_all(parent).unwrap();
-                }
-                fs::write(&result_path, &result).unwrap();
+                write_modified(&result);
             }
             PatchKind::Binary(BinaryPatch::Marker) => {
                 // Dont do anything if it is just a binary patch marker.
             }
-            PatchKind::Binary(_) => {
-                // Binary patch application requires the `binary` feature.
-                // Will be wired up when that feature is added.
+            PatchKind::Binary(patch) => {
+                let original = read_original();
+
+                let result = patch.apply(&original).map_err(TestError::Binary)?;
+
+                write_modified(&result);
             }
         }
     }
