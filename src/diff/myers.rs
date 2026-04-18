@@ -17,7 +17,7 @@ use std::ops::{Index, IndexMut};
 #[derive(Debug, Clone)]
 struct V {
     offset: isize,
-    v: Vec<usize>, // Look into initializing this to -1 and storing isize
+    v: Vec<usize>,
 }
 
 impl V {
@@ -68,7 +68,9 @@ impl ::std::fmt::Display for Snake {
 }
 
 fn max_d(len1: usize, len2: usize) -> usize {
-    // XXX look into reducing the need to have the additional '+ 1'
+    // The middle-snake search iterates `d` from 0 to ceil((N+M)/2)
+    // inclusive. `(len1 + len2 + 1) / 2` is that ceiling, and the trailing
+    // `+ 1` converts it to an exclusive upper bound for `0..d_max`.
     (len1 + len2 + 1) / 2 + 1
 }
 
@@ -125,7 +127,9 @@ fn find_middle_snake<T: PartialEq>(
             // Only check for connections from the forward search when N - M is odd
             // and when there is a reciprocal k line coming from the other direction.
             if odd && (k - delta).abs() <= (d - 1) {
-                // TODO optimize this so we don't have to compare against n
+                // Forward x-coordinate plus the reciprocal backward distance
+                // from (N, M) meets or exceeds `n` exactly when the two paths
+                // have crossed on the forward axis.
                 if vf[k] + vb[-(k - delta)] >= n {
                     // Return the snake
                     let snake = Snake {
@@ -161,7 +165,9 @@ fn find_middle_snake<T: PartialEq>(
             vb[k] = x;
 
             if !odd && (k - delta).abs() <= d {
-                // TODO optimize this so we don't have to compare against n
+                // Backward x-distance plus the reciprocal forward x-coordinate
+                // meets or exceeds `n` exactly when the two paths have crossed
+                // on the forward axis.
                 if vb[k] + vf[-(k - delta)] >= n {
                     // Return the snake
                     let snake = Snake {
