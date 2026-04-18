@@ -96,11 +96,29 @@ impl HeuristicsConfig {
     }
 }
 
+/// The result of searching for a middle snake.
+///
+/// `Optimal` is returned when forward and backward paths overlap within the
+/// edit budget; the contained snake is the real middle snake. `Heuristic`
+/// is returned when `max_cost` is exceeded first; the contained snake is a
+/// synthesized zero-length split point at the furthest-reaching endpoint
+/// seen during the search. The resulting diff is correct but not guaranteed
+/// to be minimal.
+enum SplitResult {
+    Optimal { snake: Snake },
+    Heuristic { snake: Snake },
+}
+
 // The divide part of a divide-and-conquer strategy. A D-path has D+1 snakes some of which may
 // be empty. The divide step requires finding the ceil(D/2) + 1 or middle snake of an optimal
 // D-path. The idea for doing so is to simultaneously run the basic algorithm in both the
 // forward and reverse directions until furthest reaching forward and reverse paths starting at
 // opposing corners 'overlap'.
+//
+// When `max_cost` is exceeded before an overlap is found, the search bails
+// out and returns a `SplitResult::Heuristic` anchored at whichever search
+// direction made more progress (measured by `x + y` in its own coordinate
+// system). This produces a non-minimal but correct diff in bounded time.
 fn find_middle_snake<T: PartialEq>(
     old: Range<'_, [T]>,
     new: Range<'_, [T]>,
@@ -108,7 +126,7 @@ fn find_middle_snake<T: PartialEq>(
     vb: &mut V,
     _heuristic: &HeuristicsConfig,
     _need_minimal: bool,
-) -> (isize, Snake) {
+) -> SplitResult {
     let n = old.len();
     let m = new.len();
 
@@ -126,6 +144,14 @@ fn find_middle_snake<T: PartialEq>(
     let d_max = max_d(n, m);
     assert!(vf.len() >= d_max);
     assert!(vb.len() >= d_max);
+
+    // Furthest-reaching endpoints seen on each side. Both scores are `x + y`
+    // in that side's own coordinate frame, so they measure distance from that
+    // side's starting corner ((0, 0) for forward, (N, M) for backward).
+    // Stored coordinates are what's written to `vf` / `vb`; for backward the
+    // actual grid position is `(n - x, m - y)`.
+    let mut best_fwd: (usize, usize, usize) = (0, 0, 0); // (score, x, y) in actual coords
+    let mut best_bwd: (usize, usize, usize) = (0, 0, 0); // (score, stored x, stored y)
 
     for d in 0..d_max as isize {
         // Forward path
@@ -148,6 +174,9 @@ fn find_middle_snake<T: PartialEq>(
 
             // This is the new best x value
             vf[k] = x;
+            if x + y > best_fwd.0 {
+                best_fwd = (x + y, x, y);
+            }
             // Only check for connections from the forward search when N - M is odd
             // and when there is a reciprocal k line coming from the other direction.
             if odd && (k - delta).abs() <= (d - 1) {
@@ -155,15 +184,14 @@ fn find_middle_snake<T: PartialEq>(
                 // from (N, M) meets or exceeds `n` exactly when the two paths
                 // have crossed on the forward axis.
                 if vf[k] + vb[-(k - delta)] >= n {
-                    // Return the snake
-                    let snake = Snake {
-                        x_start: x0,
-                        y_start: y0,
-                        x_end: x,
-                        y_end: y,
+                    return SplitResult::Optimal {
+                        snake: Snake {
+                            x_start: x0,
+                            y_start: y0,
+                            x_end: x,
+                            y_end: y,
+                        },
                     };
-                    // Edit distance to this snake is `2 * d - 1`
-                    return (2 * d - 1, snake);
                 }
             }
         }
@@ -187,28 +215,61 @@ fn find_middle_snake<T: PartialEq>(
 
             // This is the new best x value
             vb[k] = x;
+            // Track best-so-far in stored backward coords; the bail path below
+            // converts to actual grid coords. Guarded so an `x > n` or `y > m`
+            // overshoot from the `vb[k-1] + 1` update doesn't poison the score.
+            if x <= n && y <= m && x + y > best_bwd.0 {
+                best_bwd = (x + y, x, y);
+            }
 
             if !odd && (k - delta).abs() <= d {
                 // Backward x-distance plus the reciprocal forward x-coordinate
                 // meets or exceeds `n` exactly when the two paths have crossed
                 // on the forward axis.
                 if vb[k] + vf[-(k - delta)] >= n {
-                    // Return the snake
-                    let snake = Snake {
-                        x_start: n - x,
-                        y_start: m - y,
-                        x_end: n - x0,
-                        y_end: m - y0,
+                    return SplitResult::Optimal {
+                        snake: Snake {
+                            x_start: n - x,
+                            y_start: m - y,
+                            x_end: n - x0,
+                            y_end: m - y0,
+                        },
                     };
-                    // Edit distance to this snake is `2 * d`
-                    return (2 * d, snake);
                 }
             }
         }
 
-        // TODO: Maybe there's an opportunity to optimize and bail early?
+        // Heuristic bail. Once `d` reaches `max_cost` we stop searching for
+        // the optimal middle snake and synthesize a zero-length split at
+        // whichever side has made more progress. `conquer` splits at
+        // `(snake_x, snake_y)` and recovers any real matching content around
+        // the split via its prefix/suffix trimming on the recursive calls.
+        //
+        // We require `d >= 1` to guarantee the split is non-trivial —
+        // bailing at `d == 0` with both sides at zero progress would split
+        // at (0, 0) and recurse on the full problem, causing infinite
+        // recursion.
+        if d >= 1 && (d as usize) >= max_cost {
+            let (snake_x, snake_y) = if best_fwd.0 >= best_bwd.0 {
+                (best_fwd.1, best_fwd.2)
+            } else {
+                // Convert stored backward coords to actual grid coords.
+                (n - best_bwd.1, m - best_bwd.2)
+            };
+            return SplitResult::Heuristic {
+                snake: Snake {
+                    x_start: snake_x,
+                    y_start: snake_y,
+                    x_end: snake_x,
+                    y_end: snake_y,
+                },
+            };
+        }
     }
 
+    // With `max_cost >= d_max` the bail never fires, and Lemma 1 still
+    // guarantees a middle snake is found — so this is only reachable if the
+    // input violates the algorithm's preconditions.
     unreachable!("unable to find a middle snake");
 }
 
@@ -252,9 +313,12 @@ fn conquer<'a, 'b, T: PartialEq>(
         // Deletes
         solution.push(DiffRange::Delete(old));
     } else {
-        // Divide & Conquer
-        let (_shortest_edit_script_len, snake) =
-            find_middle_snake(old, new, vf, vb, heuristics, need_minimal);
+        // Divide & Conquer. The optimal-vs-heuristic distinction doesn't
+        // matter here — either way we split at `(snake.x_start, snake.y_start)`
+        // and recurse on the two halves.
+        let snake = match find_middle_snake(old, new, vf, vb) {
+            SplitResult::Optimal { snake } | SplitResult::Heuristic { snake } => snake,
+        };
 
         let (old_a, old_b) = old.split_at(snake.x_start);
         let (new_a, new_b) = new.split_at(snake.y_start);
