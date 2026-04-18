@@ -184,7 +184,7 @@ fn fail_prefix_no_slash() {
     Case::git("fail_prefix_no_slash")
         .strip(1)
         .expect_success(false)
-        .expect_diffy_error(snapbox::str!["io error: No such file or directory (os error 2)"])
+        .expect_diffy_error(snapbox::str!["apply error: error applying hunk #1"])
         .expect_external_error(snapbox::str![[r#"
 error: git diff header lacks filename information when removing 1 leading pathname component (line 5)
 
@@ -212,6 +212,71 @@ error: patch fragment without header at line 11: @@ -7,3 +7,3 @@
 
 "#]])
         .run();
+}
+
+// Mixed binary and text patch.
+//
+// Both git apply and diffy should apply both the binary and text changes.
+#[test]
+fn binary_and_text_mixed() {
+    Case::git("binary_and_text_mixed").strip(1).run();
+}
+
+// Binary patch in literal format (new file creation).
+#[test]
+fn binary_literal() {
+    Case::git("binary_literal").strip(1).run();
+}
+
+// Binary patch in delta format (modify existing file).
+#[test]
+fn binary_delta() {
+    Case::git("binary_delta").strip(1).run();
+}
+
+// Binary literal patch applied to wrong original content.
+//
+// diffy succeeds (literal format doesn't need the original); git rejects.
+#[test]
+fn binary_literal_wrong_original() {
+    Case::git("binary_literal_wrong_original")
+        .strip(1)
+        .expect_compat(false)
+        .expect_external_error(snapbox::str![[r#"
+error: corrupt binary patch at line 9: 
+error: No valid patches in input (allow with "--allow-empty")
+
+"#]])
+        .run();
+}
+
+// Binary delta patch applied to wrong original content.
+// Both diffy and git fail, but for different reasons (see snapshots).
+#[test]
+fn binary_delta_wrong_original() {
+    Case::git("binary_delta_wrong_original")
+        .strip(1)
+        .expect_success(false)
+        .expect_diffy_error(snapbox::str!["binary patch error: error parsing binary patch: original size mismatch: expected 5120, got 13"])
+        .expect_external_error(snapbox::str![[r#"
+error: the patch applies to 'large.bin' (0d6307ba5442d0fdfe89dd3d78f82604fe0c0d80), which does not match the current contents.
+error: large.bin: patch does not apply
+
+"#]])
+        .run();
+}
+
+// Binary patch with mixed delta/literal format.
+//
+// Git can choose different encodings for forward and reverse transformations
+// based on which is more efficient. This patch has:
+// - forward (original -> modified): delta
+// - reverse (modified -> original): literal
+//
+// From rust-lang/rust@ad46af24 (favicon-32x32.png update).
+#[test]
+fn binary_mixed_delta_literal() {
+    Case::git("binary_mixed_delta_literal").strip(1).run();
 }
 
 // Multi-file patch with junk/preamble text between different files.

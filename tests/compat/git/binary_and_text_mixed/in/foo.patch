@@ -1,0 +1,16 @@
+diff --git a/image.png b/image.png
+index 0dd1608e45a9c4d35bfc1e6f266a796364aa8754..bccac03558b00545e7ea8ced4a3a1ee232cc185a 100644
+GIT binary patch
+literal 10
+UcmV+l0QLWgP)<h;3K|Lk0S%l1s{jB1
+
+literal 8
+ScmV+j0QdiiP)<h;3K|LuM**q;
+
+diff --git a/text.txt b/text.txt
+index 33194a0a6f3f99e366d606c24d9b1ab0e0086e69..b66ba06d315d46280bb09d54614cc52d1677809f 100644
+--- a/text.txt
++++ b/text.txt
+@@ -1 +1 @@
+-old content
++new content
