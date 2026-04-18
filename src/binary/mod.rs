@@ -536,6 +536,17 @@ mod apply_tests {
     }
 
     #[test]
+    fn literal_size_mismatch() {
+        // Declared size 99 but actual decompressed data is 10 bytes.
+        // Currently accepted — no size validation after decompression.
+        let input = "GIT binary patch\nliteral 99\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\nliteral 0\nKcmV+b0RR6000031\n\n";
+        let (patch, _) = parse_binary_patch(input).unwrap();
+
+        let modified = patch.apply(&[]).unwrap();
+        assert_eq!(modified.len(), 10);
+    }
+
+    #[test]
     fn apply_with_crlf_line_endings() {
         let input = "GIT binary patch\r\nliteral 10\r\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\r\n\r\nliteral 0\r\nKcmV+b0RR6000031\r\n\r\n";
         let (patch, _) = parse_binary_patch(input).unwrap();
