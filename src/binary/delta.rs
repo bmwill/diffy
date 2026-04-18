@@ -46,6 +46,9 @@ pub fn apply(original: &[u8], delta: &[u8]) -> Result<Vec<u8>, DeltaError> {
             }
 
             result.extend_from_slice(&original[src_offset..src_end]);
+        } else if control == 0 {
+            // `git apply` rejects this as "unexpected delta opcode 0".
+            return Err(DeltaError::UnexpectedOpcode);
         } else {
             // ADD instruction
             let add_len = control as usize;
@@ -180,6 +183,8 @@ pub enum DeltaError {
     },
     /// COPY range calculation overflowed.
     InvalidCopyRange,
+    /// Unexpected delta opcode (control byte 0x00).
+    UnexpectedOpcode,
 }
 
 impl fmt::Display for DeltaError {
@@ -210,6 +215,7 @@ impl fmt::Display for DeltaError {
                 )
             }
             DeltaError::InvalidCopyRange => write!(f, "copy range calculation overflow"),
+            DeltaError::UnexpectedOpcode => write!(f, "unexpected delta opcode 0"),
         }
     }
 }
@@ -361,23 +367,20 @@ mod tests {
     }
 
     #[test]
-    fn zero_control_byte_is_add_zero() {
+    fn error_unexpected_opcode() {
         // Same delta layout as compat fixture `binary_delta_zero_control`:
         // hello -> hellX with zero control byte (0x00) between COPY and ADD.
-        //
-        // Currently 0x00 falls through to ADD with length 0 (a no-op),
-        // so the delta applies successfully. git apply rejects this.
         let delta = [
             0x05, // orig_size = 5
             0x05, // mod_size = 5
             0x91, // COPY: 0x80 | 0x10 | 0x01 (offset1 + size1 present)
             0x00, // offset=0
             0x04, // len=4 ("hell")
-            0x00, // zero control byte — currently treated as ADD(0)
+            0x00, // zero control byte (unexpected opcode)
             0x01, b'X', // ADD 1 byte: 'X'
         ];
         let original = b"hello";
-        let result = apply(original, &delta).unwrap();
-        assert_eq!(result, b"hellX");
+        let err = apply(original, &delta).unwrap_err();
+        assert_eq!(err, DeltaError::UnexpectedOpcode);
     }
 }

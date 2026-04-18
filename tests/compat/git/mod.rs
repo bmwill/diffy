@@ -288,14 +288,14 @@ fn binary_mixed_delta_literal() {
 // - 0x91 0x00 0x04  COPY offset=0, len=4 ("hell")
 // - 0x00       zero control byte
 // - 0x01 0x58  ADD 1 byte: 'X'
-//
-// git apply rejects this (`error: unexpected delta opcode 0`).
-// diffy currently treats 0x00 as ADD(0) (a no-op) and succeeds.
 #[test]
 fn binary_delta_zero_control() {
     Case::git("binary_delta_zero_control")
         .strip(1)
-        .expect_compat(false)
+        .expect_success(false)
+        .expect_diffy_error(snapbox::str![[
+            "binary patch error: error parsing binary patch: unexpected delta opcode 0"
+        ]])
         .expect_external_error(snapbox::str![[r#"
 error: unexpected delta opcode 0
 error: binary patch does not apply to 'file.bin'
