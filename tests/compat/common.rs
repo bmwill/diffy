@@ -29,6 +29,10 @@ pub struct Case<'a> {
     expect_success: bool,
     /// Whether diffy and external tool should agree on success/failure (default: true)
     expect_compat: bool,
+    /// Inline snapshot for diffy's error message on failure.
+    expect_diffy_error: Option<snapbox::Data>,
+    /// Inline snapshot for external tool's stderr on failure.
+    expect_external_error: Option<snapbox::Data>,
 }
 
 impl<'a> Case<'a> {
@@ -40,6 +44,8 @@ impl<'a> Case<'a> {
             strip_level: 0,
             expect_success: true,
             expect_compat: true,
+            expect_diffy_error: None,
+            expect_external_error: None,
         }
     }
 
@@ -51,6 +57,8 @@ impl<'a> Case<'a> {
             strip_level: 0,
             expect_success: true,
             expect_compat: true,
+            expect_diffy_error: None,
+            expect_external_error: None,
         }
     }
 
@@ -78,6 +86,20 @@ impl<'a> Case<'a> {
 
     pub fn expect_compat(mut self, expect: bool) -> Self {
         self.expect_compat = expect;
+        self
+    }
+
+    /// Assert diffy's error message matches an inline snapshot.
+    /// Use with [`snapbox::str!`].
+    pub fn expect_diffy_error(mut self, expected: impl Into<snapbox::Data>) -> Self {
+        self.expect_diffy_error = Some(expected.into());
+        self
+    }
+
+    /// Assert external tool's stderr matches an inline snapshot.
+    /// Use with [`snapbox::str!`].
+    pub fn expect_external_error(mut self, expected: impl Into<snapbox::Data>) -> Self {
+        self.expect_external_error = Some(expected.into());
         self
     }
 
@@ -111,7 +133,12 @@ impl<'a> Case<'a> {
         if self.expect_success {
             diffy_result.as_ref().expect("diffy should succeed");
         } else {
-            diffy_result.as_ref().expect_err("diffy should fail");
+            let err = diffy_result.as_ref().expect_err("diffy should fail");
+            let expected = self
+                .expect_diffy_error
+                .as_ref()
+                .expect("expect_diffy_error is required when expect_success(false)");
+            snapbox::assert_data_eq!(err.to_string(), expected.clone());
         }
 
         // In CI mode, also verify external tool behavior
@@ -129,6 +156,14 @@ impl<'a> Case<'a> {
                     gnu_patch_apply(&in_dir, &patch_path, &external_output, self.strip_level)
                 }
             };
+
+            if let Err(stderr) = &external_result {
+                let expected = self
+                    .expect_external_error
+                    .as_ref()
+                    .expect("`expect_external_error` is required when the external tool fails");
+                snapbox::assert_data_eq!(stderr.as_str(), expected.clone());
+            }
 
             // For success cases where both succeed and are expected to be compatible,
             // verify outputs match

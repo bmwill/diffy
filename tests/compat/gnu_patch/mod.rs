@@ -64,6 +64,10 @@ fn missing_minus_header() {
 fn create_empty_file_unidiff() {
     Case::gnu_patch("create_empty_file_unidiff")
         .expect_compat(false)
+        .expect_external_error(snapbox::str![[r#"
+GNU patch failed with status exit status: 2: patch: **** Only garbage was found in the patch input.
+
+"#]])
         .run();
 }
 
@@ -77,6 +81,9 @@ fn create_empty_file_gitdiff() {
         .strip(1)
         .expect_success(false)
         .expect_compat(false)
+        .expect_diffy_error(snapbox::str![
+            "parse error: error parsing patches at byte 0: no valid patches found"
+        ])
         .run();
 }
 
@@ -171,6 +178,10 @@ fn format_patch_mbox() {
 fn fail_context_mismatch() {
     Case::gnu_patch("fail_context_mismatch")
         .expect_success(false)
+        .expect_diffy_error(snapbox::str!["apply error: error applying hunk #1"])
+        .expect_external_error(snapbox::str![
+            "GNU patch failed with status exit status: 1: "
+        ])
         .run();
 }
 
@@ -178,6 +189,10 @@ fn fail_context_mismatch() {
 fn fail_hunk_not_found() {
     Case::gnu_patch("fail_hunk_not_found")
         .expect_success(false)
+        .expect_diffy_error(snapbox::str!["apply error: error applying hunk #1"])
+        .expect_external_error(snapbox::str![
+            "GNU patch failed with status exit status: 1: "
+        ])
         .run();
 }
 
@@ -185,6 +200,10 @@ fn fail_hunk_not_found() {
 fn fail_truncated_file() {
     Case::gnu_patch("fail_truncated_file")
         .expect_success(false)
+        .expect_diffy_error(snapbox::str!["apply error: error applying hunk #1"])
+        .expect_external_error(snapbox::str![
+            "GNU patch failed with status exit status: 1: "
+        ])
         .run();
 }
 
@@ -199,6 +218,10 @@ fn no_hunk() {
     Case::gnu_patch("no_hunk")
         .expect_success(true)
         .expect_compat(false)
+        .expect_external_error(snapbox::str![[r#"
+GNU patch failed with status exit status: 2: patch: **** Only garbage was found in the patch input.
+
+"#]])
         .run();
 }
 
@@ -208,5 +231,7 @@ fn no_hunk() {
 fn fail_both_devnull() {
     Case::gnu_patch("fail_both_devnull")
         .expect_success(false)
+        .expect_diffy_error(snapbox::str!["parse error: error parsing patches at byte 0: patch has both original and modified as /dev/null"])
+        .expect_external_error(snapbox::str!["GNU patch failed with status exit status: 1: "])
         .run();
 }
