@@ -279,6 +279,32 @@ fn binary_mixed_delta_literal() {
     Case::git("binary_mixed_delta_literal").strip(1).run();
 }
 
+// Binary delta with a zero control byte (0x00) in the instruction stream.
+//
+// Hand-crafted fixture: `hello` -> `hellX`. Forward delta instructions:
+//
+// - 0x05       orig_size = 5
+// - 0x05       mod_size = 5
+// - 0x91 0x00 0x04  COPY offset=0, len=4 ("hell")
+// - 0x00       zero control byte
+// - 0x01 0x58  ADD 1 byte: 'X'
+//
+// git apply rejects this (`error: unexpected delta opcode 0`).
+// diffy currently treats 0x00 as ADD(0) (a no-op) and succeeds.
+#[test]
+fn binary_delta_zero_control() {
+    Case::git("binary_delta_zero_control")
+        .strip(1)
+        .expect_compat(false)
+        .expect_external_error(snapbox::str![[r#"
+error: unexpected delta opcode 0
+error: binary patch does not apply to 'file.bin'
+error: file.bin: patch does not apply
+
+"#]])
+        .run();
+}
+
 // Multi-file patch with junk/preamble text between different files.
 //
 // git apply behavior: Ignores content between `diff --git` boundaries.
