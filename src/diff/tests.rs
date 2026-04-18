@@ -849,7 +849,6 @@ fn minimal_is_not_larger_than_myers_on_small_input() {
 }
 
 #[test]
-#[should_panic]
 fn minimal_is_smaller_than_myers_when_heuristic_fires() {
     // Pathological input modeled on the test case in
     // minimal_no_spurious_edits_on_repeated_prefix,

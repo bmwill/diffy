@@ -124,8 +124,8 @@ fn find_middle_snake<T: PartialEq>(
     new: Range<'_, [T]>,
     vf: &mut V,
     vb: &mut V,
-    _heuristic: &HeuristicsConfig,
-    _need_minimal: bool,
+    heuristic: &HeuristicsConfig,
+    need_minimal: bool,
 ) -> SplitResult {
     let n = old.len();
     let m = new.len();
@@ -364,7 +364,7 @@ fn conquer<'a, 'b, T: PartialEq>(
         // Divide & Conquer. The optimal-vs-heuristic distinction doesn't
         // matter here — either way we split at `(snake.x_start, snake.y_start)`
         // and recurse on the two halves.
-        let snake = match find_middle_snake(old, new, vf, vb) {
+        let snake = match find_middle_snake(old, new, vf, vb, heuristics, need_minimal) {
             SplitResult::Optimal { snake } | SplitResult::Heuristic { snake } => snake,
         };
 
