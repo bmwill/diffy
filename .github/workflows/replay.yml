@@ -67,7 +67,7 @@ jobs:
             exit 1
           fi
       - run: rustup toolchain install stable --profile minimal
-      - run: cargo test --release --test replay -- --ignored --nocapture
+      - run: cargo test --release --test replay -F binary -- --ignored --nocapture
         env:
           DIFFY_TEST_REPO: ${{ inputs.repo_url == '' && '.' || 'target/test-repo' }}
           DIFFY_TEST_COMMITS: ${{ inputs.commits }}

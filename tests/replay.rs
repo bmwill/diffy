@@ -6,7 +6,7 @@
 //! ## Usage
 //!
 //! ```console
-//! $ cargo test --test replay -- --ignored --nocapture
+//! $ cargo test --test replay -F binary -- --ignored --nocapture
 //! ```
 //!
 //! ## Environment Variables
@@ -59,7 +59,10 @@ use std::{
     sync::Mutex,
 };
 
-use diffy::patch_set::{FileOperation, ParseOptions, PatchKind, PatchSet};
+use diffy::{
+    binary::BinaryPatch,
+    patch_set::{FileOperation, ParseOptions, PatchKind, PatchSet},
+};
 use rayon::prelude::*;
 
 /// Persistent `git cat-file --batch` process for fast object lookups.
@@ -331,13 +334,10 @@ fn process_commit(
 
     // UniDiff format cannot express pure renames (no ---/+++ headers).
     // Use `--no-renames` to represent them as delete + create instead.
-    // GitDiff mode handles renames via extended headers natively.
+    // GitDiff mode uses `--binary` to get actual binary patch data.
     let diff_output = match mode {
         TestMode::UniDiff => git_bytes(repo, &["diff", "--no-renames", parent, child]),
-        // TODO: pass `--binary` once binary patch support lands,
-        // so binary files get actual delta/literal data instead of
-        // "Binary files differ" markers.
-        TestMode::GitDiff => git_bytes(repo, &["diff", parent, child]),
+        TestMode::GitDiff => git_bytes(repo, &["diff", "--binary", parent, child]),
     };
 
     if diff_output.is_empty() {
@@ -387,9 +387,7 @@ fn process_commit(
             text_files + type_changes
         }
         TestMode::GitDiff => {
-            // Can't use `--numstat` for GitDiff: it shows `-\t-\t` for both
-            // actual binary diffs AND pure binary renames (100% similarity).
-            // Use `--raw` for total count instead.
+            // With `--binary`, all files including binary ones have patch data.
             let raw = git(repo, &["diff", "--raw", parent, child]);
             let (mut total, mut type_changes) = (0, 0);
             for line in raw.lines().filter(|l| !l.is_empty()) {
@@ -544,11 +542,50 @@ fn process_commit(
                     );
                 }
             }
-            PatchKind::Binary(_) => {
-                // Binary patch application not yet wired up in replay tests.
-                // Will be done once the `binary` Cargo feature is added.
+            PatchKind::Binary(BinaryPatch::Marker) => {
+                // `Binary files differ` marker - no actual data to apply
                 skipped += 1;
                 continue;
+            }
+            PatchKind::Binary(patch) => {
+                // Get content as bytes
+                let base_content = if let Some(path) = base_path {
+                    let Some(content) = cat.get(parent, path) else {
+                        skipped += 1;
+                        continue;
+                    };
+                    content
+                } else {
+                    Vec::new()
+                };
+
+                let expected_content = if let Some(path) = target_path {
+                    let Some(content) = cat.get(child, path) else {
+                        skipped += 1;
+                        continue;
+                    };
+                    content
+                } else {
+                    Vec::new()
+                };
+
+                let result = match patch.apply(&base_content) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        panic!(
+                            "Failed to apply binary patch at {parent_short}..{child_short} for {desc}: {e}"
+                        );
+                    }
+                };
+
+                if result != expected_content {
+                    panic!(
+                        "Binary content mismatch at {parent_short}..{child_short} for {desc}\n\n\
+                        Expected {} bytes, got {} bytes",
+                        expected_content.len(),
+                        result.len()
+                    );
+                }
             }
         }
 
