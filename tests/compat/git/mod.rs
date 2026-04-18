@@ -127,9 +127,7 @@ fn path_ambiguous_suffix() {
 //   split at 3: a/x vs b/x c/x → suffix `x` (len 1)
 //   split at 7: a/x b/x vs c/x → suffix `x` (len 1)
 //
-// - git apply: rejects: "git diff header lacks filename information when
-//   removing 1 leading pathname component")
-// - diffy: succeeds, picks first (leftmost) split
+// diffy succeeds (picks first/leftmost split); git apply rejects.
 #[test]
 fn fail_ambiguous_suffix_tie() {
     Case::git("fail_ambiguous_suffix_tie")
@@ -144,7 +142,6 @@ error: git diff header lacks filename information when removing 1 leading pathna
 }
 
 // Both --- and +++ point to /dev/null.
-// git apply rejects: "dev/null: No such file or directory"
 #[test]
 fn fail_both_devnull() {
     Case::git("fail_both_devnull")
@@ -181,10 +178,7 @@ fn path_custom_prefix() {
 // Custom prefix without slash (e.g. `--src-prefix=foo --dst-prefix=bar`).
 //
 // Produces paths like `fooold.txt` / `barold.txt` with no `/` separator,
-// making strip impossible. Both git apply and diffy fail:
-// - git apply: "git diff header lacks filename information when removing 1
-//   leading pathname component"
-// - diffy: paths don't match any input file
+// making strip impossible. Both git apply and diffy fail.
 #[test]
 fn fail_prefix_no_slash() {
     Case::git("fail_prefix_no_slash")
@@ -207,8 +201,7 @@ fn non_utf8_hunk_content() {
 
 // Single-file patch with junk between hunks.
 //
-// - git apply: errors ("patch fragment without header")
-// - diffy: succeeds, ignores trailing junk (matches GNU patch behavior)
+// diffy succeeds (ignores trailing junk, matches GNU patch); git apply rejects.
 #[test]
 fn junk_between_hunks() {
     Case::git("junk_between_hunks")

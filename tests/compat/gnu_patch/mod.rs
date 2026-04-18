@@ -56,10 +56,8 @@ fn missing_minus_header() {
 
 // Empty file creation using unified diff format with empty hunk.
 //
-// Platform compatibility:
-// - Apple patch 2.0 (macOS/BSD): ✅ Accepts, creates empty file (0 bytes)
-// - GNU patch 2.8 (Linux): ❌ Rejects as "malformed patch at line 3"
-// - diffy: ✅ Accepts (with our current implementation)
+// diffy accepts (creates empty file); GNU patch rejects.
+// Apple patch 2.0 (macOS/BSD) also accepts.
 #[test]
 fn create_empty_file_unidiff() {
     Case::gnu_patch("create_empty_file_unidiff")
@@ -209,9 +207,7 @@ fn fail_truncated_file() {
 
 // Patch with ---/+++ headers but no @@ hunks.
 //
-// - GNU patch: rejects ("Only garbage was found in the patch input")
-// - diffy: succeeds, parses as 1 patch with 0 hunks
-//
+// diffy succeeds (parses as 1 patch with 0 hunks); GNU patch rejects.
 // diffy allows 0-hunk patches for GitDiff mode where empty/binary files have no hunks.
 #[test]
 fn no_hunk() {
