@@ -251,13 +251,15 @@ error: No valid patches in input (allow with "--allow-empty")
 }
 
 // Declared literal size (99) doesn't match actual decompressed data (10 bytes).
-//
-// git apply rejects this; diffy currently ignores the declared size.
+// Both git apply and diffy reject this.
 #[test]
 fn binary_literal_size_mismatch() {
     Case::git("binary_literal_size_mismatch")
         .strip(1)
-        .expect_compat(false)
+        .expect_success(false)
+        .expect_diffy_error(snapbox::str![[
+            "binary patch error: error parsing binary patch: decompressed size mismatch: expected 99, got 10"
+        ]])
         .expect_external_error(snapbox::str![[r#"
 error: corrupt binary patch at line 7: 
 error: No valid patches in input (allow with "--allow-empty")
