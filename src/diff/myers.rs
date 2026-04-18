@@ -154,9 +154,19 @@ fn find_middle_snake<T: PartialEq>(
     // `best_fwd` is stored in actual grid coords. `best_bwd` stays in
     // backward-stored coords because converting on each update is wasteful;
     // the heuristic bail below maps it to actual coords once.
-    let mut best_fwd_snake = Snake { x_start: 0, y_start: 0, x_end: 0, y_end: 0 };
+    let mut best_fwd_snake = Snake {
+        x_start: 0,
+        y_start: 0,
+        x_end: 0,
+        y_end: 0,
+    };
     let mut best_fwd_score: usize = 0;
-    let mut best_bwd_snake = Snake { x_start: 0, y_start: 0, x_end: 0, y_end: 0 };
+    let mut best_bwd_snake = Snake {
+        x_start: 0,
+        y_start: 0,
+        x_end: 0,
+        y_end: 0,
+    };
     let mut best_bwd_score: usize = 0;
 
     for d in 0..d_max as isize {
@@ -180,7 +190,16 @@ fn find_middle_snake<T: PartialEq>(
 
             // This is the new best x value
             vf[k] = x;
-            if x + y > best_fwd_score {
+
+            // On asymmetric inputs a `vf[k - 1] + 1` step can push `x`
+            // past `n`, or a large `|k|` can push `y = x - k` outside
+            // `[0, m]`. Such probes are still stored so the `(k-1)+1`
+            // chain reads a consistent value next iteration, but they
+            // must not contribute to `best_fwd` or fire the overlap
+            // check — a snake built from their coords would overflow
+            // `n - x` arithmetic in `conquer`'s `split_at` call.
+            let in_box = x <= n && y <= m;
+            if in_box && x + y > best_fwd_score {
                 best_fwd_score = x + y;
                 best_fwd_snake = Snake {
                     x_start: x0,
@@ -227,10 +246,17 @@ fn find_middle_snake<T: PartialEq>(
 
             // This is the new best x value
             vb[k] = x;
-            // Track best-so-far in stored backward coords; the bail path below
-            // converts to actual grid coords. Guarded so an `x > n` or `y > m`
-            // overshoot from the `vb[k-1] + 1` update doesn't poison the score.
-            if x <= n && y <= m && x + y > best_bwd_score {
+
+            // Same overshoot concern as the forward side: the reversed-
+            // coord `vb[k - 1] + 1` step is not bounds-checked against
+            // the top edge of the box, so `x` can exceed `n` and `y`
+            // can exceed `m`. Such probes are kept in `vb` for the
+            // next iteration to read, but they're excluded from the
+            // best-so-far tracking and the overlap check — a snake
+            // built from their coords would underflow the `n - x` /
+            // `m - y` conversion.
+            let in_box = x <= n && y <= m;
+            if in_box && x + y > best_bwd_score {
                 best_bwd_score = x + y;
                 best_bwd_snake = Snake {
                     x_start: x,
@@ -257,24 +283,26 @@ fn find_middle_snake<T: PartialEq>(
             }
         }
 
-        // Heuristic bail. Once `d` reaches `max_cost` we stop searching for
-        // the optimal middle snake and return whichever side has made more
-        // progress as the split point. Returning the full snake (not just
-        // its endpoint) lets `conquer` emit the confirmed matching content
-        // directly, instead of rediscovering it via prefix/suffix scans.
+        // Heuristic bail. Once `d` reaches `heuristic.max_cost` we stop
+        // searching for the optimal middle snake and return whichever side
+        // has made more progress as the split point. Returning the full
+        // snake (not just its endpoint) lets `conquer` emit the confirmed
+        // matching content directly, instead of rediscovering it via
+        // prefix/suffix scans.
         //
         // We require `d >= 1` to guarantee the split is non-trivial —
         // bailing at `d == 0` with both sides at zero progress would split
         // at (0, 0) and recurse on the full problem, causing infinite
         // recursion.
-        if d >= 1 && (d as usize) >= max_cost {
+        if !need_minimal && d >= 1 && (d as usize) >= heuristic.max_cost {
             let snake = if best_fwd_score >= best_bwd_score {
                 best_fwd_snake
             } else {
-                // Convert stored backward coords to actual grid coords. The
-                // backward snake runs from higher stored values toward lower,
-                // so the actual-coord ordering flips: stored `x_start` is the
-                // actual end, and stored `x_end` is the actual start.
+                // Convert stored backward coords to actual grid coords.
+                // The backward snake runs from higher stored values toward
+                // lower, so the actual-coord ordering flips: stored
+                // `x_start` is the actual end, and stored `x_end` is the
+                // actual start.
                 Snake {
                     x_start: n - best_bwd_snake.x_start,
                     y_start: m - best_bwd_snake.y_start,
@@ -286,9 +314,10 @@ fn find_middle_snake<T: PartialEq>(
         }
     }
 
-    // With `max_cost >= d_max` the bail never fires, and Lemma 1 still
-    // guarantees a middle snake is found — so this is only reachable if the
-    // input violates the algorithm's preconditions.
+    // With `need_minimal` or `heuristic.max_cost >= d_max` the bail never
+    // fires, and Lemma 1 still guarantees a middle snake is found — so
+    // this is only reachable if the input violates the algorithm's
+    // preconditions.
     unreachable!("unable to find a middle snake");
 }
 
