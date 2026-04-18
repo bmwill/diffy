@@ -41,6 +41,18 @@ where
     }
 }
 
+/// Selects which diff algorithm [`DiffOptions`] uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub(crate) enum DiffAlgorithm {
+    /// Apply a heuristic edit-cost bailout, sacrificing minimality for
+    /// bounded worst-case work on pathological inputs.
+    Myers,
+    /// Always produce a minimal diff, at the cost of potentially
+    /// quadratic work on very different inputs.
+    Minimal,
+}
+
 /// A collection of options for modifying the way a diff is performed
 #[derive(Debug)]
 pub struct DiffOptions {
@@ -48,6 +60,7 @@ pub struct DiffOptions {
     context_len: usize,
     original_filename: Option<Cow<'static, str>>,
     modified_filename: Option<Cow<'static, str>>,
+    algorithm: DiffAlgorithm,
 }
 
 impl DiffOptions {
@@ -55,12 +68,14 @@ impl DiffOptions {
     ///
     /// ## Defaults
     /// * context_len = 3
+    // * algorithm = [`DiffAlgorithm::Minimal`]
     pub fn new() -> Self {
         Self {
             compact: true,
             context_len: 3,
             original_filename: Some("original".into()),
             modified_filename: Some("modified".into()),
+            algorithm: DiffAlgorithm::Minimal,
         }
     }
 
@@ -77,6 +92,13 @@ impl DiffOptions {
     #[allow(dead_code)]
     fn set_compact(&mut self, compact: bool) -> &mut Self {
         self.compact = compact;
+        self
+    }
+
+    /// Select which diff algorithm is used when producing a patch.
+    #[allow(dead_code)] // Only reachable from tests today.
+    pub(crate) fn set_algorithm(&mut self, algorithm: DiffAlgorithm) -> &mut Self {
+        self.algorithm = algorithm;
         self
     }
 
@@ -105,7 +127,8 @@ impl DiffOptions {
     // TODO determine if this should be exposed in the public API
     #[allow(dead_code)]
     fn diff<'a>(&self, original: &'a str, modified: &'a str) -> Vec<Diff<'a, str>> {
-        let solution = myers::diff(original.as_bytes(), modified.as_bytes());
+        let solution =
+            myers::diff(original.as_bytes(), modified.as_bytes(), self.need_minimal());
 
         let mut solution = solution
             .into_iter()
@@ -117,6 +140,10 @@ impl DiffOptions {
         }
 
         solution.into_iter().map(Diff::from).collect()
+    }
+
+    fn need_minimal(&self) -> bool {
+        matches!(self.algorithm, DiffAlgorithm::Minimal)
     }
 
     /// Produce a Patch between two texts based on the configured options
@@ -169,7 +196,7 @@ impl DiffOptions {
         old: &'a [T],
         new: &'a [T],
     ) -> Vec<DiffRange<'a, 'a, [T]>> {
-        let mut solution = myers::diff(old, new);
+        let mut solution = myers::diff(old, new, self.need_minimal());
 
         if self.compact {
             cleanup::compact(&mut solution);

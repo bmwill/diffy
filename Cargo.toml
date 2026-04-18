@@ -19,8 +19,10 @@ color = ["dep:anstyle"]
 anstyle = { version = "1.0.13", optional = true }
 
 [dev-dependencies]
+proptest = "1"
 rayon = "1.10.0"
 snapbox = { version = "0.6.24", features = ["dir"] }
+test-strategy = "0.4.5"
 
 [[example]]
 name = "patch_formatter"

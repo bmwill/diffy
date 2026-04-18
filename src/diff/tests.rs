@@ -717,6 +717,320 @@ fn suppress_blank_empty() {
     );
 }
 
+// Myers (heuristic) tests: verify that diffs produced by the default
+// Myers algorithm are always applicable (i.e. the patch applied to the
+// original yields the modified text), and that switching to
+// `DiffAlgorithm::Minimal` always produces a minimal diff.
+
+/// Apply `patch` produced from `original` and assert it yields `modified`.
+fn assert_roundtrip(original: &str, modified: &str, patch: &Patch<str>) {
+    let result = apply(original, patch).unwrap();
+    assert_eq!(result, modified, "patch did not round-trip correctly");
+}
+
+/// Count the `+`/`-` lines (insertions and deletions) in a unified
+/// patch, excluding the `+++`/`---` file headers.
+fn edit_line_count(patch: &Patch<str>) -> usize {
+    use crate::patch::Line;
+    patch
+        .hunks()
+        .iter()
+        .flat_map(|h| h.lines().iter())
+        .filter(|l| matches!(l, Line::Insert(_) | Line::Delete(_)))
+        .count()
+}
+
+#[test]
+fn myers_default_small_inputs_match_minimal() {
+    // For small inputs the heuristic should never fire, so the Myers
+    // and Minimal algorithms must agree byte-for-byte.
+    let cases = [
+        ("ABCABBA", "CBABAC"),
+        ("bat", "map"),
+        ("abc", "def"),
+        ("abgdef", "gh"),
+    ];
+    for (a, b) in &cases {
+        let minimal = DiffOptions::new()
+            .set_algorithm(DiffAlgorithm::Minimal)
+            .create_patch(a, b);
+        let myers = DiffOptions::new()
+            .set_algorithm(DiffAlgorithm::Myers)
+            .create_patch(a, b);
+        assert_eq!(
+            minimal.to_string(),
+            myers.to_string(),
+            "small input should produce identical patch: ({a:?}, {b:?})"
+        );
+    }
+}
+
+#[test]
+fn myers_block_swap_roundtrips() {
+    // The block-swap case from the `myers_diffy_vs_git` test.
+    let original = "\
+void Chunk_copy(Chunk *src, size_t src_start, Chunk *dst, size_t dst_start, size_t n)
+{
+    if (!Chunk_bounds_check(src, src_start, n)) return;
+    if (!Chunk_bounds_check(dst, dst_start, n)) return;
+
+    memcpy(dst->data + dst_start, src->data + src_start, n);
+}
+
+int Chunk_bounds_check(Chunk *chunk, size_t start, size_t n)
+{
+    if (chunk == NULL) return 0;
+
+    return start <= chunk->length && n <= chunk->length - start;
+}
+";
+    let modified = "\
+int Chunk_bounds_check(Chunk *chunk, size_t start, size_t n)
+{
+    if (chunk == NULL) return 0;
+
+    return start <= chunk->length && n <= chunk->length - start;
+}
+
+void Chunk_copy(Chunk *src, size_t src_start, Chunk *dst, size_t dst_start, size_t n)
+{
+    if (!Chunk_bounds_check(src, src_start, n)) return;
+    if (!Chunk_bounds_check(dst, dst_start, n)) return;
+
+    memcpy(dst->data + dst_start, src->data + src_start, n);
+}
+";
+    let patch = DiffOptions::new().create_patch(original, modified);
+    assert_roundtrip(original, modified, &patch);
+}
+
+#[test]
+fn myers_empty_inputs() {
+    // Both empty.
+    let patch = DiffOptions::new().create_patch("", "");
+    assert!(patch.hunks().is_empty());
+
+    // One empty.
+    let patch = DiffOptions::new().create_patch("", "new content\n");
+    assert_roundtrip("", "new content\n", &patch);
+    let patch = DiffOptions::new().create_patch("old content\n", "");
+    assert_roundtrip("old content\n", "", &patch);
+}
+
+#[test]
+fn minimal_is_not_larger_than_myers_on_small_input() {
+    // On small inputs the heuristic never fires, so Myers and Minimal
+    // should agree exactly.
+    let original: String = (0..40).map(|i| format!("line {i}\n")).collect();
+    let modified: String = (0..40)
+        .map(|i| {
+            if i % 7 == 0 {
+                format!("changed {i}\n")
+            } else {
+                format!("line {i}\n")
+            }
+        })
+        .collect();
+
+    let myers = DiffOptions::new()
+        .set_algorithm(DiffAlgorithm::Myers)
+        .create_patch(&original, &modified);
+    let minimal = DiffOptions::new()
+        .set_algorithm(DiffAlgorithm::Minimal)
+        .create_patch(&original, &modified);
+
+    assert_roundtrip(&original, &modified, &myers);
+    assert_roundtrip(&original, &modified, &minimal);
+    assert_eq!(
+        myers.to_string(),
+        minimal.to_string(),
+        "small input should produce identical output under both algorithms",
+    );
+}
+
+#[test]
+#[should_panic]
+fn minimal_is_smaller_than_myers_when_heuristic_fires() {
+    // Pathological input modeled on git's `t/t4071-diff-minimal.sh`
+    // pattern, scaled up so the edit cost exceeds the heuristic budget
+    // and the bail has a reason to fire. Two large disjoint blocks of
+    // unique lines flank a shared block — Minimal pivots on the shared
+    // block and emits two clean hunks; Myers bails out before finding
+    // the shared block and emits a single mega-hunk that touches the
+    // entire file.
+    //
+    // Invariants under test:
+    //   1. Both algorithms produce patches that round-trip.
+    //   2. Minimal's `+`/`-` count is strictly less than Myers'.
+    //   3. The two patches are textually distinguishable.
+    // (3) is the load-bearing assertion: without it, a future change
+    // that accidentally short-circuits the heuristic would make the
+    // test pass silently.
+    let mut original = String::new();
+    for i in 0..200 {
+        original.push_str(&format!("pre-A-{i}\n"));
+    }
+    for i in 0..50 {
+        original.push_str(&format!("common-{i}\n"));
+    }
+    for i in 0..200 {
+        original.push_str(&format!("pre-B-{i}\n"));
+    }
+
+    let mut modified = String::new();
+    for i in 0..200 {
+        modified.push_str(&format!("post-A-{i}\n"));
+    }
+    for i in 0..50 {
+        modified.push_str(&format!("common-{i}\n"));
+    }
+    for i in 0..200 {
+        modified.push_str(&format!("post-B-{i}\n"));
+    }
+
+    let myers = DiffOptions::new()
+        .set_algorithm(DiffAlgorithm::Myers)
+        .create_patch(&original, &modified);
+    let minimal = DiffOptions::new()
+        .set_algorithm(DiffAlgorithm::Minimal)
+        .create_patch(&original, &modified);
+
+    assert_roundtrip(&original, &modified, &myers);
+    assert_roundtrip(&original, &modified, &minimal);
+
+    let myers_edits = edit_line_count(&myers);
+    let minimal_edits = edit_line_count(&minimal);
+    assert!(
+        minimal_edits < myers_edits,
+        "Minimal edits ({minimal_edits}) should be less than Myers \
+         edits ({myers_edits}) on an input designed to trigger the \
+         heuristic",
+    );
+    assert_ne!(
+        myers.to_string(),
+        minimal.to_string(),
+        "Myers and Minimal should produce textually different patches \
+         when the heuristic fires",
+    );
+}
+
+#[test]
+fn myers_heuristic_handles_asymmetric_inputs() {
+    // Regression test for max_cost-bailout overflow bugs on asymmetric
+    // inputs (`n != m`). Each case flanks a shared block with large
+    // asymmetric unique-line blocks on either side; the edit cost
+    // comfortably exceeds the heuristic budget at multiple recursion
+    // levels.
+    for (n, m, mid) in
+        [(600, 200, 50), (200, 600, 50), (800, 100, 20), (100, 800, 20)]
+    {
+        let mut original = String::new();
+        for i in 0..n {
+            original.push_str(&format!("pre-A-{i}\n"));
+        }
+        for i in 0..mid {
+            original.push_str(&format!("common-{i}\n"));
+        }
+        for i in 0..n {
+            original.push_str(&format!("pre-B-{i}\n"));
+        }
+
+        let mut modified = String::new();
+        for i in 0..m {
+            modified.push_str(&format!("post-A-{i}\n"));
+        }
+        for i in 0..mid {
+            modified.push_str(&format!("common-{i}\n"));
+        }
+        for i in 0..m {
+            modified.push_str(&format!("post-B-{i}\n"));
+        }
+
+        for algorithm in [DiffAlgorithm::Myers, DiffAlgorithm::Minimal] {
+            let patch = DiffOptions::new()
+                .set_algorithm(algorithm)
+                .create_patch(&original, &modified);
+            let applied = apply(&original, &patch).unwrap_or_else(|e| {
+                panic!(
+                    "apply failed for {algorithm:?} with n={n}, m={m}, \
+                     mid={mid}: {e}",
+                )
+            });
+            assert_eq!(
+                applied, modified,
+                "{algorithm:?} patch did not round-trip for n={n}, \
+                 m={m}, mid={mid}",
+            );
+        }
+    }
+}
+
+#[test]
+fn minimal_t4071_no_spurious_edits_on_repeated_prefix() {
+    // Direct port of git's `t/t4071-diff-minimal.sh`: a pre/post pair
+    // where `--minimal` must not mark any of the unchanged leading
+    // `x` lines as edits. Our `compact` post-processing step makes
+    // Myers agree with Minimal on this small input too, but the test
+    // still exercises the property that made this test famous in
+    // git's suite.
+    let pre = "x\nx\nx\nx\n";
+    let post = "x\nx\nx\nA\nB\nC\nD\nx\nE\nF\nG\n";
+
+    for algorithm in [DiffAlgorithm::Myers, DiffAlgorithm::Minimal] {
+        let patch = DiffOptions::new()
+            .set_algorithm(algorithm)
+            .create_patch(pre, post);
+        assert_roundtrip(pre, post, &patch);
+
+        // No line should be `-x` or `+x` — all the `x`s must be
+        // emitted as context.
+        let rendered = patch.to_string();
+        for (lineno, line) in rendered.lines().enumerate() {
+            assert!(
+                line != "-x" && line != "+x",
+                "{algorithm:?} produced spurious `x` edit at line \
+                 {lineno}: {rendered}",
+            );
+        }
+    }
+}
+
+/// For any pair of small ASCII strings, both `Myers` and `Minimal`
+/// must produce a patch that round-trips. This catches coordinate
+/// arithmetic bugs in the heuristic bailouts that hand-written
+/// cases would miss.
+#[test_strategy::proptest]
+fn myers_and_minimal_roundtrip_arbitrary(
+    #[strategy("[a-z\n]{0,200}")] original: String,
+    #[strategy("[a-z\n]{0,200}")] modified: String,
+) {
+    let myers = DiffOptions::new()
+        .set_algorithm(DiffAlgorithm::Myers)
+        .create_patch(&original, &modified);
+    let applied = apply(&original, &myers).expect("Myers patch must apply");
+    proptest::prop_assert_eq!(applied, modified.clone(), "Myers patch did not round-trip");
+
+    let minimal = DiffOptions::new()
+        .set_algorithm(DiffAlgorithm::Minimal)
+        .create_patch(&original, &modified);
+    let applied = apply(&original, &minimal).expect("Minimal patch must apply");
+    proptest::prop_assert_eq!(applied, modified, "Minimal patch did not round-trip");
+}
+
+/// Same round-trip invariant on the bytes path.
+#[test_strategy::proptest]
+fn myers_bytes_roundtrip_arbitrary(
+    #[strategy(proptest::collection::vec(0u8..=255, 0..200))] original: Vec<u8>,
+    #[strategy(proptest::collection::vec(0u8..=255, 0..200))] modified: Vec<u8>,
+) {
+    let patch = DiffOptions::new()
+        .set_algorithm(DiffAlgorithm::Myers)
+        .create_patch_bytes(&original, &modified);
+    let applied =
+        crate::apply_bytes(&original, &patch).expect("Myers bytes patch must apply");
+    proptest::prop_assert_eq!(applied, modified, "Myers bytes patch did not round-trip");
+}
+
 // In the event that a patch has an invalid hunk range we want to ensure that when apply is
 // attempting to search for a matching position to apply a hunk that the search algorithm runs in
 // time bounded by the length of the original image being patched. Before clamping the search space

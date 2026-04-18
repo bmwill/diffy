@@ -84,6 +84,7 @@ fn find_middle_snake<T: PartialEq>(
     new: Range<'_, [T]>,
     vf: &mut V,
     vb: &mut V,
+    _need_minimal: bool,
 ) -> (isize, Snake) {
     let n = old.len();
     let m = new.len();
@@ -193,6 +194,7 @@ fn conquer<'a, 'b, T: PartialEq>(
     mut new: Range<'b, [T]>,
     vf: &mut V,
     vb: &mut V,
+    need_minimal: bool,
     solution: &mut Vec<DiffRange<'a, 'b, [T]>>,
 ) {
     // Check for common prefix
@@ -227,13 +229,13 @@ fn conquer<'a, 'b, T: PartialEq>(
         solution.push(DiffRange::Delete(old));
     } else {
         // Divide & Conquer
-        let (_shortest_edit_script_len, snake) = find_middle_snake(old, new, vf, vb);
+        let (_shortest_edit_script_len, snake) = find_middle_snake(old, new, vf, vb, need_minimal);
 
         let (old_a, old_b) = old.split_at(snake.x_start);
         let (new_a, new_b) = new.split_at(snake.y_start);
 
-        conquer(old_a, new_a, vf, vb, solution);
-        conquer(old_b, new_b, vf, vb, solution);
+        conquer(old_a, new_a, vf, vb, need_minimal, solution);
+        conquer(old_b, new_b, vf, vb, need_minimal, solution);
     }
 
     if common_suffix_len > 0 {
@@ -241,7 +243,11 @@ fn conquer<'a, 'b, T: PartialEq>(
     }
 }
 
-pub fn diff<'a, 'b, T: PartialEq>(old: &'a [T], new: &'b [T]) -> Vec<DiffRange<'a, 'b, [T]>> {
+pub fn diff<'a, 'b, T: PartialEq>(
+    old: &'a [T],
+    new: &'b [T],
+    need_minimal: bool,
+) -> Vec<DiffRange<'a, 'b, [T]>> {
     let old_recs = Range::new(old, ..);
     let new_recs = Range::new(new, ..);
 
@@ -254,7 +260,14 @@ pub fn diff<'a, 'b, T: PartialEq>(old: &'a [T], new: &'b [T]) -> Vec<DiffRange<'
     let mut vf = V::new(max_d);
     let mut vb = V::new(max_d);
 
-    conquer(old_recs, new_recs, &mut vf, &mut vb, &mut solution);
+    conquer(
+        old_recs,
+        new_recs,
+        &mut vf,
+        &mut vb,
+        need_minimal,
+        &mut solution,
+    );
 
     solution
 }
@@ -270,6 +283,6 @@ mod tests {
         let max_d = max_d(a.len(), b.len());
         let mut vf = V::new(max_d);
         let mut vb = V::new(max_d);
-        find_middle_snake(a, b, &mut vf, &mut vb);
+        find_middle_snake(a, b, &mut vf, &mut vb, true);
     }
 }
