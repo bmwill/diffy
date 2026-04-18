@@ -359,4 +359,25 @@ mod tests {
         let err = apply(&[], &delta).unwrap_err();
         assert_eq!(err, DeltaError::UnexpectedEof);
     }
+
+    #[test]
+    fn zero_control_byte_is_add_zero() {
+        // Same delta layout as compat fixture `binary_delta_zero_control`:
+        // hello -> hellX with zero control byte (0x00) between COPY and ADD.
+        //
+        // Currently 0x00 falls through to ADD with length 0 (a no-op),
+        // so the delta applies successfully. git apply rejects this.
+        let delta = [
+            0x05, // orig_size = 5
+            0x05, // mod_size = 5
+            0x91, // COPY: 0x80 | 0x10 | 0x01 (offset1 + size1 present)
+            0x00, // offset=0
+            0x04, // len=4 ("hell")
+            0x00, // zero control byte — currently treated as ADD(0)
+            0x01, b'X', // ADD 1 byte: 'X'
+        ];
+        let original = b"hello";
+        let result = apply(original, &delta).unwrap();
+        assert_eq!(result, b"hellX");
+    }
 }
