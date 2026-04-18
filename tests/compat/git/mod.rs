@@ -136,6 +136,10 @@ fn fail_ambiguous_suffix_tie() {
         .strip(1)
         .expect_success(true)
         .expect_compat(false)
+        .expect_external_error(snapbox::str![[r#"
+error: git diff header lacks filename information when removing 1 leading pathname component (line 4)
+
+"#]])
         .run();
 }
 
@@ -146,6 +150,11 @@ fn fail_both_devnull() {
     Case::git("fail_both_devnull")
         .strip(1)
         .expect_success(false)
+        .expect_diffy_error(snapbox::str!["parse error: error parsing patches at byte 0: patch has both original and modified as /dev/null"])
+        .expect_external_error(snapbox::str![[r#"
+error: dev/null: No such file or directory
+
+"#]])
         .run();
 }
 
@@ -181,6 +190,11 @@ fn fail_prefix_no_slash() {
     Case::git("fail_prefix_no_slash")
         .strip(1)
         .expect_success(false)
+        .expect_diffy_error(snapbox::str!["io error: No such file or directory (os error 2)"])
+        .expect_external_error(snapbox::str![[r#"
+error: git diff header lacks filename information when removing 1 leading pathname component (line 5)
+
+"#]])
         .run();
 }
 
@@ -200,6 +214,10 @@ fn junk_between_hunks() {
     Case::git("junk_between_hunks")
         .strip(1)
         .expect_compat(false)
+        .expect_external_error(snapbox::str![[r#"
+error: patch fragment without header at line 11: @@ -7,3 +7,3 @@
+
+"#]])
         .run();
 }
 
