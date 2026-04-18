@@ -118,6 +118,14 @@ impl<'a> BinaryPatch<'a> {
             .read_to_end(&mut decompressed)
             .map_err(|e| BinaryPatchParseErrorKind::DecompressionFailed(e.to_string()))?;
 
+        if decompressed.len() as u64 != binary_data.size {
+            return Err(BinaryPatchParseErrorKind::DecompressedSizeMismatch {
+                expected: binary_data.size,
+                actual: decompressed.len() as u64,
+            }
+            .into());
+        }
+
         Ok(decompressed)
     }
 }
@@ -236,6 +244,10 @@ pub(crate) enum BinaryPatchParseErrorKind {
     /// Zlib decompression failed.
     #[cfg(feature = "binary")]
     DecompressionFailed(String),
+
+    /// Decompressed size doesn't match declared size.
+    #[cfg(feature = "binary")]
+    DecompressedSizeMismatch { expected: u64, actual: u64 },
 }
 
 impl fmt::Display for BinaryPatchParseErrorKind {
@@ -252,6 +264,13 @@ impl fmt::Display for BinaryPatchParseErrorKind {
             Self::Delta(e) => write!(f, "{e}"),
             #[cfg(feature = "binary")]
             Self::DecompressionFailed(msg) => write!(f, "decompression failed: {msg}"),
+            #[cfg(feature = "binary")]
+            Self::DecompressedSizeMismatch { expected, actual } => {
+                write!(
+                    f,
+                    "decompressed size mismatch: expected {expected}, got {actual}"
+                )
+            }
         }
     }
 }
@@ -538,12 +557,17 @@ mod apply_tests {
     #[test]
     fn literal_size_mismatch() {
         // Declared size 99 but actual decompressed data is 10 bytes.
-        // Currently accepted — no size validation after decompression.
         let input = "GIT binary patch\nliteral 99\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\nliteral 0\nKcmV+b0RR6000031\n\n";
         let (patch, _) = parse_binary_patch(input).unwrap();
 
-        let modified = patch.apply(&[]).unwrap();
-        assert_eq!(modified.len(), 10);
+        let err = patch.apply(&[]).unwrap_err();
+        assert!(matches!(
+            err.kind,
+            BinaryPatchParseErrorKind::DecompressedSizeMismatch {
+                expected: 99,
+                actual: 10
+            }
+        ));
     }
 
     #[test]
