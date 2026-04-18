@@ -145,13 +145,19 @@ fn find_middle_snake<T: PartialEq>(
     assert!(vf.len() >= d_max);
     assert!(vb.len() >= d_max);
 
-    // Furthest-reaching endpoints seen on each side. Both scores are `x + y`
-    // in that side's own coordinate frame, so they measure distance from that
-    // side's starting corner ((0, 0) for forward, (N, M) for backward).
-    // Stored coordinates are what's written to `vf` / `vb`; for backward the
-    // actual grid position is `(n - x, m - y)`.
-    let mut best_fwd: (usize, usize, usize) = (0, 0, 0); // (score, x, y) in actual coords
-    let mut best_bwd: (usize, usize, usize) = (0, 0, 0); // (score, stored x, stored y)
+    // Furthest-reaching snake seen on each side. Every forward or backward
+    // extension produces a snake `(x0, y0) -> (x, y)` of zero or more matching
+    // elements; we remember the one whose endpoint has made the most progress
+    // along its search axis, scored by `x + y` in that side's own coordinate
+    // frame.
+    //
+    // `best_fwd` is stored in actual grid coords. `best_bwd` stays in
+    // backward-stored coords because converting on each update is wasteful;
+    // the heuristic bail below maps it to actual coords once.
+    let mut best_fwd_snake = Snake { x_start: 0, y_start: 0, x_end: 0, y_end: 0 };
+    let mut best_fwd_score: usize = 0;
+    let mut best_bwd_snake = Snake { x_start: 0, y_start: 0, x_end: 0, y_end: 0 };
+    let mut best_bwd_score: usize = 0;
 
     for d in 0..d_max as isize {
         // Forward path
@@ -174,8 +180,14 @@ fn find_middle_snake<T: PartialEq>(
 
             // This is the new best x value
             vf[k] = x;
-            if x + y > best_fwd.0 {
-                best_fwd = (x + y, x, y);
+            if x + y > best_fwd_score {
+                best_fwd_score = x + y;
+                best_fwd_snake = Snake {
+                    x_start: x0,
+                    y_start: y0,
+                    x_end: x,
+                    y_end: y,
+                };
             }
             // Only check for connections from the forward search when N - M is odd
             // and when there is a reciprocal k line coming from the other direction.
@@ -218,8 +230,14 @@ fn find_middle_snake<T: PartialEq>(
             // Track best-so-far in stored backward coords; the bail path below
             // converts to actual grid coords. Guarded so an `x > n` or `y > m`
             // overshoot from the `vb[k-1] + 1` update doesn't poison the score.
-            if x <= n && y <= m && x + y > best_bwd.0 {
-                best_bwd = (x + y, x, y);
+            if x <= n && y <= m && x + y > best_bwd_score {
+                best_bwd_score = x + y;
+                best_bwd_snake = Snake {
+                    x_start: x,
+                    y_start: y,
+                    x_end: x0,
+                    y_end: y0,
+                };
             }
 
             if !odd && (k - delta).abs() <= d {
@@ -240,30 +258,31 @@ fn find_middle_snake<T: PartialEq>(
         }
 
         // Heuristic bail. Once `d` reaches `max_cost` we stop searching for
-        // the optimal middle snake and synthesize a zero-length split at
-        // whichever side has made more progress. `conquer` splits at
-        // `(snake_x, snake_y)` and recovers any real matching content around
-        // the split via its prefix/suffix trimming on the recursive calls.
+        // the optimal middle snake and return whichever side has made more
+        // progress as the split point. Returning the full snake (not just
+        // its endpoint) lets `conquer` emit the confirmed matching content
+        // directly, instead of rediscovering it via prefix/suffix scans.
         //
         // We require `d >= 1` to guarantee the split is non-trivial —
         // bailing at `d == 0` with both sides at zero progress would split
         // at (0, 0) and recurse on the full problem, causing infinite
         // recursion.
         if d >= 1 && (d as usize) >= max_cost {
-            let (snake_x, snake_y) = if best_fwd.0 >= best_bwd.0 {
-                (best_fwd.1, best_fwd.2)
+            let snake = if best_fwd_score >= best_bwd_score {
+                best_fwd_snake
             } else {
-                // Convert stored backward coords to actual grid coords.
-                (n - best_bwd.1, m - best_bwd.2)
+                // Convert stored backward coords to actual grid coords. The
+                // backward snake runs from higher stored values toward lower,
+                // so the actual-coord ordering flips: stored `x_start` is the
+                // actual end, and stored `x_end` is the actual start.
+                Snake {
+                    x_start: n - best_bwd_snake.x_start,
+                    y_start: m - best_bwd_snake.y_start,
+                    x_end: n - best_bwd_snake.x_end,
+                    y_end: m - best_bwd_snake.y_end,
+                }
             };
-            return SplitResult::Heuristic {
-                snake: Snake {
-                    x_start: snake_x,
-                    y_start: snake_y,
-                    x_end: snake_x,
-                    y_end: snake_y,
-                },
-            };
+            return SplitResult::Heuristic { snake };
         }
     }
 
