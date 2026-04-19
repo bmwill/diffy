@@ -1,4 +1,5 @@
 use crate::range::{DiffRange, Range};
+use std::cmp;
 use std::ops::{Index, IndexMut};
 
 // A D-path is a path which starts at (0,0) that has exactly D non-diagonal edges. All D-paths
@@ -76,9 +77,18 @@ fn max_d(len1: usize, len2: usize) -> usize {
 
 /// Tunables for the Myers middle-snake heuristic bailouts.
 struct HeuristicsConfig {
+    /// Minimum edit cost before the snake-length heuristic is allowed to
+    /// fire. Below this, the algorithm always runs full Myers.
+    heur_min: usize,
+    /// Minimum snake length (in classifier IDs / bytes) that counts as
+    /// "interesting" when scanning the frontier for a heuristic split
+    /// point.
+    snake_cnt: usize,
+    /// A candidate diagonal's progress must exceed `k_heur * d` to
+    /// trigger the snake heuristic.
+    k_heur: usize,
     /// Maximum `d` (edit cost) the middle-snake search is allowed to
     /// explore before bailing out with a heuristic split.
-    #[allow(unused)]
     max_cost: usize,
 }
 
@@ -92,7 +102,12 @@ impl HeuristicsConfig {
         let bits = usize::BITS - nm.leading_zeros();
         let max_cost = (1usize << ((bits + 1) / 2)).max(Self::MAX_COST_MINIMUM);
         // let max_cost = ((nm as f64).sqrt() as usize).max(Self::MAX_COST_MINIMUM);
-        Self { max_cost }
+        Self {
+            heur_min: 256,
+            snake_cnt: 20,
+            k_heur: 4,
+            max_cost,
+        }
     }
 }
 
@@ -170,7 +185,17 @@ fn find_middle_snake<T: PartialEq>(
     };
     let mut best_bwd_score: usize = 0;
 
+    // `snake_cnt` is used both to tag long snakes during the forward /
+    // backward extensions (`got_snake`) and to confirm a candidate
+    // diagonal in the snake-length heuristic block below.
+    let snake_cnt = if need_minimal { 0 } else { heuristic.snake_cnt };
+
     for d in 0..d_max as isize {
+        // Reset per-d: set to true when a forward or backward extension
+        // produces a snake of length >= `snake_cnt`. Only then is the
+        // snake-length heuristic worth scanning for.
+        let mut got_snake = false;
+
         // Forward path
         for k in (-d..=d).rev().step_by(2) {
             let mut x = if k == -d || (k != d && vf[k - 1] < vf[k + 1]) {
@@ -187,6 +212,9 @@ fn find_middle_snake<T: PartialEq>(
                 let advance = s1.common_prefix_len(s2);
                 x += advance;
                 y += advance;
+            }
+            if snake_cnt > 0 && x - x0 >= snake_cnt {
+                got_snake = true;
             }
 
             // This is the new best x value
@@ -246,6 +274,9 @@ fn find_middle_snake<T: PartialEq>(
                 x += advance;
                 y += advance;
             }
+            if snake_cnt > 0 && x - x0 >= snake_cnt {
+                got_snake = true;
+            }
 
             // This is the new best x value
             vb[k] = x;
@@ -288,18 +319,130 @@ fn find_middle_snake<T: PartialEq>(
             }
         }
 
-        // Heuristic bail. Once `d` reaches `heuristic.max_cost` we stop
-        // searching for the optimal middle snake and return whichever side
-        // has made more progress as the split point. Returning the full
-        // snake (not just its endpoint) lets `conquer` emit the confirmed
-        // matching content directly, instead of rediscovering it via
-        // prefix/suffix scans.
+        // From this point on the block is heuristic; skip it when we
+        // must produce a minimal diff.
+        if need_minimal {
+            continue;
+        }
+
+        let ec = d as usize;
+
+        // Snake-length heuristic. If the edit cost has already passed
+        // `heur_min` and at least one extension this round produced a
+        // snake of length >= `snake_cnt`, scan the frontier for a
+        // diagonal whose progress `(x + y) - |k - delta|` exceeds
+        // `k_heur * d` and confirm a real snake of the required length
+        // ends / starts at that point. Returning the full snake range
+        // lets `conquer` emit it as `Equal` content directly.
+        if ec > heuristic.heur_min && got_snake {
+            let fmid = delta;
+            let old_s = old.as_slice();
+            let new_s = new.as_slice();
+
+            // Scan forward diagonals.
+            let mut best: isize = 0;
+            let mut best_snake: Option<Snake> = None;
+            for k in (-d..=d).rev().step_by(2) {
+                let x = cmp::min(vf[k], n);
+                let y_signed = x as isize - k;
+                if y_signed < 0 || y_signed > m as isize {
+                    continue;
+                }
+                let y = y_signed as usize;
+                let dd = (k - fmid).unsigned_abs();
+                let progress = (x + y).wrapping_sub(dd) as isize;
+
+                if progress > heuristic.k_heur as isize * d
+                    && progress > best
+                    && heuristic.snake_cnt <= x
+                    && x < n
+                    && heuristic.snake_cnt <= y
+                    && y < m
+                {
+                    // Confirm a real snake of the required length ends
+                    // at `(x, y)` by walking backward.
+                    let confirmed =
+                        (1..=heuristic.snake_cnt).all(|i| old_s[x - i] == new_s[y - i]);
+                    if confirmed {
+                        best = progress;
+                        best_snake = Some(Snake {
+                            x_start: x - heuristic.snake_cnt,
+                            y_start: y - heuristic.snake_cnt,
+                            x_end: x,
+                            y_end: y,
+                        });
+                    }
+                }
+            }
+            if let Some(snake) = best_snake {
+                // The forward search explored the "lo" half, so that
+                // side has a known cost bound of `d` and must be
+                // finished minimally. The "hi" half is a fresh sub-
+                // problem and may use heuristics again.
+                return SplitResult {
+                    snake,
+                    need_minimal_forward: true,
+                    need_minimal_backward: false,
+                };
+            }
+
+            // Scan backward diagonals.
+            best = 0;
+            best_snake = None;
+            for k in (-d..=d).rev().step_by(2) {
+                let bx = cmp::min(vb[k], n);
+                let by_signed = bx as isize - k;
+                if by_signed < 0 || by_signed > m as isize {
+                    continue;
+                }
+                let by = by_signed as usize;
+                // Convert backward coords to forward.
+                let x = n - bx;
+                let y = m - by;
+                let dd = (k - fmid).unsigned_abs();
+                let progress = (bx + by).wrapping_sub(dd) as isize;
+
+                if progress > heuristic.k_heur as isize * d
+                    && progress > best
+                    && x < n.saturating_sub(heuristic.snake_cnt)
+                    && y < m.saturating_sub(heuristic.snake_cnt)
+                {
+                    // Confirm a real snake of the required length
+                    // starts at `(x, y)` by walking forward.
+                    let confirmed =
+                        (0..heuristic.snake_cnt).all(|i| old_s[x + i] == new_s[y + i]);
+                    if confirmed {
+                        best = progress;
+                        best_snake = Some(Snake {
+                            x_start: x,
+                            y_start: y,
+                            x_end: x + heuristic.snake_cnt,
+                            y_end: y + heuristic.snake_cnt,
+                        });
+                    }
+                }
+            }
+            if let Some(snake) = best_snake {
+                // The backward search explored the "hi" half, so that
+                // side has a known cost bound of `d` and must be
+                // finished minimally.
+                return SplitResult {
+                    snake,
+                    need_minimal_forward: false,
+                    need_minimal_backward: true,
+                };
+            }
+        }
+
+        // Max-cost bail. Once `d` reaches `heuristic.max_cost` we stop
+        // searching for the optimal middle snake and return whichever
+        // side has made more progress as the split point.
         //
         // We require `d >= 1` to guarantee the split is non-trivial —
-        // bailing at `d == 0` with both sides at zero progress would split
-        // at (0, 0) and recurse on the full problem, causing infinite
-        // recursion.
-        if !need_minimal && d >= 1 && (d as usize) >= heuristic.max_cost {
+        // bailing at `d == 0` with both sides at zero progress would
+        // split at (0, 0) and recurse on the full problem, causing
+        // infinite recursion.
+        if d >= 1 && ec >= heuristic.max_cost {
             let res = if best_fwd_score >= best_bwd_score {
                 SplitResult {
                     snake: best_fwd_snake,
@@ -308,10 +451,10 @@ fn find_middle_snake<T: PartialEq>(
                 }
             } else {
                 // Convert stored backward coords to actual grid coords.
-                // The backward snake runs from higher stored values toward
-                // lower, so the actual-coord ordering flips: stored
-                // `x_start` is the actual end, and stored `x_end` is the
-                // actual start.
+                // The backward snake runs from higher stored values
+                // toward lower, so the actual-coord ordering flips:
+                // stored `x_start` is the actual end, and stored
+                // `x_end` is the actual start.
                 SplitResult {
                     snake: Snake {
                         x_start: n - best_bwd_snake.x_start,
@@ -319,8 +462,8 @@ fn find_middle_snake<T: PartialEq>(
                         x_end: n - best_bwd_snake.x_end,
                         y_end: m - best_bwd_snake.y_end,
                     },
-                    need_minimal_forward: true,
-                    need_minimal_backward: false,
+                    need_minimal_forward: false,
+                    need_minimal_backward: true,
                 }
             };
             return res;
@@ -374,17 +517,27 @@ fn conquer<'a, 'b, T: PartialEq>(
         // Deletes
         solution.push(DiffRange::Delete(old));
     } else {
-        // Divide & Conquer. The optimal-vs-heuristic distinction doesn't
-        // matter here — either way we split at `(snake.x_start, snake.y_start)`
-        // and recurse on the two halves.
+        // Divide & Conquer. The returned snake runs from
+        // `(x_start, y_start)` to `(x_end, y_end)` along the diagonal
+        // and is a confirmed run of matching elements. Emit it here as
+        // `Equal` content and recurse on the pre/post halves — that
+        // saves the recursive calls from rediscovering the same range
+        // via `common_prefix_len` / `common_suffix_len`, and for the
+        // snake heuristic the range is load-bearing (the bail-point
+        // split itself is otherwise arbitrary).
         let SplitResult {
             snake,
             need_minimal_forward,
             need_minimal_backward,
         } = find_middle_snake(old, new, vf, vb, heuristics, need_minimal);
 
-        let (old_a, old_b) = old.split_at(snake.x_start);
-        let (new_a, new_b) = new.split_at(snake.y_start);
+        let snake_len = snake.x_end - snake.x_start;
+        debug_assert_eq!(snake_len, snake.y_end - snake.y_start);
+
+        let (old_a, old_rest) = old.split_at(snake.x_start);
+        let (new_a, new_rest) = new.split_at(snake.y_start);
+        let (old_mid, old_b) = old_rest.split_at(snake_len);
+        let (new_mid, new_b) = new_rest.split_at(snake_len);
 
         conquer(
             old_a,
@@ -395,6 +548,9 @@ fn conquer<'a, 'b, T: PartialEq>(
             need_minimal_forward,
             solution,
         );
+        if snake_len > 0 {
+            solution.push(DiffRange::Equal(old_mid, new_mid));
+        }
         conquer(
             old_b,
             new_b,
