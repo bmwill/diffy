@@ -1,0 +1,57 @@
+name: Fuzz
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  schedule:
+    # Daily at 03:00 UTC
+    - cron: '0 3 * * *'
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+  CLICOLOR: 1
+  CI: 1
+  CARGO_FUZZ_VERSION: 0.13.1
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - patch_from_str
+          - patch_from_bytes
+          - patch_set_gitdiff
+          - patch_set_unidiff
+          - patch_set_gitdiff_bytes
+          - patch_set_unidiff_bytes
+    steps:
+      - uses: actions/checkout@v6
+
+      - run: rustup toolchain install nightly
+      - run: rustup default nightly
+
+      - uses: dtolnay/install@cargo-fuzz
+
+      - run: cargo fuzz build ${{ matrix.target }}
+      - name: Run fuzzer
+        run: cargo fuzz run ${{ matrix.target }} -- -max_total_time=$TIME
+        env:
+          TIME: ${{ github.event_name == 'schedule' && '600' || '30' }}
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}-${{ github.sha }}
+          path: fuzz/artifacts/
