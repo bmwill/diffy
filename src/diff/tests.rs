@@ -769,7 +769,7 @@ Second:
     let elapsed = now.elapsed();
 
     assert!(
-        elapsed < std::time::Duration::from_micros(200),
+        elapsed < core::time::Duration::from_micros(200),
         "{:?}",
         elapsed
     );
