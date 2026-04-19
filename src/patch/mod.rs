@@ -9,9 +9,14 @@ mod tests;
 pub use error::ParsePatchError;
 pub use format::PatchFormatter;
 
-use std::{borrow::Cow, fmt, ops};
+use alloc::borrow::{Cow, ToOwned};
+use alloc::fmt;
+use alloc::vec::Vec;
+use core::ops;
 
-use crate::utils::{byte_needs_quoting, fmt_escaped_byte, write_escaped_byte};
+#[cfg(feature = "std")]
+use crate::utils::write_escaped_byte;
+use crate::utils::{byte_needs_quoting, fmt_escaped_byte};
 
 const NO_NEWLINE_AT_EOF: &str = "\\ No newline at end of file";
 
@@ -102,6 +107,7 @@ impl<'a, T: ToOwned + ?Sized> Patch<'a, T> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: AsRef<[u8]> + ToOwned + ?Sized> Patch<'_, T> {
     /// Convert a `Patch` into bytes
     ///
@@ -186,7 +192,7 @@ impl fmt::Display for Patch<'_, str> {
 impl<T: ?Sized, O> fmt::Debug for Patch<'_, T>
 where
     T: ToOwned<Owned = O> + fmt::Debug,
-    O: std::borrow::Borrow<T> + fmt::Debug,
+    O: core::borrow::Borrow<T> + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Patch")
@@ -200,6 +206,7 @@ where
 #[derive(PartialEq, Eq)]
 struct Filename<'a, T: ToOwned + ?Sized>(Cow<'a, T>);
 
+#[cfg(feature = "std")]
 impl<T: ToOwned + AsRef<[u8]> + ?Sized> Filename<'_, T> {
     fn needs_to_be_escaped_bytes(&self) -> bool {
         self.0
@@ -245,10 +252,10 @@ impl<T: ToOwned + ?Sized> Clone for Filename<'_, T> {
 }
 
 impl fmt::Display for Filename<'_, str> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let bytes = self.0.as_bytes();
         if bytes.iter().any(|b| byte_needs_quoting(*b)) {
-            use std::fmt::Write;
+            use core::fmt::Write;
             f.write_char('\"')?;
             for &b in bytes {
                 fmt_escaped_byte(f, b)?;
@@ -265,7 +272,7 @@ impl fmt::Display for Filename<'_, str> {
 impl<T: ?Sized, O> fmt::Debug for Filename<'_, T>
 where
     T: ToOwned<Owned = O> + fmt::Debug,
-    O: std::borrow::Borrow<T> + fmt::Debug,
+    O: core::borrow::Borrow<T> + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("Filename").field(&self.0).finish()

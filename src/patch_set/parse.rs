@@ -9,7 +9,8 @@ use crate::patch::parse::parse_one;
 use crate::utils::{escaped_filename, Text};
 use crate::Patch;
 
-use std::borrow::Cow;
+use alloc::borrow::Cow;
+use alloc::string::String;
 
 /// Prefix for the original file path (e.g., `--- a/file.rs`).
 const ORIGINAL_PREFIX: &str = "--- ";

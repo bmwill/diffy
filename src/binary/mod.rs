@@ -10,7 +10,11 @@ mod base85;
 #[cfg(feature = "binary")]
 mod delta;
 
-use std::{fmt, ops::Range};
+#[cfg(feature = "binary")]
+use alloc::string::String;
+#[cfg(feature = "binary")]
+use alloc::vec::Vec;
+use core::{fmt, ops::Range};
 
 /// Cap preallocation when the size comes from untrusted input.
 ///
@@ -115,6 +119,7 @@ impl<'a> BinaryPatch<'a> {
     /// See [Decoding Logic](https://diffx.org/spec/binary-diffs.html#decoding-logic)
     #[cfg(feature = "binary")]
     fn decode_data(binary_data: &BinaryData<'_>) -> Result<Vec<u8>, BinaryPatchParseError> {
+        use alloc::string::ToString;
         use std::io::Read;
 
         let compressed = decode_base85_lines(binary_data.data)?;
@@ -193,6 +198,7 @@ impl fmt::Display for BinaryPatchParseError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for BinaryPatchParseError {}
 
 #[cfg(feature = "binary")]
@@ -358,7 +364,7 @@ fn parse_binary_block<'a>(parser: &mut BinaryParser<'a>) -> Option<BinaryBlock<'
     let format_line = parser.next_line()?;
     let space = format_line.iter().position(|&b| b == b' ')?;
     let (patch_type, rest) = format_line.split_at(space);
-    let size_str = std::str::from_utf8(&rest[1..]).ok()?;
+    let size_str = core::str::from_utf8(&rest[1..]).ok()?;
     let size: u64 = size_str.parse().ok()?;
 
     let kind = match patch_type {
@@ -527,6 +533,7 @@ mod tests {
 #[cfg(feature = "binary")]
 mod apply_tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn decode_line_length_uppercase() {

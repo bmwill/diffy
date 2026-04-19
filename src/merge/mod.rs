@@ -3,7 +3,10 @@ use crate::{
     range::{DiffRange, Range, SliceLike},
     utils::Classifier,
 };
-use std::{cmp, fmt};
+use alloc::fmt;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::cmp;
 
 #[cfg(test)]
 mod tests;

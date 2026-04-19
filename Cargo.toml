@@ -13,11 +13,14 @@ rust-version = "1.75.0"
 edition = "2021"
 
 [features]
-binary = ["dep:flate2"]
+default = []
+std = []
+binary = ["dep:flate2", "std"]
 color = ["dep:anstyle"]
 
 [dependencies]
-anstyle = { version = "1.0.13", optional = true }
+hashbrown = { version = "0.16.1", default-features = false, features = ["default-hasher"] }
+anstyle = { version = "1.0.13", default-features = false, optional = true }
 flate2 = { version = "1.1.9", optional = true, default-features = false, features = ["zlib-rs"] }
 
 [dev-dependencies]

@@ -7,7 +7,8 @@
 //!
 //! Based on Diffx's [Git Delta Binary Diffs](https://diffx.org/spec/binary-diffs.html#git-delta-binary-diffs)
 
-use std::fmt;
+use alloc::vec::Vec;
+use core::fmt;
 
 /// Applies delta instructions to an original file, producing the modified file.
 pub fn apply(original: &[u8], delta: &[u8]) -> Result<Vec<u8>, DeltaError> {
@@ -220,11 +221,13 @@ impl fmt::Display for DeltaError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for DeltaError {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn read_size_single_byte() {

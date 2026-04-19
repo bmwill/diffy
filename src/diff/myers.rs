@@ -1,5 +1,8 @@
 use crate::range::{DiffRange, Range};
-use std::ops::{Index, IndexMut};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::fmt;
+use core::ops::{Index, IndexMut};
 
 // A D-path is a path which starts at (0,0) that has exactly D non-diagonal edges. All D-paths
 // consist of a (D - 1)-path followed by a non-diagonal edge and then a possibly empty sequence of
@@ -57,8 +60,8 @@ struct Snake {
     y_end: usize,
 }
 
-impl ::std::fmt::Display for Snake {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+impl fmt::Display for Snake {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "({}, {}) -> ({}, {})",

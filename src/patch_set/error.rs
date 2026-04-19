@@ -1,7 +1,8 @@
 //! Error types for patches parsing.
 
-use std::fmt;
-use std::ops::Range;
+use alloc::string::String;
+use core::fmt;
+use core::ops::Range;
 
 use crate::binary::BinaryPatchParseError;
 use crate::patch::ParsePatchError;
@@ -42,6 +43,7 @@ impl fmt::Display for PatchSetParseError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for PatchSetParseError {}
 
 impl From<PatchSetParseErrorKind> for PatchSetParseError {

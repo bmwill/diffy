@@ -8,8 +8,8 @@ mod parse;
 #[cfg(test)]
 mod tests;
 
-use std::borrow::Cow;
-use std::fmt;
+use alloc::borrow::{Cow, ToOwned};
+use core::fmt;
 
 use crate::binary::BinaryPatch;
 use crate::utils::Text;
@@ -114,7 +114,7 @@ pub enum FileMode {
     Gitlink,
 }
 
-impl std::str::FromStr for FileMode {
+impl core::str::FromStr for FileMode {
     type Err = PatchSetParseError;
 
     fn from_str(mode: &str) -> Result<Self, Self::Err> {
@@ -137,12 +137,12 @@ pub enum PatchKind<'a, T: ToOwned + ?Sized> {
     Binary(BinaryPatch<'a>),
 }
 
-impl<T: ?Sized, O> std::fmt::Debug for PatchKind<'_, T>
+impl<T: ?Sized, O> fmt::Debug for PatchKind<'_, T>
 where
-    T: ToOwned<Owned = O> + std::fmt::Debug,
-    O: std::borrow::Borrow<T> + std::fmt::Debug,
+    T: ToOwned<Owned = O> + fmt::Debug,
+    O: core::borrow::Borrow<T> + fmt::Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PatchKind::Text(patch) => f.debug_tuple("Text").field(patch).finish(),
             PatchKind::Binary(patch) => f.debug_tuple("Binary").field(patch).finish(),
@@ -186,12 +186,12 @@ pub struct FilePatch<'a, T: ToOwned + ?Sized> {
     new_mode: Option<FileMode>,
 }
 
-impl<T: ?Sized, O> std::fmt::Debug for FilePatch<'_, T>
+impl<T: ?Sized, O> fmt::Debug for FilePatch<'_, T>
 where
-    T: ToOwned<Owned = O> + std::fmt::Debug,
-    O: std::borrow::Borrow<T> + std::fmt::Debug,
+    T: ToOwned<Owned = O> + fmt::Debug,
+    O: core::borrow::Borrow<T> + fmt::Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FilePatch")
             .field("operation", &self.operation)
             .field("kind", &self.kind)
@@ -320,7 +320,7 @@ impl<T: ToOwned + ?Sized> Clone for FileOperation<'_, T> {
 impl<T: ?Sized, O> fmt::Debug for FileOperation<'_, T>
 where
     T: ToOwned<Owned = O> + fmt::Debug,
-    O: std::borrow::Borrow<T> + fmt::Debug,
+    O: core::borrow::Borrow<T> + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

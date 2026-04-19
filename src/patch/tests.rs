@@ -1,5 +1,7 @@
 use super::error::ParsePatchErrorKind;
 use super::parse::{parse, parse_bytes, parse_bytes_strict, parse_strict};
+use alloc::format;
+use alloc::string::ToString;
 
 #[test]
 fn trailing_garbage_after_complete_hunk() {
@@ -637,6 +639,8 @@ fn non_utf8_escaped_filename_returns_error_on_str_parse() {
 }
 
 mod error_display {
+    use alloc::string::ToString;
+
     use crate::patch::error::ParsePatchErrorKind;
     use crate::Patch;
     use snapbox::assert_data_eq;

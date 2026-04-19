@@ -1,7 +1,8 @@
-use std::{
-    fmt::{Display, Formatter, Result},
-    io,
-};
+use alloc::borrow::ToOwned;
+use core::fmt::{Display, Formatter, Result};
+
+#[cfg(feature = "std")]
+use std::io;
 
 #[cfg(feature = "color")]
 use super::style;
@@ -69,6 +70,7 @@ impl PatchFormatter {
         PatchDisplay { f: self, patch }
     }
 
+    #[cfg(feature = "std")]
     pub fn write_patch_into<T: ToOwned + AsRef<[u8]> + ?Sized, W: io::Write>(
         &self,
         patch: &Patch<'_, T>,
@@ -81,6 +83,7 @@ impl PatchFormatter {
         HunkDisplay { f: self, hunk }
     }
 
+    #[cfg(feature = "std")]
     fn write_hunk_into<T: AsRef<[u8]> + ?Sized, W: io::Write>(
         &self,
         hunk: &Hunk<'_, T>,
@@ -93,6 +96,7 @@ impl PatchFormatter {
         LineDisplay { f: self, line }
     }
 
+    #[cfg(feature = "std")]
     fn write_line_into<T: AsRef<[u8]> + ?Sized, W: io::Write>(
         &self,
         line: &Line<'_, T>,
@@ -113,6 +117,7 @@ struct PatchDisplay<'a, T: ToOwned + ?Sized> {
     patch: &'a Patch<'a, T>,
 }
 
+#[cfg(feature = "std")]
 impl<T: ToOwned + AsRef<[u8]> + ?Sized> PatchDisplay<'_, T> {
     fn write_into<W: io::Write>(&self, mut w: W) -> io::Result<()> {
         if self.patch.original.is_some() || self.patch.modified.is_some() {
@@ -176,6 +181,7 @@ struct HunkDisplay<'a, T: ?Sized> {
     hunk: &'a Hunk<'a, T>,
 }
 
+#[cfg(feature = "std")]
 impl<T: AsRef<[u8]> + ?Sized> HunkDisplay<'_, T> {
     fn write_into<W: io::Write>(&self, mut w: W) -> io::Result<()> {
         #[cfg(feature = "color")]
@@ -250,6 +256,7 @@ struct LineDisplay<'a, T: ?Sized> {
     line: &'a Line<'a, T>,
 }
 
+#[cfg(feature = "std")]
 impl<T: AsRef<[u8]> + ?Sized> LineDisplay<'_, T> {
     fn write_into<W: io::Write>(&self, mut w: W) -> io::Result<()> {
         #[cfg(feature = "color")]
