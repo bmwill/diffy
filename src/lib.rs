@@ -222,6 +222,14 @@
 //! [`create_patch`]: fn.create_patch.html
 //! [`create_patch_bytes`]: fn.create_patch_bytes.html
 
+// unconditionally define as no_std to have consistency on the prelude that is auto imported.
+#![no_std]
+
+extern crate alloc;
+
+#[cfg(feature = "std")]
+extern crate std;
+
 mod apply;
 pub mod binary;
 mod diff;

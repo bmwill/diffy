@@ -3,7 +3,10 @@ use crate::{
     range::{DiffRange, SliceLike},
     utils::Classifier,
 };
-use std::{borrow::Cow, cmp, ops};
+use alloc::borrow::Cow;
+use alloc::vec::Vec;
+use core::cmp;
+use core::ops;
 
 mod cleanup;
 mod myers;
@@ -405,6 +408,7 @@ fn build_edit_script<T>(solution: &[DiffRange<[T]>]) -> Vec<EditRange> {
 #[cfg(test)]
 mod test {
     use super::DiffOptions;
+    use alloc::string::ToString;
 
     #[test]
     fn set_original_and_modified_filenames() {

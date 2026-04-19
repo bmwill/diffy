@@ -6,6 +6,10 @@ use crate::{
     range::Range,
     PatchFormatter,
 };
+use alloc::format;
+use alloc::string::ToString;
+use alloc::vec;
+use alloc::vec::Vec;
 
 // Helper macros are based off of the ones used in [dissimilar](https://docs.rs/dissimilar)
 macro_rules! diff_range_list {
@@ -764,8 +768,11 @@ Second:
 
     let elapsed = now.elapsed();
 
-    println!("{:?}", elapsed);
-    assert!(elapsed < std::time::Duration::from_micros(200));
+    assert!(
+        elapsed < std::time::Duration::from_micros(200),
+        "{:?}",
+        elapsed
+    );
 
     assert_eq!(result, expected);
 }

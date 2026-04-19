@@ -8,9 +8,10 @@ use crate::{
     patch::Patch,
     utils::{escaped_filename, LineIter, Text},
 };
-use std::borrow::Cow;
+use alloc::borrow::Cow;
+use alloc::vec::Vec;
 
-type Result<T, E = ParsePatchError> = std::result::Result<T, E>;
+type Result<T, E = ParsePatchError> = core::result::Result<T, E>;
 
 /// Options that control parsing behavior.
 ///
@@ -50,7 +51,7 @@ impl ParseOpts {
 }
 
 struct Parser<'a, T: Text + ?Sized> {
-    lines: std::iter::Peekable<LineIter<'a, T>>,
+    lines: core::iter::Peekable<LineIter<'a, T>>,
     offset: usize,
 }
 

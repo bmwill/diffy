@@ -1,7 +1,7 @@
 //! Error types for patch parsing.
 
-use std::fmt;
-use std::ops::Range;
+use core::fmt;
+use core::ops::Range;
 
 /// An error returned when parsing a `Patch` using [`Patch::from_str`] fails.
 ///
@@ -36,6 +36,7 @@ impl fmt::Display for ParsePatchError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for ParsePatchError {}
 
 impl From<ParsePatchErrorKind> for ParsePatchError {

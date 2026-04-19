@@ -7,7 +7,7 @@
 //!
 //! [RFC 1924]: https://datatracker.ietf.org/doc/html/rfc1924
 
-use std::fmt;
+use core::fmt;
 
 /// Base85 character set (RFC 1924).
 const ALPHABET: &[u8; 85] = b"0123456789\
@@ -46,6 +46,7 @@ impl fmt::Display for Base85Error {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for Base85Error {}
 
 /// Decodes a Base85 string to the provided output.
@@ -115,6 +116,8 @@ pub fn encode_into(input: &[u8], output: &mut impl Extend<char>) -> Result<(), B
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::string::String;
+    use alloc::vec::Vec;
 
     fn decode(input: &str) -> Result<Vec<u8>, Base85Error> {
         let mut result = Vec::with_capacity((input.len() / 5) * 4);

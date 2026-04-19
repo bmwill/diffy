@@ -1,10 +1,11 @@
 //! Common utilities
 
-use std::{
-    borrow::Cow,
-    collections::{hash_map::Entry, HashMap},
-    hash::Hash,
-};
+use alloc::borrow::{Cow, ToOwned};
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::hash::Hash;
+use hashbrown::hash_map::Entry;
+use hashbrown::HashMap;
 
 use crate::{patch::error::ParsePatchErrorKind, ParsePatchError};
 
@@ -22,6 +23,7 @@ pub(crate) fn byte_needs_quoting(b: u8) -> bool {
 /// `\t`, `\n`, `\v`, `\f`, `\r`, `\\`, `\"`). Other bytes that
 /// require quoting are emitted as 3-digit octal (`\NNN`).
 /// Non-special bytes are written through unchanged.
+#[cfg(feature = "std")]
 pub(crate) fn write_escaped_byte<W: std::io::Write>(w: &mut W, b: u8) -> std::io::Result<()> {
     match b {
         b'\x07' => w.write_all(b"\\a"),
@@ -49,7 +51,7 @@ pub(crate) fn write_escaped_byte<W: std::io::Write>(w: &mut W, b: u8) -> std::io
 /// Writes one byte in its escaped form to a [`fmt::Write`] sink.
 ///
 /// Same logic as [`write_escaped_byte`] but for [`fmt::Write`].
-pub(crate) fn fmt_escaped_byte(f: &mut impl std::fmt::Write, b: u8) -> std::fmt::Result {
+pub(crate) fn fmt_escaped_byte(f: &mut impl core::fmt::Write, b: u8) -> core::fmt::Result {
     match b {
         b'\x07' => f.write_str("\\a"),
         b'\x08' => f.write_str("\\b"),
@@ -154,7 +156,7 @@ pub trait Text: Eq + Hash + ToOwned {
     /// (e.g. non-UTF-8 bytes for `str`).
     fn owned_from_bytes(bytes: Vec<u8>) -> Option<Self::Owned>;
 
-    fn parse<T: std::str::FromStr>(&self) -> Option<T> {
+    fn parse<T: core::str::FromStr>(&self) -> Option<T> {
         self.as_str().and_then(|s| s.parse().ok())
     }
 }
@@ -256,7 +258,7 @@ impl Text for [u8] {
     }
 
     fn as_str(&self) -> Option<&str> {
-        std::str::from_utf8(self).ok()
+        core::str::from_utf8(self).ok()
     }
 
     fn as_bytes(&self) -> &[u8] {

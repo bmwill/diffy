@@ -1,5 +1,9 @@
 //! Tests for patchset parsing.
 
+use alloc::borrow::ToOwned;
+use alloc::string::ToString;
+use alloc::vec::Vec;
+
 use super::{error::PatchSetParseErrorKind, FileOperation, ParseOptions, PatchSet};
 
 mod file_operation {
