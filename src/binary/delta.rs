@@ -222,6 +222,7 @@ impl fmt::Display for DeltaError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for DeltaError {}
 
 #[cfg(test)]

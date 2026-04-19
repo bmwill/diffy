@@ -33,6 +33,7 @@ impl PatchFormatter {
 
     /// Enable formatting a patch with color
     #[cfg(feature = "color")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "color")))]
     pub fn with_color(mut self) -> Self {
         self.with_color = true;
         self
@@ -71,6 +72,7 @@ impl PatchFormatter {
     }
 
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write_patch_into<T: ToOwned + AsRef<[u8]> + ?Sized, W: io::Write>(
         &self,
         patch: &Patch<'_, T>,
