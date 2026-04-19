@@ -108,6 +108,7 @@ impl<'a, T: ToOwned + ?Sized> Patch<'a, T> {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<T: AsRef<[u8]> + ToOwned + ?Sized> Patch<'_, T> {
     /// Convert a `Patch` into bytes
     ///

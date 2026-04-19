@@ -83,6 +83,7 @@ impl<'a> BinaryPatch<'a> {
     ///
     /// Unlike `git apply`, this doesn't validate the original content hash.
     #[cfg(feature = "binary")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "binary")))]
     pub fn apply(&self, original: &[u8]) -> Result<Vec<u8>, BinaryPatchParseError> {
         match self {
             BinaryPatch::Full { forward, .. } => Self::apply_block(forward, original),
@@ -97,6 +98,7 @@ impl<'a> BinaryPatch<'a> {
     ///
     /// Unlike `git apply`, this doesn't validate the modified content hash.
     #[cfg(feature = "binary")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "binary")))]
     pub fn apply_reverse(&self, modified: &[u8]) -> Result<Vec<u8>, BinaryPatchParseError> {
         match self {
             BinaryPatch::Full { reverse, .. } => Self::apply_block(reverse, modified),
@@ -199,6 +201,7 @@ impl fmt::Display for BinaryPatchParseError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for BinaryPatchParseError {}
 
 #[cfg(feature = "binary")]
