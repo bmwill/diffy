@@ -104,9 +104,10 @@ impl HeuristicsConfig {
 /// synthesized zero-length split point at the furthest-reaching endpoint
 /// seen during the search. The resulting diff is correct but not guaranteed
 /// to be minimal.
-enum SplitResult {
-    Optimal { snake: Snake },
-    Heuristic { snake: Snake },
+struct SplitResult {
+    snake: Snake,
+    need_minimal_forward: bool,
+    need_minimal_backward: bool,
 }
 
 // The divide part of a divide-and-conquer strategy. A D-path has D+1 snakes some of which may
@@ -215,13 +216,15 @@ fn find_middle_snake<T: PartialEq>(
                 // from (N, M) meets or exceeds `n` exactly when the two paths
                 // have crossed on the forward axis.
                 if vf[k] + vb[-(k - delta)] >= n {
-                    return SplitResult::Optimal {
+                    return SplitResult {
                         snake: Snake {
                             x_start: x0,
                             y_start: y0,
                             x_end: x,
                             y_end: y,
                         },
+                        need_minimal_forward: true,
+                        need_minimal_backward: true,
                     };
                 }
             }
@@ -271,13 +274,15 @@ fn find_middle_snake<T: PartialEq>(
                 // meets or exceeds `n` exactly when the two paths have crossed
                 // on the forward axis.
                 if vb[k] + vf[-(k - delta)] >= n {
-                    return SplitResult::Optimal {
+                    return SplitResult {
                         snake: Snake {
                             x_start: n - x,
                             y_start: m - y,
                             x_end: n - x0,
                             y_end: m - y0,
                         },
+                        need_minimal_forward: true,
+                        need_minimal_backward: true,
                     };
                 }
             }
@@ -295,22 +300,30 @@ fn find_middle_snake<T: PartialEq>(
         // at (0, 0) and recurse on the full problem, causing infinite
         // recursion.
         if !need_minimal && d >= 1 && (d as usize) >= heuristic.max_cost {
-            let snake = if best_fwd_score >= best_bwd_score {
-                best_fwd_snake
+            let res = if best_fwd_score >= best_bwd_score {
+                SplitResult {
+                    snake: best_fwd_snake,
+                    need_minimal_forward: true,
+                    need_minimal_backward: false,
+                }
             } else {
                 // Convert stored backward coords to actual grid coords.
                 // The backward snake runs from higher stored values toward
                 // lower, so the actual-coord ordering flips: stored
                 // `x_start` is the actual end, and stored `x_end` is the
                 // actual start.
-                Snake {
-                    x_start: n - best_bwd_snake.x_start,
-                    y_start: m - best_bwd_snake.y_start,
-                    x_end: n - best_bwd_snake.x_end,
-                    y_end: m - best_bwd_snake.y_end,
+                SplitResult {
+                    snake: Snake {
+                        x_start: n - best_bwd_snake.x_start,
+                        y_start: m - best_bwd_snake.y_start,
+                        x_end: n - best_bwd_snake.x_end,
+                        y_end: m - best_bwd_snake.y_end,
+                    },
+                    need_minimal_forward: true,
+                    need_minimal_backward: false,
                 }
             };
-            return SplitResult::Heuristic { snake };
+            return res;
         }
     }
 
@@ -364,15 +377,33 @@ fn conquer<'a, 'b, T: PartialEq>(
         // Divide & Conquer. The optimal-vs-heuristic distinction doesn't
         // matter here — either way we split at `(snake.x_start, snake.y_start)`
         // and recurse on the two halves.
-        let snake = match find_middle_snake(old, new, vf, vb, heuristics, need_minimal) {
-            SplitResult::Optimal { snake } | SplitResult::Heuristic { snake } => snake,
-        };
+        let SplitResult {
+            snake,
+            need_minimal_forward,
+            need_minimal_backward,
+        } = find_middle_snake(old, new, vf, vb, heuristics, need_minimal);
 
         let (old_a, old_b) = old.split_at(snake.x_start);
         let (new_a, new_b) = new.split_at(snake.y_start);
 
-        conquer(old_a, new_a, vf, vb, heuristics, need_minimal, solution);
-        conquer(old_b, new_b, vf, vb, heuristics, need_minimal, solution);
+        conquer(
+            old_a,
+            new_a,
+            vf,
+            vb,
+            heuristics,
+            need_minimal_forward,
+            solution,
+        );
+        conquer(
+            old_b,
+            new_b,
+            vf,
+            vb,
+            heuristics,
+            need_minimal_backward,
+            solution,
+        );
     }
 
     if common_suffix_len > 0 {
