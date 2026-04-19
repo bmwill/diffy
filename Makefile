@@ -34,11 +34,11 @@ check-no-std: ## Verify crate builds in no_std env
 
 .PHONY: doc
 doc: ## Generate documentation
-	RUSTDOCFLAGS="-Dwarnings --cfg=docsrs -Zunstable-options --generate-link-to-definition" RUSTC_BOOTSTRAP=1 cargo doc --all-features --no-deps
+	RUSTDOCFLAGS="-Dwarnings --cfg=docsrs -Zunstable-options --generate-link-to-definition" RUSTC_BOOTSTRAP=1 cargo doc --all-features --no-deps -Zrustdoc-scrape-examples
 
 .PHONY: doc-open
 doc-open: ## Generate and open documentation
-	RUSTDOCFLAGS="--cfg=docsrs -Zunstable-options --generate-link-to-definition" RUSTC_BOOTSTRAP=1 cargo doc --all-features --no-deps --open
+	RUSTDOCFLAGS="--cfg=docsrs -Zunstable-options --generate-link-to-definition" RUSTC_BOOTSTRAP=1 cargo doc --all-features --no-deps --open -Zrustdoc-scrape-examples
 
 .PHONY: is-dirty
 is-dirty: ## Checks if repository is dirty
