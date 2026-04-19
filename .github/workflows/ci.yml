@@ -54,6 +54,17 @@ jobs:
       - uses: taiki-e/install-action@cargo-hack
       - run: cargo hack check --feature-powerset --no-dev-deps
 
+  no-std:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup toolchain install stable --profile minimal
+      - run: rustup target add aarch64-unknown-none
+      # Build against a bare-metal target that has no `std` crate,
+      # so any accidental reliance on `std` fails to link.
+      - run: cargo build --target aarch64-unknown-none --no-default-features
+      - run: cargo build --target aarch64-unknown-none --no-default-features --features color
+
   semver:
     runs-on: ubuntu-latest
     steps:
