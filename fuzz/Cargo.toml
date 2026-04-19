@@ -1,0 +1,57 @@
+[package]
+name = "diffy-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.diffy]
+path = ".."
+features = ["binary"]
+
+[[bin]]
+name = "patch_from_str"
+path = "fuzz_targets/patch_from_str.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "patch_from_bytes"
+path = "fuzz_targets/patch_from_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "patch_set_gitdiff"
+path = "fuzz_targets/patch_set_gitdiff.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "patch_set_unidiff"
+path = "fuzz_targets/patch_set_unidiff.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "patch_set_gitdiff_bytes"
+path = "fuzz_targets/patch_set_gitdiff_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "patch_set_unidiff_bytes"
+path = "fuzz_targets/patch_set_unidiff_bytes.rs"
+test = false
+doc = false
+bench = false
