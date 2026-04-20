@@ -1,12 +1,17 @@
 use alloc::borrow::ToOwned;
-use core::fmt::{Display, Formatter, Result};
+use core::fmt::Display;
+use core::fmt::Formatter;
+use core::fmt::Result;
 
 #[cfg(feature = "std")]
 use std::io;
 
 #[cfg(feature = "color")]
 use super::style;
-use super::{Hunk, Line, Patch, NO_NEWLINE_AT_EOF};
+use super::Hunk;
+use super::Line;
+use super::Patch;
+use super::NO_NEWLINE_AT_EOF;
 
 /// Struct used to adjust the formatting of a `Patch`
 #[derive(Debug)]

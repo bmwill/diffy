@@ -1,12 +1,17 @@
 //! Parse multiple file patches from a unified diff.
 
-use super::{
-    error::PatchSetParseErrorKind, FileMode, FileOperation, FilePatch, Format, ParseOptions,
-    PatchSetParseError,
-};
-use crate::binary::{parse_binary_patch, BinaryPatch};
+use super::error::PatchSetParseErrorKind;
+use super::FileMode;
+use super::FileOperation;
+use super::FilePatch;
+use super::Format;
+use super::ParseOptions;
+use super::PatchSetParseError;
+use crate::binary::parse_binary_patch;
+use crate::binary::BinaryPatch;
 use crate::patch::parse::parse_one;
-use crate::utils::{escaped_filename, Text};
+use crate::utils::escaped_filename;
+use crate::utils::Text;
 use crate::Patch;
 
 use alloc::borrow::Cow;
@@ -29,7 +34,8 @@ const EMAIL_PREAMBLE_SEPARATOR: &str = "\n---\n";
 /// # Example
 ///
 /// ```
-/// use diffy::patch_set::{PatchSet, ParseOptions};
+/// use diffy::patch_set::ParseOptions;
+/// use diffy::patch_set::PatchSet;
 ///
 /// let s = "\
 /// --- original

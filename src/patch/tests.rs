@@ -1,5 +1,8 @@
 use super::error::ParsePatchErrorKind;
-use super::parse::{parse, parse_bytes, parse_bytes_strict, parse_strict};
+use super::parse::parse;
+use super::parse::parse_bytes;
+use super::parse::parse_bytes_strict;
+use super::parse::parse_strict;
 use alloc::format;
 use alloc::string::ToString;
 

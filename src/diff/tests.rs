@@ -1,11 +1,10 @@
 use super::*;
-use crate::{
-    apply::apply,
-    diff::{Diff, DiffRange},
-    patch::Patch,
-    range::Range,
-    PatchFormatter,
-};
+use crate::apply::apply;
+use crate::diff::Diff;
+use crate::diff::DiffRange;
+use crate::patch::Patch;
+use crate::range::Range;
+use crate::PatchFormatter;
 use alloc::format;
 use alloc::string::ToString;
 use alloc::vec;

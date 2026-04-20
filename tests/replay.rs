@@ -51,18 +51,22 @@
 //! $ gh run view --log-failed
 //! ```
 
-use std::{
-    env,
-    io::{BufRead, BufReader, Read, Write},
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-    sync::Mutex,
-};
+use std::env;
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::Read;
+use std::io::Write;
+use std::path::Path;
+use std::path::PathBuf;
+use std::process::Command;
+use std::process::Stdio;
+use std::sync::Mutex;
 
-use diffy::{
-    binary::BinaryPatch,
-    patch_set::{FileOperation, ParseOptions, PatchKind, PatchSet},
-};
+use diffy::binary::BinaryPatch;
+use diffy::patch_set::FileOperation;
+use diffy::patch_set::ParseOptions;
+use diffy::patch_set::PatchKind;
+use diffy::patch_set::PatchSet;
 use rayon::prelude::*;
 
 /// Persistent `git cat-file --batch` process for fast object lookups.
