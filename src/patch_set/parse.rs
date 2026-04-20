@@ -698,30 +698,42 @@ fn longest_common_path_suffix<'a, T: Text + ?Sized>(a: &'a T, b: &T) -> Option<&
         return None;
     }
 
-    let suffix_len = a
+    let mut last_slash = None;
+    let mut matched = 0;
+
+    for (i, (x, y)) in a
         .as_bytes()
         .iter()
         .rev()
         .zip(b.as_bytes().iter().rev())
-        .take_while(|(x, y)| x == y)
-        .count();
+        .enumerate()
+    {
+        if x != y {
+            break;
+        }
+        // `/` is ASCII,
+        // so this index is always a valid split point UTF-8 strings.
+        // No char boundary check needed.
+        if *x == b'/' {
+            last_slash = Some(i + 1);
+        }
+        matched = i + 1;
+    }
 
-    if suffix_len == 0 {
+    if matched == 0 {
         return None;
     }
 
     // Identical strings
-    if suffix_len == a.len() && a.len() == b.len() {
+    if matched == a.len() && a.len() == b.len() {
         return Some(a);
     }
 
-    // Find first '/' in suffix and return path after it
-    let suffix_start = a.len() - suffix_len;
-    let (_, suffix) = a.split_at(suffix_start);
-    suffix
-        .split_at_exclusive("/")
-        .map(|(_, path)| path)
-        .filter(|p| !p.is_empty())
+    // Return the path after the outermost `/` in the common suffix.
+    let suffix_len = last_slash?;
+    let start = a.len() - suffix_len + 1; // skip the '/'
+    let (_, path) = a.split_at(start);
+    (!path.is_empty()).then_some(path)
 }
 
 /// Extracts the file operation for a binary patch from git headers.

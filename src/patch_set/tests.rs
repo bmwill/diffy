@@ -482,14 +482,16 @@ mod patchset_gitdiff {
     /// Paths sharing trailing UTF-8 continuation bytes
     /// but belonging to different codepoints must not panic
     #[test]
-    #[should_panic(expected = "not a char boundary")]
     fn multibyte_char_boundary_in_diff_git_path() {
         // U+00BF INVERTED QUESTION MARK (¿) = 0xC2 0xBF
         // U+00FF LATIN SMALL LETTER Y WITH DIAERESIS (ÿ) = 0xC3 0xBF
         // Both share trailing byte 0xBF.
         let input = "diff --git a/\u{bf} b/\u{ff}\n";
-        let _ = PatchSet::parse(input, ParseOptions::gitdiff())
-            .collect::<Result<Vec<_>, _>>();
+        let result: Result<Vec<_>, _> = PatchSet::parse(input, ParseOptions::gitdiff()).collect();
+        assert_eq!(
+            result.unwrap_err().kind,
+            PatchSetParseErrorKind::InvalidDiffGitPath
+        );
     }
 
     /// `parse_one` must stop at `diff --git` boundaries so that
