@@ -1,17 +1,20 @@
 //! Common utilities for compat tests.
 
-use std::{
-    fs,
-    io::Write,
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-    sync::Once,
-};
+use std::fs;
+use std::io::Write;
+use std::path::Path;
+use std::path::PathBuf;
+use std::process::Command;
+use std::process::Stdio;
+use std::sync::Once;
 
-use diffy::{
-    binary::{BinaryPatch, BinaryPatchParseError},
-    patch_set::{FileOperation, ParseOptions, PatchKind, PatchSet, PatchSetParseError},
-};
+use diffy::binary::BinaryPatch;
+use diffy::binary::BinaryPatchParseError;
+use diffy::patch_set::FileOperation;
+use diffy::patch_set::ParseOptions;
+use diffy::patch_set::PatchKind;
+use diffy::patch_set::PatchSet;
+use diffy::patch_set::PatchSetParseError;
 
 /// Which external tool to compare against.
 #[derive(Clone, Copy)]

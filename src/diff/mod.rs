@@ -1,8 +1,10 @@
-use crate::{
-    patch::{Hunk, HunkRange, Line, Patch},
-    range::{DiffRange, SliceLike},
-    utils::Classifier,
-};
+use crate::patch::Hunk;
+use crate::patch::HunkRange;
+use crate::patch::Line;
+use crate::patch::Patch;
+use crate::range::DiffRange;
+use crate::range::SliceLike;
+use crate::utils::Classifier;
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use core::cmp;

@@ -12,7 +12,8 @@ mod delta;
 
 #[cfg(feature = "binary")]
 use alloc::vec::Vec;
-use core::{fmt, ops::Range};
+use core::fmt;
+use core::ops::Range;
 
 /// Cap preallocation when the size comes from untrusted input.
 ///
@@ -120,7 +121,9 @@ impl<'a> BinaryPatch<'a> {
     #[cfg(feature = "binary")]
     fn decode_data(binary_data: &BinaryData<'_>) -> Result<Vec<u8>, BinaryPatchParseError> {
         use alloc::vec;
-        use zlib_rs::{Inflate, InflateFlush, Status};
+        use zlib_rs::Inflate;
+        use zlib_rs::InflateFlush;
+        use zlib_rs::Status;
 
         let compressed = decode_base85_lines(binary_data.data)?;
 

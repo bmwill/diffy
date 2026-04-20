@@ -1,8 +1,10 @@
-use crate::range::{DiffRange, Range};
+use crate::range::DiffRange;
+use crate::range::Range;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
-use core::ops::{Index, IndexMut};
+use core::ops::Index;
+use core::ops::IndexMut;
 
 // A D-path is a path which starts at (0,0) that has exactly D non-diagonal edges. All D-paths
 // consist of a (D - 1)-path followed by a non-diagonal edge and then a possibly empty sequence of

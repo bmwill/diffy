@@ -1,8 +1,8 @@
-use crate::{
-    diff::DiffOptions,
-    range::{DiffRange, Range, SliceLike},
-    utils::Classifier,
-};
+use crate::diff::DiffOptions;
+use crate::range::DiffRange;
+use crate::range::Range;
+use crate::range::SliceLike;
+use crate::utils::Classifier;
 use alloc::fmt;
 use alloc::string::String;
 use alloc::vec::Vec;

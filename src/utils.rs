@@ -1,13 +1,15 @@
 //! Common utilities
 
-use alloc::borrow::{Cow, ToOwned};
+use alloc::borrow::Cow;
+use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::hash::Hash;
 use hashbrown::hash_map::Entry;
 use hashbrown::HashMap;
 
-use crate::{patch::error::ParsePatchErrorKind, ParsePatchError};
+use crate::patch::error::ParsePatchErrorKind;
+use crate::ParsePatchError;
 
 /// Returns `true` if a byte must be quoted in a diff filename.
 ///

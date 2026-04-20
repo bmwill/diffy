@@ -1,4 +1,5 @@
-use crate::range::{DiffRange, SliceLike};
+use crate::range::DiffRange;
+use crate::range::SliceLike;
 use alloc::vec::Vec;
 
 // Walks through all edits and shifts them up and then down, trying to see if they run into similar

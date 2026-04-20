@@ -103,7 +103,8 @@
 //! image.
 //!
 //! ```
-//! use diffy::{apply, Patch};
+//! use diffy::apply;
+//! use diffy::Patch;
 //!
 //! let s = "\
 //! --- a/skybreaker-ideals
@@ -243,7 +244,19 @@ pub mod patch_set;
 mod range;
 mod utils;
 
-pub use apply::{apply, apply_bytes, ApplyError};
-pub use diff::{create_patch, create_patch_bytes, DiffOptions};
-pub use merge::{merge, merge_bytes, ConflictStyle, MergeOptions};
-pub use patch::{Hunk, HunkRange, Line, ParsePatchError, Patch, PatchFormatter};
+pub use apply::apply;
+pub use apply::apply_bytes;
+pub use apply::ApplyError;
+pub use diff::create_patch;
+pub use diff::create_patch_bytes;
+pub use diff::DiffOptions;
+pub use merge::merge;
+pub use merge::merge_bytes;
+pub use merge::ConflictStyle;
+pub use merge::MergeOptions;
+pub use patch::Hunk;
+pub use patch::HunkRange;
+pub use patch::Line;
+pub use patch::ParsePatchError;
+pub use patch::Patch;
+pub use patch::PatchFormatter;

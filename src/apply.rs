@@ -1,7 +1,7 @@
-use crate::{
-    patch::{Hunk, Line, Patch},
-    utils::LineIter,
-};
+use crate::patch::Hunk;
+use crate::patch::Line;
+use crate::patch::Patch;
+use crate::utils::LineIter;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::cmp;
@@ -60,7 +60,8 @@ impl<T: ?Sized> Clone for ImageLine<'_, T> {
 /// Apply a `Patch` to a base image
 ///
 /// ```
-/// use diffy::{apply, Patch};
+/// use diffy::apply;
+/// use diffy::Patch;
 ///
 /// let s = "\
 /// --- a/ideals

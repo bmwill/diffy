@@ -9,14 +9,16 @@ mod tests;
 pub use error::ParsePatchError;
 pub use format::PatchFormatter;
 
-use alloc::borrow::{Cow, ToOwned};
+use alloc::borrow::Cow;
+use alloc::borrow::ToOwned;
 use alloc::fmt;
 use alloc::vec::Vec;
 use core::ops;
 
+use crate::utils::byte_needs_quoting;
+use crate::utils::fmt_escaped_byte;
 #[cfg(feature = "std")]
 use crate::utils::write_escaped_byte;
-use crate::utils::{byte_needs_quoting, fmt_escaped_byte};
 
 const NO_NEWLINE_AT_EOF: &str = "\\ No newline at end of file";
 

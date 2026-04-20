@@ -8,7 +8,8 @@ mod parse;
 #[cfg(test)]
 mod tests;
 
-use alloc::borrow::{Cow, ToOwned};
+use alloc::borrow::Cow;
+use alloc::borrow::ToOwned;
 use core::fmt;
 
 use crate::binary::BinaryPatch;
@@ -37,7 +38,8 @@ pub use parse::PatchSet;
 /// ## Example
 ///
 /// ```
-/// use diffy::patch_set::{PatchSet, ParseOptions};
+/// use diffy::patch_set::ParseOptions;
+/// use diffy::patch_set::PatchSet;
 ///
 /// let s = "\
 /// --- original
