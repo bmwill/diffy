@@ -58,15 +58,13 @@ impl std::error::Error for Base85Error {}
 /// When decoding data where the original byte count isn't a multiple of 4,
 /// callers must handle truncation at a higher level.
 /// For example, via a length indicator in Git binary patch.
-pub fn decode_into(input: &str, output: &mut impl Extend<u8>) -> Result<(), Base85Error> {
-    let bytes = input.as_bytes();
-
-    if bytes.len() % 5 != 0 {
+pub fn decode_into(input: &[u8], output: &mut impl Extend<u8>) -> Result<(), Base85Error> {
+    if input.len() % 5 != 0 {
         return Err(Base85Error::InvalidLength);
     }
 
     // TODO: Use `as_chunks::<5>()` when MSRV >= 1.88
-    for chunk in bytes.chunks_exact(5) {
+    for chunk in input.chunks_exact(5) {
         let mut value: u32 = 0;
         for &byte in chunk {
             let digit = TABLE[byte as usize];
@@ -120,7 +118,7 @@ mod tests {
 
     fn decode(input: &str) -> Result<Vec<u8>, Base85Error> {
         let mut result = Vec::with_capacity((input.len() / 5) * 4);
-        decode_into(input, &mut result)?;
+        decode_into(input.as_bytes(), &mut result)?;
         Ok(result)
     }
 

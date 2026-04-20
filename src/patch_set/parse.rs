@@ -255,9 +255,7 @@ fn next_gitdiff_patch<'a, T: Text + ?Sized>(
         // GitHeader::parse consumed the marker line but not the payload.
         // Use the recorded offset to pass input from the marker onward.
         let (_, binary_input) = ps.input.split_at(abs_patch_start + binary_patch_start);
-        // Binary patch data is always ASCII (base85-encoded).
-        let binary_input = binary_input.as_str_prefix();
-        let (binary_patch, consumed) = match parse_binary_patch(binary_input) {
+        let (binary_patch, consumed) = match parse_binary_patch(binary_input.as_bytes()) {
             Ok(result) => result,
             Err(e) => return Some(Err(e.into())),
         };
