@@ -13,7 +13,32 @@ use super::Line;
 use super::Patch;
 use super::NO_NEWLINE_AT_EOF;
 
-/// Struct used to adjust the formatting of a `Patch`
+/// Formats patches for display or writing into byte streams.
+///
+/// # Examples
+///
+/// ```
+/// use diffy::create_patch;
+/// use diffy::PatchFormatter;
+///
+/// let patch = create_patch("alpha\nbeta\n", "ALPHA\nbeta\n");
+/// let formatter = PatchFormatter::new().missing_newline_message(false);
+/// let mut output = Vec::new();
+///
+/// formatter.write_patch_into(&patch, &mut output).unwrap();
+///
+/// assert_eq!(
+///     String::from_utf8(output).unwrap(),
+///     "\
+/// --- original
+/// +++ modified
+/// @@ -1,2 +1,2 @@
+/// -alpha
+/// +ALPHA
+///  beta
+/// ",
+/// );
+/// ```
 #[derive(Debug)]
 pub struct PatchFormatter {
     #[cfg(feature = "color")]
