@@ -285,17 +285,29 @@ pub enum FileOperation<'a, T: ToOwned + ?Sized> {
     ///
     /// Usually, the caller needs to strip the prefix from the paths to determine.
     Modify {
+        /// The original path before the modification.
         original: Cow<'a, T>,
+        /// The resulting path after the modification.
         modified: Cow<'a, T>,
     },
     /// Rename a file (move from `from` to `to`, delete `from`).
     ///
     /// Only produced when git extended headers explicitly indicate a rename.
-    Rename { from: Cow<'a, T>, to: Cow<'a, T> },
+    Rename {
+        /// The source path before the rename.
+        from: Cow<'a, T>,
+        /// The destination path after the rename.
+        to: Cow<'a, T>,
+    },
     /// Copy a file (copy from `from` to `to`, keep `from`).
     ///
     /// Only produced when git extended headers explicitly indicate a copy.
-    Copy { from: Cow<'a, T>, to: Cow<'a, T> },
+    Copy {
+        /// The source path that is copied from.
+        from: Cow<'a, T>,
+        /// The destination path that is copied to.
+        to: Cow<'a, T>,
+    },
 }
 
 impl<T: ToOwned + ?Sized> Clone for FileOperation<'_, T> {

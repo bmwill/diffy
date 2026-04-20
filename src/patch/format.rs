@@ -76,6 +76,11 @@ impl PatchFormatter {
         PatchDisplay { f: self, patch }
     }
 
+    /// Writes a formatted patch into a writer.
+    ///
+    /// This is the byte-oriented equivalent of [`fmt_patch`](Self::fmt_patch)
+    /// for callers that want to stream the formatted patch into an `io::Write`
+    /// sink instead of going through `Display`.
     #[cfg(feature = "std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write_patch_into<T: ToOwned + AsRef<[u8]> + ?Sized, W: io::Write>(
