@@ -17,6 +17,15 @@
 //! contents of those files into memory before passing their contents to the
 //! apis provided by this library.
 //!
+//! ## Cargo Feature Flags
+//!
+//! This crate is `no_std` by default.
+//! Enable [Cargo features] as needed:
+//!
+//! - `std` for writer-based formatting and `std::error::Error` impls
+//! - `color` for ANSI-colored patch formatting
+//! - `binary` for applying parsed git binary patches
+//!
 //! ## UTF-8 and Non-UTF-8
 //!
 //! This library has support for working with both utf8 and non-utf8 texts.
@@ -146,6 +155,66 @@
 //! assert_eq!(apply(base_image, &patch).unwrap(), expected);
 //! ```
 //!
+//! ## Parsing Multi-File Patches
+//!
+//! The [`patch_set`] module provides support for parsing unified diffs
+//! that contain changes to multiple files,
+//! such as `git diff` and `git format-patch` output.
+//! [`PatchSet`] is a streaming iterator,
+//! so callers can process file patches one at a time.
+//!
+//! Use [`ParseOptions::gitdiff`] for git-style diffs or
+//! [`ParseOptions::unidiff`] for plain unified diffs.
+//!
+//! ```
+//! use diffy::apply;
+//! use diffy::patch_set::FileOperation;
+//! use diffy::patch_set::ParseOptions;
+//! use diffy::patch_set::PatchSet;
+//!
+//! let input = "\
+//! diff --git a/alpha.txt b/alpha.txt
+//! index 1111111..2222222 100644
+//! --- a/alpha.txt
+//! +++ b/alpha.txt
+//! @@ -1 +1 @@
+//! -alpha
+//! +ALPHA
+//! diff --git a/beta.txt b/beta.txt
+//! new file mode 100644
+//! --- /dev/null
+//! +++ b/beta.txt
+//! @@ -0,0 +1 @@
+//! +beta
+//! ";
+//!
+//! let mut patches = PatchSet::parse(input, ParseOptions::gitdiff());
+//!
+//! let first = patches.next().unwrap().unwrap();
+//! let second = patches.next().unwrap().unwrap();
+//! assert!(patches.next().is_none());
+//!
+//! match first.operation().strip_prefix(1) {
+//!     FileOperation::Modify { original, modified } => {
+//!         assert_eq!(original, "alpha.txt");
+//!         assert_eq!(modified, "alpha.txt");
+//!     }
+//!     operation => panic!("unexpected operation: {operation:?}"),
+//! }
+//!
+//! let text_patch = first.patch().as_text().unwrap();
+//! assert_eq!(apply("alpha\n", text_patch).unwrap(), "ALPHA\n");
+//!
+//! match second.operation().strip_prefix(1) {
+//!     FileOperation::Create(path) => assert_eq!(path, "beta.txt"),
+//!     operation => panic!("unexpected operation: {operation:?}"),
+//! }
+//! ```
+//!
+//! With the `binary` Cargo feature enabled,
+//! parsed multi-file patches can also contain [`BinaryPatch`] values.
+//! You can apply them with [`BinaryPatch::apply`].
+//!
 //! ## Performing a Three-way Merge
 //!
 //! Two files `A` and `B` can be merged together given a common ancestor or
@@ -216,12 +285,22 @@
 //! [Mercurial]: https://www.mercurial-scm.org/
 //! [Unified Format]: https://en.wikipedia.org/wiki/Diff#Unified_format
 //! [diff3]: https://en.wikipedia.org/wiki/Diff3
+//! [Cargo features]: https://doc.rust-lang.org/cargo/reference/features.html
 //!
-//! [`Display`]: https://doc.rust-lang.org/stable/std/fmt/trait.Display.html
-//! [`Patch`]: struct.Patch.html
-//! [`PatchFormatter`]: struct.PatchFormatter.html
-//! [`create_patch`]: fn.create_patch.html
-//! [`create_patch_bytes`]: fn.create_patch_bytes.html
+//! [`BinaryPatch`]: crate::binary::BinaryPatch
+//! [`BinaryPatch::apply`]: crate::binary::BinaryPatch::apply
+//! [`Display`]: core::fmt::Display
+//! [`ParseOptions::gitdiff`]: crate::patch_set::ParseOptions::gitdiff
+//! [`ParseOptions::unidiff`]: crate::patch_set::ParseOptions::unidiff
+//! [`Patch`]: crate::Patch
+//! [`PatchFormatter`]: crate::PatchFormatter
+//! [`PatchKind::as_binary`]: crate::patch_set::PatchKind::as_binary
+//! [`PatchSet`]: crate::patch_set::PatchSet
+//! [`PatchSet::parse`]: crate::patch_set::PatchSet::parse
+//! [`PatchSet::parse_bytes`]: crate::patch_set::PatchSet::parse_bytes
+//! [`create_patch`]: crate::create_patch
+//! [`create_patch_bytes`]: crate::create_patch_bytes
+//! [`patch_set`]: crate::patch_set
 
 // unconditionally define as no_std to have consistency on the prelude that is auto imported.
 #![no_std]
