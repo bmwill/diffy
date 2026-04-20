@@ -108,6 +108,34 @@ pub fn apply(base_image: &str, patch: &Patch<'_, str>) -> Result<String, ApplyEr
 }
 
 /// Apply a non-utf8 `Patch` to a base image
+///
+/// # Examples
+///
+/// ```
+/// use diffy::apply_bytes;
+/// use diffy::Patch;
+///
+/// let patch = Patch::from_bytes(
+///     b"\
+/// --- a/ideals
+/// +++ b/ideals
+/// @@ -1 +1,2 @@
+///  First Ideal
+/// +Second Ideal
+/// ",
+/// )
+/// .unwrap();
+///
+/// let applied = apply_bytes(b"First Ideal\n", &patch).unwrap();
+///
+/// assert_eq!(
+///     applied,
+///     b"\
+/// First Ideal
+/// Second Ideal
+/// ",
+/// );
+/// ```
 pub fn apply_bytes(base_image: &[u8], patch: &Patch<'_, [u8]>) -> Result<Vec<u8>, ApplyError> {
     let mut image: Vec<_> = LineIter::new(base_image)
         .map(ImageLine::Unpatched)

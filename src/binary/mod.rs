@@ -81,6 +81,36 @@ impl<'a> BinaryPatch<'a> {
     /// - If the forward block is `Delta`: applies delta instructions to `original`.
     ///
     /// Unlike `git apply`, this doesn't validate the original content hash.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use diffy::patch_set::ParseOptions;
+    /// use diffy::patch_set::PatchSet;
+    ///
+    /// let input = b"\
+    /// diff --git a/blob b/blob
+    /// index e69de29..0000000 100644
+    /// GIT binary patch
+    /// literal 10
+    /// UcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k
+    ///
+    /// literal 0
+    /// KcmV+b0RR6000031
+    ///
+    /// ";
+    ///
+    /// let patch = PatchSet::parse_bytes(input, ParseOptions::gitdiff())
+    ///     .next()
+    ///     .unwrap()
+    ///     .unwrap();
+    /// let binary = patch.patch().as_binary().unwrap();
+    ///
+    /// assert_eq!(
+    ///     binary.apply(&[]).unwrap(),
+    ///     b"\0\x01\x02\x03\x04\x05\x06\x07\x08\t"
+    /// );
+    /// ```
     #[cfg(feature = "binary")]
     #[cfg_attr(docsrs, doc(cfg(feature = "binary")))]
     pub fn apply(&self, original: &[u8]) -> Result<Vec<u8>, BinaryPatchParseError> {
@@ -96,6 +126,33 @@ impl<'a> BinaryPatch<'a> {
     /// - If the reverse block is `Delta`: applies delta instructions to `modified`.
     ///
     /// Unlike `git apply`, this doesn't validate the modified content hash.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use diffy::patch_set::ParseOptions;
+    /// use diffy::patch_set::PatchSet;
+    ///
+    /// let input = b"\
+    /// diff --git a/blob b/blob
+    /// index e69de29..0000000 100644
+    /// GIT binary patch
+    /// literal 10
+    /// UcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k
+    ///
+    /// literal 0
+    /// KcmV+b0RR6000031
+    ///
+    /// ";
+    ///
+    /// let patch = PatchSet::parse_bytes(input, ParseOptions::gitdiff())
+    ///     .next()
+    ///     .unwrap()
+    ///     .unwrap();
+    /// let binary = patch.patch().as_binary().unwrap();
+    ///
+    /// assert_eq!(binary.apply_reverse(&[]).unwrap(), b"");
+    /// ```
     #[cfg(feature = "binary")]
     #[cfg_attr(docsrs, doc(cfg(feature = "binary")))]
     pub fn apply_reverse(&self, modified: &[u8]) -> Result<Vec<u8>, BinaryPatchParseError> {

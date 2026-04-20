@@ -47,6 +47,44 @@ where
 }
 
 /// A collection of options for modifying the way a diff is performed
+///
+/// # Examples
+///
+/// ```
+/// use diffy::DiffOptions;
+///
+/// let mut options = DiffOptions::new();
+/// options
+///     .set_context_len(1)
+///     .set_original_filename("before.txt")
+///     .set_modified_filename("after.txt");
+///
+/// let patch = options.create_patch(
+///     "\
+/// alpha
+/// beta
+/// gamma
+/// ",
+///     "\
+/// alpha
+/// BETA
+/// gamma
+/// ",
+/// );
+///
+/// assert_eq!(
+///     patch.to_string(),
+///     "\
+/// --- before.txt
+/// +++ after.txt
+/// @@ -1,3 +1,3 @@
+///  alpha
+/// -beta
+/// +BETA
+///  gamma
+/// ",
+/// );
+/// ```
 #[derive(Debug)]
 pub struct DiffOptions {
     compact: bool,
@@ -234,6 +272,26 @@ pub fn create_patch<'a>(original: &'a str, modified: &'a str) -> Patch<'a, str> 
 }
 
 /// Create a patch between two potentially non-utf8 texts
+///
+/// # Examples
+///
+/// ```
+/// use diffy::create_patch_bytes;
+///
+/// let patch = create_patch_bytes(b"alpha\nbeta\n", b"alpha\nBETA\n");
+///
+/// assert_eq!(
+///     patch.to_bytes(),
+///     b"\
+/// --- original
+/// +++ modified
+/// @@ -1,2 +1,2 @@
+///  alpha
+/// -beta
+/// +BETA
+/// ",
+/// );
+/// ```
 pub fn create_patch_bytes<'a>(original: &'a [u8], modified: &'a [u8]) -> Patch<'a, [u8]> {
     DiffOptions::default().create_patch_bytes(original, modified)
 }

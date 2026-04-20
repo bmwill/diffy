@@ -116,6 +116,31 @@ pub enum ConflictStyle {
 }
 
 /// A collection of options for modifying the way a merge is performed
+///
+/// # Examples
+///
+/// ```
+/// use diffy::ConflictStyle;
+/// use diffy::MergeOptions;
+///
+/// let mut options = MergeOptions::new();
+/// options
+///     .set_conflict_style(ConflictStyle::Merge)
+///     .set_conflict_marker_length(5);
+///
+/// let conflict = options.merge("value\n", "ours\n", "theirs\n").unwrap_err();
+///
+/// assert_eq!(
+///     conflict,
+///     "\
+/// <<<<< ours
+/// ours
+/// =====
+/// theirs
+/// >>>>> theirs
+/// ",
+/// );
+/// ```
 #[derive(Debug)]
 pub struct MergeOptions {
     conflict_marker_length: usize,
@@ -272,6 +297,38 @@ pub fn merge<'a>(ancestor: &'a str, ours: &'a str, theirs: &'a str) -> Result<St
 }
 
 /// Perform a 3-way merge between potentially non-utf8 texts
+///
+/// # Examples
+///
+/// ```
+/// use diffy::merge_bytes;
+///
+/// let merged = merge_bytes(
+///     b"\
+/// alpha
+/// beta
+/// ",
+///     b"\
+/// ALPHA
+/// beta
+/// ",
+///     b"\
+/// alpha
+/// beta
+/// gamma
+/// ",
+/// )
+/// .unwrap();
+///
+/// assert_eq!(
+///     merged,
+///     b"\
+/// ALPHA
+/// beta
+/// gamma
+/// ",
+/// );
+/// ```
 pub fn merge_bytes<'a>(
     ancestor: &'a [u8],
     ours: &'a [u8],
