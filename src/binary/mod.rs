@@ -141,7 +141,7 @@ impl<'a> BinaryPatch<'a> {
 ///
 /// For example, the following patch block
 ///
-/// * is parsed as `BinaryData { size: 10, data: "UcmV+l0QLU>0RjUA1qKHQ2>\`DEE&u=k" }`
+/// * is parsed as `BinaryData { size: 10, data: b"UcmV+l0QLU>0RjUA1qKHQ2>\`DEE&u=k" }`
 /// * The line starts with a length indicator (`U` = 21 decoded bytes)
 ///
 ///
@@ -154,7 +154,7 @@ pub struct BinaryData<'a> {
     /// Uncompressed size in bytes.
     pub size: u64,
     /// Raw Base85 lines with length indicators.
-    pub data: &'a str,
+    pub data: &'a [u8],
 }
 
 /// Error type for binary patch operations.
@@ -284,12 +284,12 @@ impl fmt::Display for BinaryPatchParseErrorKind {
 
 /// Simple streaming parser for binary patches.
 struct BinaryParser<'a> {
-    input: &'a str,
+    input: &'a [u8],
     offset: usize,
 }
 
 impl<'a> BinaryParser<'a> {
-    fn new(input: &'a str) -> Self {
+    fn new(input: &'a [u8]) -> Self {
         Self { input, offset: 0 }
     }
 
@@ -298,17 +298,17 @@ impl<'a> BinaryParser<'a> {
         BinaryPatchParseError::new(kind, self.offset..self.offset)
     }
 
-    fn next_line(&mut self) -> Option<&'a str> {
+    fn next_line(&mut self) -> Option<&'a [u8]> {
         let rest = &self.input[self.offset..];
         if rest.is_empty() {
             return None;
         }
-        let (line, skip) = match rest.find('\n') {
+        let (line, skip) = match rest.iter().position(|&b| b == b'\n') {
             Some(pos) => (&rest[..pos], pos + 1),
             None => (rest, rest.len()),
         };
         self.offset += skip;
-        Some(line.strip_suffix('\r').unwrap_or(line))
+        Some(line.strip_suffix(b"\r").unwrap_or(line))
     }
 }
 
@@ -328,12 +328,12 @@ impl<'a> BinaryParser<'a> {
 /// <base85_lines>
 /// ```
 pub(crate) fn parse_binary_patch(
-    input: &str,
+    input: &[u8],
 ) -> Result<(BinaryPatch<'_>, usize), BinaryPatchParseError> {
     let mut parser = BinaryParser::new(input);
 
     // Expect "GIT binary patch" marker
-    if parser.next_line() != Some("GIT binary patch") {
+    if parser.next_line() != Some(b"GIT binary patch".as_slice()) {
         return Err(parser.error(BinaryPatchParseErrorKind::InvalidHeader));
     }
 
@@ -356,12 +356,14 @@ pub(crate) fn parse_binary_patch(
 fn parse_binary_block<'a>(parser: &mut BinaryParser<'a>) -> Option<BinaryBlock<'a>> {
     // Parse "literal 10" or "delta 18"
     let format_line = parser.next_line()?;
-    let (patch_type, size_str) = format_line.split_once(' ')?;
+    let space = format_line.iter().position(|&b| b == b' ')?;
+    let (patch_type, rest) = format_line.split_at(space);
+    let size_str = std::str::from_utf8(&rest[1..]).ok()?;
     let size: u64 = size_str.parse().ok()?;
 
     let kind = match patch_type {
-        "literal" => BinaryBlockKind::Literal,
-        "delta" => BinaryBlockKind::Delta,
+        b"literal" => BinaryBlockKind::Literal,
+        b"delta" => BinaryBlockKind::Delta,
         _ => return None,
     };
 
@@ -378,8 +380,8 @@ fn parse_binary_block<'a>(parser: &mut BinaryParser<'a>) -> Option<BinaryBlock<'
     // Slice the data lines, stripping the final line ending.
     let data = &parser.input[data_start..data_end];
     let data = data
-        .strip_suffix("\r\n")
-        .or_else(|| data.strip_suffix('\n'))
+        .strip_suffix(b"\r\n".as_slice())
+        .or_else(|| data.strip_suffix(b"\n".as_slice()))
         .unwrap_or(data);
 
     Some(BinaryBlock {
@@ -402,18 +404,17 @@ fn parse_binary_block<'a>(parser: &mut BinaryParser<'a>) -> Option<BinaryBlock<'
 /// >     This encodes the length of the (pre-encoded) data written on this line.
 /// >  * `data` is Base85-encoded data for this line.
 #[cfg(feature = "binary")]
-fn decode_base85_lines(data: &str) -> Result<Vec<u8>, BinaryPatchParseError> {
+fn decode_base85_lines(data: &[u8]) -> Result<Vec<u8>, BinaryPatchParseError> {
     // A rough estimate: In Base85, 5 chars -> 4 bytes
     let mut result = Vec::with_capacity(data.len() * 4 / 5);
 
-    for line in data.lines() {
+    for line in data.split(|&b| b == b'\n') {
+        let line = line.strip_suffix(b"\r".as_slice()).unwrap_or(line);
         if line.is_empty() {
             continue;
         }
 
-        let line_bytes = line.as_bytes();
-
-        let length = decode_line_length(line_bytes[0])
+        let length = decode_line_length(line[0])
             .ok_or(BinaryPatchParseErrorKind::InvalidLineLengthIndicator)?;
         let encoded = &line[1..];
         let start = result.len();
@@ -450,7 +451,7 @@ mod tests {
 
     #[test]
     fn parse_literal_format_simple() {
-        let input = "GIT binary patch\nliteral 10\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\nliteral 0\nKcmV+b0RR6000031\n\n";
+        let input = b"GIT binary patch\nliteral 10\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\nliteral 0\nKcmV+b0RR6000031\n\n";
         let (patch, consumed) = parse_binary_patch(input).unwrap();
 
         assert_eq!(consumed, input.len());
@@ -467,7 +468,7 @@ mod tests {
 
     #[test]
     fn parse_delta_format() {
-        let input = "GIT binary patch\ndelta 18\nccmV+t0PX*P2!IH%^Z^9`00000v-trB0x!=5aR2}S\n\ndelta 18\nccmV+t0PX*P2!IH%^Z^BFm9#}av-trB0zxAOrvLx|\n\n";
+        let input = b"GIT binary patch\ndelta 18\nccmV+t0PX*P2!IH%^Z^9`00000v-trB0x!=5aR2}S\n\ndelta 18\nccmV+t0PX*P2!IH%^Z^BFm9#}av-trB0zxAOrvLx|\n\n";
         let (patch, _) = parse_binary_patch(input).unwrap();
 
         match &patch {
@@ -484,14 +485,14 @@ mod tests {
     #[test]
     fn parse_invalid_header() {
         // Without "GIT binary patch" marker, parse_binary_patch returns error
-        let input = "literal 10\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\n";
+        let input = b"literal 10\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\n";
         let err = parse_binary_patch(input).unwrap_err();
         assert_eq!(err.kind, BinaryPatchParseErrorKind::InvalidHeader);
     }
 
     #[test]
     fn parse_with_crlf_line_endings() {
-        let input = "GIT binary patch\r\nliteral 10\r\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\r\n\r\nliteral 0\r\nKcmV+b0RR6000031\r\n\r\n";
+        let input = b"GIT binary patch\r\nliteral 10\r\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\r\n\r\nliteral 0\r\nKcmV+b0RR6000031\r\n\r\n";
         let (patch, consumed) = parse_binary_patch(input).unwrap();
 
         assert_eq!(consumed, input.len());
@@ -509,7 +510,7 @@ mod tests {
     #[test]
     fn parse_mixed_format() {
         // Git can use different encoding for each direction
-        let input = "GIT binary patch\nliteral 10\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\ndelta 18\nccmV+t0PX*P2!IH%^Z^9`00000v-trB0x!=5aR2}S\n\n";
+        let input = b"GIT binary patch\nliteral 10\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\ndelta 18\nccmV+t0PX*P2!IH%^Z^9`00000v-trB0x!=5aR2}S\n\n";
         let (patch, _) = parse_binary_patch(input).unwrap();
 
         match &patch {
@@ -550,7 +551,7 @@ mod apply_tests {
 
     #[test]
     fn apply_literal_patch() {
-        let input = "GIT binary patch\nliteral 10\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\nliteral 0\nKcmV+b0RR6000031\n\n";
+        let input = b"GIT binary patch\nliteral 10\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\nliteral 0\nKcmV+b0RR6000031\n\n";
         let (patch, _) = parse_binary_patch(input).unwrap();
 
         let modified = patch.apply(&[]).unwrap();
@@ -564,7 +565,7 @@ mod apply_tests {
     #[test]
     fn literal_size_mismatch() {
         // Declared size 99 but actual decompressed data is 10 bytes.
-        let input = "GIT binary patch\nliteral 99\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\nliteral 0\nKcmV+b0RR6000031\n\n";
+        let input = b"GIT binary patch\nliteral 99\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\n\nliteral 0\nKcmV+b0RR6000031\n\n";
         let (patch, _) = parse_binary_patch(input).unwrap();
 
         let err = patch.apply(&[]).unwrap_err();
@@ -579,7 +580,7 @@ mod apply_tests {
 
     #[test]
     fn apply_with_crlf_line_endings() {
-        let input = "GIT binary patch\r\nliteral 10\r\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\r\n\r\nliteral 0\r\nKcmV+b0RR6000031\r\n\r\n";
+        let input = b"GIT binary patch\r\nliteral 10\r\nUcmV+l0QLU>0RjUA1qKHQ2>`DEE&u=k\r\n\r\nliteral 0\r\nKcmV+b0RR6000031\r\n\r\n";
         let (patch, _) = parse_binary_patch(input).unwrap();
 
         let modified = patch.apply(&[]).unwrap();
