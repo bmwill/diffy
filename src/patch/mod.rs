@@ -99,6 +99,7 @@ impl<'a, T: ToOwned + ?Sized> Patch<'a, T> {
         &self.hunks
     }
 
+    /// Returns a patch that transforms the modified text back into the original text.
     pub fn reverse(&self) -> Patch<'_, T> {
         let hunks = self.hunks.iter().map(Hunk::reverse).collect();
         Patch {
@@ -438,6 +439,11 @@ impl<T: ?Sized> Clone for Line<'_, T> {
 }
 
 impl<T: ?Sized> Line<'_, T> {
+    /// Reverses the direction of this diff line.
+    ///
+    /// * Context lines are unchanged
+    /// * Insertions become deletions
+    /// * Deletions become insertions
     pub fn reverse(&self) -> Self {
         match self {
             Line::Context(s) => Line::Context(s),
