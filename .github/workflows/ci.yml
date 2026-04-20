@@ -30,6 +30,7 @@ jobs:
       - run: rustup toolchain install ${{ matrix.rust }} --profile minimal
       - run: cargo +${{ matrix.rust }} check --all-targets --all-features
       - run: cargo +${{ matrix.rust }} test --all-features
+      - run: make is-dirty
 
   lint:
     runs-on: ubuntu-latest
@@ -38,9 +39,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
-      - run: cargo fmt -- --check
-      - run: cargo clippy --all-targets --all-features
-      - run: cargo doc --no-deps --all-features
+      - run: make check-fmt
+      - run: make clippy
+      - run: make doc
+      - run: make is-dirty
 
   check-features:
     runs-on: ubuntu-latest
@@ -52,7 +54,7 @@ jobs:
           rustc --version
           cargo --version
       - uses: taiki-e/install-action@cargo-hack
-      - run: cargo hack check --feature-powerset --no-dev-deps
+      - run: make check-features
 
   no-std:
     runs-on: ubuntu-latest
@@ -65,7 +67,7 @@ jobs:
       # so any accidental reliance on `std` fails to link. `--skip std`
       # excludes the `std` feature from the powerset since enabling it
       # intentionally opts back into the `std` crate.
-      - run: cargo hack build --target aarch64-unknown-none --feature-powerset --no-dev-deps --skip std
+      - run: make check-no-std
 
   semver:
     runs-on: ubuntu-latest
