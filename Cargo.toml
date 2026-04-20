@@ -28,13 +28,13 @@ rustdoc-args = [
 [features]
 default = []
 std = []
-binary = ["dep:flate2", "std"]
+binary = ["dep:zlib-rs"]
 color = ["dep:anstyle"]
 
 [dependencies]
 hashbrown = { version = "0.16.1", default-features = false, features = ["default-hasher"] }
 anstyle = { version = "1.0.13", default-features = false, optional = true }
-flate2 = { version = "1.1.9", optional = true, default-features = false, features = ["zlib-rs"] }
+zlib-rs = { version = "0.6.3", optional = true, default-features = false, features = ["c-allocator"] }
 
 [dev-dependencies]
 rayon = "1.10.0"

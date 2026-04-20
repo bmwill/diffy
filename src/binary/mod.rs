@@ -11,8 +11,6 @@ mod base85;
 mod delta;
 
 #[cfg(feature = "binary")]
-use alloc::string::String;
-#[cfg(feature = "binary")]
 use alloc::vec::Vec;
 use core::{fmt, ops::Range};
 
@@ -121,26 +119,59 @@ impl<'a> BinaryPatch<'a> {
     /// See [Decoding Logic](https://diffx.org/spec/binary-diffs.html#decoding-logic)
     #[cfg(feature = "binary")]
     fn decode_data(binary_data: &BinaryData<'_>) -> Result<Vec<u8>, BinaryPatchParseError> {
-        use alloc::string::ToString;
-        use std::io::Read;
+        use alloc::vec;
+        use zlib_rs::{Inflate, InflateFlush, Status};
 
         let compressed = decode_base85_lines(binary_data.data)?;
 
-        let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
-        let mut decompressed = Vec::with_capacity(binary_data.size.min(MAX_PREALLOC) as usize);
-        decoder
-            .read_to_end(&mut decompressed)
-            .map_err(|e| BinaryPatchParseErrorKind::DecompressionFailed(e.to_string()))?;
+        // Bound the initial allocation so a bogus header can't request
+        // gigabytes upfront. The output grows as inflation produces data.
+        let initial_len = binary_data.size.clamp(1, MAX_PREALLOC) as usize;
+        let mut output: Vec<u8> = vec![0; initial_len];
 
-        if decompressed.len() as u64 != binary_data.size {
+        let mut inflate = Inflate::new(true, 15);
+        let mut in_pos = 0usize;
+        let mut out_pos = 0usize;
+
+        loop {
+            let prev_in = inflate.total_in();
+            let prev_out = inflate.total_out();
+
+            let status = inflate
+                .decompress(
+                    &compressed[in_pos..],
+                    &mut output[out_pos..],
+                    InflateFlush::Finish,
+                )
+                .map_err(|e| BinaryPatchParseErrorKind::DecompressionFailed(e.as_str()))?;
+
+            in_pos += (inflate.total_in() - prev_in) as usize;
+            out_pos += (inflate.total_out() - prev_out) as usize;
+
+            match status {
+                Status::StreamEnd => {
+                    output.truncate(out_pos);
+                    break;
+                }
+                Status::Ok | Status::BufError => {
+                    if out_pos == output.len() {
+                        // Output buffer is full: grow and keep inflating.
+                        let new_len = output.len().saturating_mul(2);
+                        output.resize(new_len, 0);
+                    }
+                }
+            }
+        }
+
+        if output.len() as u64 != binary_data.size {
             return Err(BinaryPatchParseErrorKind::DecompressedSizeMismatch {
                 expected: binary_data.size,
-                actual: decompressed.len() as u64,
+                actual: output.len() as u64,
             }
             .into());
         }
 
-        Ok(decompressed)
+        Ok(output)
     }
 }
 
@@ -259,7 +290,7 @@ pub(crate) enum BinaryPatchParseErrorKind {
 
     /// Zlib decompression failed.
     #[cfg(feature = "binary")]
-    DecompressionFailed(String),
+    DecompressionFailed(&'static str),
 
     /// Decompressed size doesn't match declared size.
     #[cfg(feature = "binary")]
