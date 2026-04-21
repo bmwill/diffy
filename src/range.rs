@@ -35,7 +35,6 @@ impl<'a, T: ?Sized> Range<'a, T> {
         self.offset
     }
 
-    #[allow(dead_code)]
     pub fn range(&self) -> ops::Range<usize> {
         self.offset..self.offset + self.len
     }
@@ -98,7 +97,6 @@ where
         Range { inner, offset, len }
     }
 
-    #[allow(dead_code)]
     pub fn empty() -> Range<'a, T> {
         Range {
             inner: T::empty(),
@@ -119,17 +117,17 @@ where
         self.as_slice().common_suffix_len(other.as_slice())
     }
 
-    #[allow(dead_code)]
+    #[cfg_attr(not(test), expect(dead_code))]
     pub fn common_overlap_len(&self, other: Range<'_, T>) -> usize {
         self.as_slice().common_overlap_len(other.as_slice())
     }
 
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     pub fn starts_with(&self, prefix: Range<'_, T>) -> bool {
         self.as_slice().starts_with(prefix.as_slice())
     }
 
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     pub fn ends_with(&self, suffix: Range<'_, T>) -> bool {
         self.as_slice().ends_with(suffix.as_slice())
     }

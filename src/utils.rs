@@ -140,7 +140,6 @@ pub trait Text: Eq + Hash + ToOwned {
     fn is_empty(&self) -> bool;
     fn len(&self) -> usize;
     fn starts_with(&self, prefix: &str) -> bool;
-    #[allow(unused)]
     fn ends_with(&self, suffix: &str) -> bool;
     fn strip_prefix(&self, prefix: &str) -> Option<&Self>;
     fn strip_suffix(&self, suffix: &str) -> Option<&Self>;
@@ -149,7 +148,6 @@ pub trait Text: Eq + Hash + ToOwned {
     fn split_at(&self, mid: usize) -> (&Self, &Self);
     fn as_str(&self) -> Option<&str>;
     fn as_bytes(&self) -> &[u8];
-    #[allow(unused)]
     fn lines(&self) -> LineIter<'_, Self>;
 
     /// Converts raw bytes into `Self::Owned`.

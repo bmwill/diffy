@@ -524,7 +524,6 @@ fn create_merge_range<'ancestor, 'ours, 'theirs, T: ?Sized + SliceLike>(
     }
 }
 
-#[allow(clippy::needless_lifetimes)]
 fn cleanup_conflicts<'ancestor, 'ours, 'theirs, T: ?Sized + SliceLike + PartialEq>(
     solution: &mut [MergeRange<'ancestor, 'ours, 'theirs, T>],
 ) {

@@ -38,7 +38,6 @@ impl ParseOpts {
     ///
     /// Useful when the caller has already positioned the input
     /// at the start of the patch content.
-    #[allow(dead_code)] // will be used by patch_set parser
     pub(crate) fn no_skip_preamble(mut self) -> Self {
         self.skip_preamble = false;
         self
@@ -145,7 +144,7 @@ pub(crate) fn parse_one<T: Text + ?Sized>(
     (Ok(Patch::new(header.0, header.1, hunks)), parser.offset())
 }
 
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 fn patch_header<'a, T: Text + ?Sized>(
     parser: &mut Parser<'a, T>,
     opts: &ParseOpts,
