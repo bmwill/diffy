@@ -644,8 +644,8 @@ fn non_utf8_escaped_filename_returns_error_on_str_parse() {
 mod error_display {
     use alloc::string::ToString;
 
-    use crate::patch::error::ParsePatchErrorKind;
     use crate::Patch;
+    use crate::patch::error::ParsePatchErrorKind;
     use snapbox::assert_data_eq;
     use snapbox::str;
 

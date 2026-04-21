@@ -1,5 +1,5 @@
-use diffy::create_patch;
 use diffy::PatchFormatter;
+use diffy::create_patch;
 
 fn main() {
     let original = "first line\nlast line";

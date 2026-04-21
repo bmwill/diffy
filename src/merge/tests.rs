@@ -1,14 +1,14 @@
 use super::*;
 
 macro_rules! assert_merge {
-    ($original:ident, $ours:ident, $theirs:ident, $kind:ident($expected:expr), $msg:literal $(,)?) => {
+    ($original:ident, $ours:ident, $theirs:ident, $kind:ident($expected:expr_2021), $msg:literal $(,)?) => {
         let solution = merge($original, $ours, $theirs);
 
         macro_rules! result {
-            (Ok, $s:expr) => {
+            (Ok, $s:expr_2021) => {
                 Result::<&str, &str>::Ok($s)
             };
-            (Err, $s:expr) => {
+            (Err, $s:expr_2021) => {
                 Result::<&str, &str>::Err($s)
             };
         }
@@ -23,10 +23,10 @@ macro_rules! assert_merge {
             merge_bytes($original.as_bytes(), $ours.as_bytes(), $theirs.as_bytes());
 
         macro_rules! result_bytes {
-            (Ok, $s:expr) => {
+            (Ok, $s:expr_2021) => {
                 Result::<&[u8], &[u8]>::Ok($s.as_bytes())
             };
-            (Err, $s:expr) => {
+            (Err, $s:expr_2021) => {
                 Result::<&[u8], &[u8]>::Err($s.as_bytes())
             };
         }

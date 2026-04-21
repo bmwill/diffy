@@ -10,7 +10,7 @@ readme = "README.md"
 keywords = ["diff", "patch", "merge"]
 categories = ["text-processing"]
 rust-version = "1.85.0"
-edition = "2021"
+edition = "2024"
 
 [package.metadata.docs.rs]
 # To build locally:

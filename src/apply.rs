@@ -58,8 +58,8 @@ impl<T: ?Sized> Clone for ImageLine<'_, T> {
 /// Apply a `Patch` to a base image
 ///
 /// ```
-/// use diffy::apply;
 /// use diffy::Patch;
+/// use diffy::apply;
 ///
 /// let s = "\
 /// --- a/ideals
@@ -110,8 +110,8 @@ pub fn apply(base_image: &str, patch: &Patch<'_, str>) -> Result<String, ApplyEr
 /// # Examples
 ///
 /// ```
-/// use diffy::apply_bytes;
 /// use diffy::Patch;
+/// use diffy::apply_bytes;
 ///
 /// let patch = Patch::from_bytes(
 ///     b"\

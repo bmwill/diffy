@@ -1,18 +1,18 @@
 //! Parse multiple file patches from a unified diff.
 
-use super::error::PatchSetParseErrorKind;
 use super::FileMode;
 use super::FileOperation;
 use super::FilePatch;
 use super::Format;
 use super::ParseOptions;
 use super::PatchSetParseError;
-use crate::binary::parse_binary_patch;
-use crate::binary::BinaryPatch;
-use crate::patch::parse::parse_one;
-use crate::utils::escaped_filename;
-use crate::utils::Text;
+use super::error::PatchSetParseErrorKind;
 use crate::Patch;
+use crate::binary::BinaryPatch;
+use crate::binary::parse_binary_patch;
+use crate::patch::parse::parse_one;
+use crate::utils::Text;
+use crate::utils::escaped_filename;
 
 use alloc::borrow::Cow;
 use alloc::string::String;
@@ -610,7 +610,7 @@ fn parse_unquoted_diff_git_path<'a, T: Text + ?Sized>(
     let mut best_match = None;
     let mut longest_path_len = 0;
 
-    for (i, _) in bytes.iter().enumerate().filter(|(_, &b)| b == b' ') {
+    for (i, _) in bytes.iter().enumerate().filter(|&(_, &b)| b == b' ') {
         let (left, right_with_space) = line.split_at(i);
         // skip the space
         let (_, right) = right_with_space.split_at(1);
