@@ -318,8 +318,6 @@ impl From<BinaryPatchParseErrorKind> for BinaryPatchParseError {
 #[non_exhaustive]
 pub(crate) enum BinaryPatchParseErrorKind {
     /// Missing or invalid "GIT binary patch" header.
-    // TODO: Switch to #[expect(dead_code)] when MSRV >= 1.81
-    #[cfg_attr(not(feature = "binary"), allow(dead_code))]
     InvalidHeader,
 
     /// First binary block (forward) not found.
@@ -329,13 +327,11 @@ pub(crate) enum BinaryPatchParseErrorKind {
     MissingReverseBlock,
 
     /// No binary data available (marker-only patch).
-    // TODO: Switch to #[expect(dead_code)] when MSRV >= 1.81
-    #[cfg_attr(not(feature = "binary"), allow(dead_code))]
+    #[cfg_attr(not(feature = "binary"), expect(dead_code))]
     NoBinaryData,
 
     /// Invalid line length indicator in Base85 data.
-    // TODO: Switch to #[expect(dead_code)] when MSRV >= 1.81
-    #[cfg_attr(not(feature = "binary"), allow(dead_code))]
+    #[cfg_attr(not(feature = "binary"), expect(dead_code))]
     InvalidLineLengthIndicator,
 
     /// Base85 decoding failed.
