@@ -12,9 +12,9 @@ use alloc::borrow::Cow;
 use alloc::borrow::ToOwned;
 use core::fmt;
 
+use crate::Patch;
 use crate::binary::BinaryPatch;
 use crate::utils::Text;
-use crate::Patch;
 
 pub use error::PatchSetParseError;
 use error::PatchSetParseErrorKind;

@@ -1,10 +1,10 @@
 use super::*;
+use crate::PatchFormatter;
 use crate::apply::apply;
 use crate::diff::Diff;
 use crate::diff::DiffRange;
 use crate::patch::Patch;
 use crate::range::Range;
-use crate::PatchFormatter;
 use alloc::format;
 use alloc::string::ToString;
 use alloc::vec;
@@ -59,7 +59,7 @@ macro_rules! assert_diff_range {
             expected, $solution,
         );
     };
-    ([$($kind:ident($text:literal)),* $(,)?], $solution:ident, $msg:expr $(,)?) => {
+    ([$($kind:ident($text:literal)),* $(,)?], $solution:ident, $msg:expr_2021 $(,)?) => {
         let expected = &[$(Diff::$kind($text)),*];
         assert!(
             same_diffs(expected, &$solution),
@@ -91,7 +91,7 @@ macro_rules! assert_diff {
             expected, $solution,
         );
     };
-    ([$($kind:ident($text:literal)),* $(,)?], $solution:ident, $msg:expr $(,)?) => {
+    ([$($kind:ident($text:literal)),* $(,)?], $solution:ident, $msg:expr_2021 $(,)?) => {
         let expected: &[_] = &[$(Diff::$kind($text)),*];
         assert_eq!(
             expected,
@@ -328,7 +328,7 @@ fn test_compact() {
 }
 
 macro_rules! assert_patch {
-    ($diff_options:expr, $old:ident, $new:ident, $expected:ident $(,)?) => {
+    ($diff_options:expr_2021, $old:ident, $new:ident, $expected:ident $(,)?) => {
         let patch = $diff_options.create_patch($old, $new);
         let bpatch = $diff_options.create_patch_bytes($old.as_bytes(), $new.as_bytes());
         let patch_str = patch.to_string();

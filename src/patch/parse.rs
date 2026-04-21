@@ -1,15 +1,15 @@
 //! Parse a Patch
 
-use super::error::ParsePatchError;
-use super::error::ParsePatchErrorKind;
 use super::Hunk;
 use super::HunkRange;
 use super::Line;
 use super::NO_NEWLINE_AT_EOF;
+use super::error::ParsePatchError;
+use super::error::ParsePatchErrorKind;
 use crate::patch::Patch;
-use crate::utils::escaped_filename;
 use crate::utils::LineIter;
 use crate::utils::Text;
+use crate::utils::escaped_filename;
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 

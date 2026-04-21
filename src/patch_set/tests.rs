@@ -4,10 +4,10 @@ use alloc::borrow::ToOwned;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
-use super::error::PatchSetParseErrorKind;
 use super::FileOperation;
 use super::ParseOptions;
 use super::PatchSet;
+use super::error::PatchSetParseErrorKind;
 
 mod file_operation {
     use super::*;

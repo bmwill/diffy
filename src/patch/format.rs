@@ -6,20 +6,20 @@ use core::fmt::Result;
 #[cfg(feature = "std")]
 use std::io;
 
-#[cfg(feature = "color")]
-use super::style;
 use super::Hunk;
 use super::Line;
-use super::Patch;
 use super::NO_NEWLINE_AT_EOF;
+use super::Patch;
+#[cfg(feature = "color")]
+use super::style;
 
 /// Formats patches for display or writing into byte streams.
 ///
 /// # Examples
 ///
 /// ```
-/// use diffy::create_patch;
 /// use diffy::PatchFormatter;
+/// use diffy::create_patch;
 ///
 /// let patch = create_patch("alpha\nbeta\n", "ALPHA\nbeta\n");
 /// let formatter = PatchFormatter::new().missing_newline_message(false);
