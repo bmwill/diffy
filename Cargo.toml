@@ -35,7 +35,7 @@ binary = ["dep:zlib-rs"]
 color = ["dep:anstyle"]
 
 [dependencies]
-hashbrown = { version = "0.16.1", default-features = false, features = ["default-hasher"] }
+hashbrown = { version = "0.17.0", default-features = false, features = ["default-hasher"] }
 anstyle = { version = "1.0.13", default-features = false, optional = true }
 zlib-rs = { version = "0.6.3", optional = true, default-features = false, features = ["c-allocator"] }
 
