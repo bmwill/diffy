@@ -9,7 +9,7 @@ repository = "https://github.com/bmwill/diffy"
 readme = "README.md"
 keywords = ["diff", "patch", "merge"]
 categories = ["text-processing"]
-rust-version = "1.75.0"
+rust-version = "1.85.0"
 edition = "2021"
 
 [package.metadata.docs.rs]
