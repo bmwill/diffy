@@ -90,7 +90,8 @@ pub fn decode_into(input: &[u8], output: &mut impl Extend<u8>) -> Result<(), Bas
 /// Callers encoding data where the byte count isn't a multiple of 4
 /// must handle padding at a higher level.
 /// For example, via a length indicator in Git binary patch format.
-#[allow(dead_code)] // will be used for patch formatting
+// will be used for patch formatting
+#[cfg_attr(not(test), expect(dead_code))]
 pub fn encode_into(input: &[u8], output: &mut impl Extend<char>) -> Result<(), Base85Error> {
     if input.len() % 4 != 0 {
         return Err(Base85Error::InvalidLength);

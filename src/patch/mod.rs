@@ -146,7 +146,7 @@ impl<'a> Patch<'a, str> {
     ///
     /// let patch = Patch::from_str(s).unwrap();
     /// ```
-    #[allow(clippy::should_implement_trait)]
+    #[expect(clippy::should_implement_trait)]
     pub fn from_str(s: &'a str) -> Result<Patch<'a, str>, ParsePatchError> {
         parse::parse(s)
     }
