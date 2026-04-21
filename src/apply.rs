@@ -20,9 +20,7 @@ impl fmt::Display for ApplyError {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for ApplyError {}
+impl core::error::Error for ApplyError {}
 
 #[derive(Debug)]
 enum ImageLine<'a, T: ?Sized> {

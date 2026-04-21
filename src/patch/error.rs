@@ -36,9 +36,7 @@ impl fmt::Display for ParsePatchError {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for ParsePatchError {}
+impl core::error::Error for ParsePatchError {}
 
 impl From<ParsePatchErrorKind> for ParsePatchError {
     fn from(kind: ParsePatchErrorKind) -> Self {

@@ -43,9 +43,7 @@ impl fmt::Display for PatchSetParseError {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for PatchSetParseError {}
+impl core::error::Error for PatchSetParseError {}
 
 impl From<PatchSetParseErrorKind> for PatchSetParseError {
     fn from(kind: PatchSetParseErrorKind) -> Self {
