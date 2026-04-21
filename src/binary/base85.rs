@@ -46,9 +46,7 @@ impl fmt::Display for Base85Error {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for Base85Error {}
+impl core::error::Error for Base85Error {}
 
 /// Decodes a Base85 string to the provided output.
 ///

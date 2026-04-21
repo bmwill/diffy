@@ -22,7 +22,7 @@
 //! This crate is `no_std` by default.
 //! Enable [Cargo features] as needed:
 //!
-//! - `std` for writer-based formatting and `std::error::Error` impls
+//! - `std` for std::io::Write-based formatting impls
 //! - `color` for ANSI-colored patch formatting
 //! - `binary` for applying parsed git binary patches
 //!

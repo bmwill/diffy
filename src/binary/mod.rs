@@ -291,9 +291,7 @@ impl fmt::Display for BinaryPatchParseError {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for BinaryPatchParseError {}
+impl core::error::Error for BinaryPatchParseError {}
 
 #[cfg(feature = "binary")]
 impl From<base85::Base85Error> for BinaryPatchParseError {
