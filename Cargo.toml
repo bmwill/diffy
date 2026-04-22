@@ -49,6 +49,11 @@ name = "patch_formatter"
 required-features = ["std", "color"]
 doc-scrape-examples = true
 
+[[example]]
+name = "apply"
+required-features = ["binary"]
+doc-scrape-examples = true
+
 [[test]]
 name = "compat"
 required-features = ["binary"]
