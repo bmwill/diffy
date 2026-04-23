@@ -24,29 +24,17 @@ const NO_NEWLINE_AT_EOF: &str = "\\ No newline at end of file";
 
 /// Representation of all the differences between two files
 ///
-/// # Parsing modes
+/// # Parsing behavior
 ///
-/// `Patch` provides two parsing modes with different strictness levels,
-/// modeled after the behavior of GNU patch and `git apply`:
+/// [`from_str`] and [`from_bytes`] follow `git apply` behavior:
+/// trailing non-patch content after a complete hunk is ignored,
+/// but orphaned hunk headers hidden behind trailing content are rejected.
 ///
-/// | Scenario                          | GNU patch   | git apply | [`from_str`] | [`from_str_strict`] |
-/// |-----------------------------------|-------------|-----------|--------------|---------------------|
-/// | Junk after all hunks are complete | Ignores     | Ignores   | Ignores      | Ignores             |
-/// | Junk between hunks                | Ignores[^1] | Errors    | Ignores[^1]  | Errors              |
-///
-/// [^1]: "Ignores" here means silently stopping at the junk.
-///     Only hunks before it are parsed; later hunks are dropped.
-///
-/// [`from_str`] and [`from_bytes`] follow GNU patch behavior,
-/// silently ignoring non-patch content after a hunk's line counts are satisfied.
-///
-/// [`from_str_strict`] and [`from_bytes_strict`] follow `git apply` behavior,
-/// additionally rejecting orphaned hunk headers hidden behind trailing content.
+/// For parsing multi-file patches, use [`PatchSet`] instead.
 ///
 /// [`from_str`]: Patch::from_str
 /// [`from_bytes`]: Patch::from_bytes
-/// [`from_str_strict`]: Patch::from_str_strict
-/// [`from_bytes_strict`]: Patch::from_bytes_strict
+/// [`PatchSet`]: crate::patch_set::PatchSet
 #[derive(PartialEq, Eq)]
 pub struct Patch<'a, T: ToOwned + ?Sized> {
     // TODO GNU patch is able to parse patches without filename headers.
@@ -150,30 +138,12 @@ impl<'a> Patch<'a, str> {
     pub fn from_str(s: &'a str) -> Result<Patch<'a, str>, ParsePatchError> {
         parse::parse(s)
     }
-
-    /// Parse a `Patch` from a string in strict mode
-    ///
-    /// Unlike [`Patch::from_str`],
-    /// this rejects orphaned hunk headers hidden after trailing content,
-    /// matching `git apply` behavior.
-    pub fn from_str_strict(s: &'a str) -> Result<Patch<'a, str>, ParsePatchError> {
-        parse::parse_strict(s)
-    }
 }
 
 impl<'a> Patch<'a, [u8]> {
     /// Parse a `Patch` from bytes
     pub fn from_bytes(s: &'a [u8]) -> Result<Patch<'a, [u8]>, ParsePatchError> {
         parse::parse_bytes(s)
-    }
-
-    /// Parse a `Patch` from bytes in strict mode
-    ///
-    /// Unlike [`Patch::from_bytes`],
-    /// this rejects orphaned hunk headers hidden after trailing content,
-    /// matching `git apply` behavior.
-    pub fn from_bytes_strict(s: &'a [u8]) -> Result<Patch<'a, [u8]>, ParsePatchError> {
-        parse::parse_bytes_strict(s)
     }
 }
 

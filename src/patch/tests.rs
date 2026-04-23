@@ -1,8 +1,6 @@
 use super::error::ParsePatchErrorKind;
 use super::parse::parse;
 use super::parse::parse_bytes;
-use super::parse::parse_bytes_strict;
-use super::parse::parse_strict;
 use alloc::format;
 use alloc::string::ToString;
 
@@ -103,12 +101,10 @@ some trailing garbage
 }
 
 #[test]
-fn garbage_between_hunks_stops_parsing() {
-    // GNU patch would try to parse the second @@ as a new patch
-    // and fail because there's no `---` header.
-    //
-    // diffy `Patch` is a single patch parser, so should just ignore everything
-    // after the first complete hunk when garbage is encountered.
+fn garbage_between_hunks_rejects_orphaned_header() {
+    // Junk between hunks hides the second @@ header.
+    // This is rejected because the orphaned hunk header
+    // indicates a malformed patch.
     let s = "\
 --- a/file.txt
 +++ b/file.txt
@@ -120,9 +116,10 @@ not a hunk line
 -b
 +B
 ";
-    let patch = parse(s).unwrap();
-    // Only first hunk is parsed; second @@ is ignored as garbage
-    assert_eq!(patch.hunks().len(), 1);
+    assert_eq!(
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::OrphanedHunkHeader,
+    );
 }
 
 #[test]
@@ -146,12 +143,12 @@ trailing garbage
 
 // Strict mode (git-apply behavior): rejects orphaned hunk headers
 // hidden behind trailing content, but allows plain trailing junk.
-mod strict_mode {
+mod trailing_content {
     use super::*;
 
     #[test]
     fn trailing_junk_allowed() {
-        // git apply accepts trailing junk after all hunks
+        // Trailing junk after all hunks is accepted
         let s = "\
 --- a/file.txt
 +++ b/file.txt
@@ -160,7 +157,7 @@ mod strict_mode {
 +new
 this is trailing garbage
 ";
-        let patch = parse_strict(s).unwrap();
+        let patch = parse(s).unwrap();
         assert_eq!(patch.hunks().len(), 1);
     }
 
@@ -174,13 +171,13 @@ this is trailing garbage
 +new
 this is trailing garbage
 ";
-        let patch = parse_bytes_strict(&s[..]).unwrap();
+        let patch = parse_bytes(&s[..]).unwrap();
         assert_eq!(patch.hunks().len(), 1);
     }
 
     #[test]
     fn orphaned_hunk_header_after_junk() {
-        // Junk between hunks hides the second @@ — strict rejects this
+        // Junk between hunks hides the second @@ — rejected
         // since git apply errors with "patch fragment without header".
         let s = "\
 --- a/file.txt
@@ -194,7 +191,7 @@ not a hunk line
 +B
 ";
         assert_eq!(
-            parse_strict(s).unwrap_err().kind,
+            parse(s).unwrap_err().kind,
             ParsePatchErrorKind::OrphanedHunkHeader,
         );
     }
@@ -208,7 +205,7 @@ not a hunk line
 -old
 +new
 ";
-        let patch = parse_strict(s).unwrap();
+        let patch = parse(s).unwrap();
         assert_eq!(patch.hunks().len(), 1);
     }
 
@@ -224,7 +221,7 @@ not a hunk line
 -b
 +B
 ";
-        let patch = parse_strict(s).unwrap();
+        let patch = parse(s).unwrap();
         assert_eq!(patch.hunks().len(), 2);
     }
 
@@ -240,7 +237,7 @@ garbage before hunk complete
  line 3
 ";
         assert_eq!(
-            parse_strict(s).unwrap_err().kind,
+            parse(s).unwrap_err().kind,
             ParsePatchErrorKind::UnexpectedHunkLine,
         );
     }
