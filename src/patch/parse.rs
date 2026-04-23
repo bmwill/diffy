@@ -273,7 +273,7 @@ fn hunk_header<T: Text + ?Sized>(input: &T) -> Result<(HunkRange, HunkRange, Opt
 }
 
 fn range<T: Text + ?Sized>(s: &T) -> Result<HunkRange> {
-    let (start, len) = if let Some((start, len)) = s.split_at_exclusive(",") {
+    let (start, len): (usize, usize) = if let Some((start, len)) = s.split_at_exclusive(",") {
         (
             start.parse().ok_or(ParsePatchErrorKind::InvalidRange)?,
             len.parse().ok_or(ParsePatchErrorKind::InvalidRange)?,
@@ -281,6 +281,11 @@ fn range<T: Text + ?Sized>(s: &T) -> Result<HunkRange> {
     } else {
         (s.parse().ok_or(ParsePatchErrorKind::InvalidRange)?, 1)
     };
+
+    // reject ranges that overflow
+    start
+        .checked_add(len)
+        .ok_or(ParsePatchErrorKind::InvalidRange)?;
 
     Ok(HunkRange::new(start, len))
 }
