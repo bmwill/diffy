@@ -1,5 +1,63 @@
 # Changelog
 
+## [0.5.0] - Unreleased
+
+This is a major release introducing multi-file patch support,
+git binary diff handling, and `no_std` compatibility.
+
+### Breaking Changes
+
+- [#73](https://github.com/bmwill/diffy/pull/73)
+  The crate is now `no_std` by default.
+  `Patch::to_bytes()` and `PatchFormatter::write_patch_into()` now
+  require the `std` feature. Add `features = ["std"]` to restore them.
+- [#46](https://github.com/bmwill/diffy/pull/46)
+  Color support is now behind the `color` feature flag.
+  Previously color was always available. Now `PatchFormatter::with_color()`
+  requires enabling the `color` feature. The underlying implementation
+  switched from `nu-ansi-term` to `anstyle`.
+
+### Added
+
+- [#55](https://github.com/bmwill/diffy/pull/55)
+  [#59](https://github.com/bmwill/diffy/pull/59)
+  [#61](https://github.com/bmwill/diffy/pull/61)
+  [#66](https://github.com/bmwill/diffy/pull/66)
+  [#74](https://github.com/bmwill/diffy/pull/74)
+  [#76](https://github.com/bmwill/diffy/pull/76)
+  Multi-file patch support.
+  Parse and apply unified diff and `git diff` output containing
+  multiple files, including create, delete, modify, rename, and copy
+  operations. Git binary patches (`literal` and `delta`) are supported
+  behind the `binary` feature flag.
+- [#80](https://github.com/bmwill/diffy/pull/80)
+  New `apply` example demonstrating multi-file patch application.
+
+### Fixed
+
+- [#51](https://github.com/bmwill/diffy/pull/51)
+  [#82](https://github.com/bmwill/diffy/pull/82)
+  `Patch::from_str` / `from_bytes` no longer error on trailing
+  non-patch content after a complete hunk,
+  matching GNU patch and `git apply` behavior.
+- [#65](https://github.com/bmwill/diffy/pull/65)
+  Return an error instead of panicking on non-UTF-8 escaped filenames
+  when parsing as `str`.
+- [#47](https://github.com/bmwill/diffy/pull/47)
+  Fix quoted filename escaping: handle `\a`, `\b`, `\f`, `\v`,
+  3-digit octal escapes (`\0xx`–`\3xx`), and quote all control characters.
+- [#83](https://github.com/bmwill/diffy/pull/83)
+  Fix arithmetic overflow panic when parsing hunk headers
+  with extremely large range values.
+
+### Changed
+
+- [#79](https://github.com/bmwill/diffy/pull/79)
+  Bump MSRV to 1.85 (Rust 2024 edition).
+- [#48](https://github.com/bmwill/diffy/pull/48)
+  [#50](https://github.com/bmwill/diffy/pull/50)
+  Parse error messages now show the byte offset where parsing failed.
+
 ## [0.4.2] - 2025-01-29
 
 ### Added
@@ -82,6 +140,7 @@
 ## [0.1.0] - 2020-06-30
 - Initial release.
 
+[0.5.0]: https://github.com/bmwill/diffy/releases/tag/0.5.0
 [0.4.2]: https://github.com/bmwill/diffy/releases/tag/0.4.2
 [0.4.1]: https://github.com/bmwill/diffy/releases/tag/0.4.1
 [0.4.0]: https://github.com/bmwill/diffy/releases/tag/0.4.0
