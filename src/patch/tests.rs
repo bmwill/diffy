@@ -638,6 +638,23 @@ fn non_utf8_escaped_filename_returns_error_on_str_parse() {
     );
 }
 
+#[test]
+#[should_panic = "attempt to add with overflow"]
+fn hunk_range_overflow() {
+    let s = format!(
+        "\
+--- a/file.txt
++++ b/file.txt
+@@ -{},1 +1 @@
+-old
++new
+",
+        usize::MAX,
+    );
+    let patch = crate::Patch::from_str(&s).unwrap();
+    let _ = patch.hunks()[0].old_range().end();
+}
+
 mod error_display {
     use alloc::string::ToString;
 
