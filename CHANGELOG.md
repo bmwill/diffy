@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.5.0] - Unreleased
+## [0.5.0]- 2026-04-27
 
 This is a major release introducing multi-file patch support,
 git binary diff handling, and `no_std` compatibility.
