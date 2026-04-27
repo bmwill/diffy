@@ -272,7 +272,8 @@ impl BinaryPatchParseError {
     }
 
     /// Returns the byte range in the input where the error occurred.
-    pub fn span(&self) -> Option<Range<usize>> {
+    #[expect(unused)]
+    pub(crate) fn span(&self) -> Option<Range<usize>> {
         self.span.clone()
     }
 }
