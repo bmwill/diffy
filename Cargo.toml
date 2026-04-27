@@ -11,7 +11,7 @@ keywords = ["diff", "patch", "merge"]
 categories = ["text-processing"]
 rust-version = "1.85.0"
 edition = "2024"
-exclude = ["/fuzz/"]
+exclude = ["/fuzz/", "/tests/"]
 
 [package.metadata.docs.rs]
 # To build locally:
