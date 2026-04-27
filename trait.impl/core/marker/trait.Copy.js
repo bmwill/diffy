@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["diffy",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.95.0/core/marker/trait.Copy.html\" title=\"trait core::marker::Copy\">Copy</a> for <a class=\"enum\" href=\"diffy/binary/enum.BinaryBlockKind.html\" title=\"enum diffy::binary::BinaryBlockKind\">BinaryBlockKind</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.95.0/core/marker/trait.Copy.html\" title=\"trait core::marker::Copy\">Copy</a> for <a class=\"enum\" href=\"diffy/enum.ConflictStyle.html\" title=\"enum diffy::ConflictStyle\">ConflictStyle</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.95.0/core/marker/trait.Copy.html\" title=\"trait core::marker::Copy\">Copy</a> for <a class=\"enum\" href=\"diffy/patch_set/enum.FileMode.html\" title=\"enum diffy::patch_set::FileMode\">FileMode</a>",0],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.95.0/core/marker/trait.Copy.html\" title=\"trait core::marker::Copy\">Copy</a> for <a class=\"struct\" href=\"diffy/struct.HunkRange.html\" title=\"struct diffy::HunkRange\">HunkRange</a>",0],["impl&lt;T: ?<a class=\"trait\" href=\"https://doc.rust-lang.org/1.95.0/core/marker/trait.Sized.html\" title=\"trait core::marker::Sized\">Sized</a>&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.95.0/core/marker/trait.Copy.html\" title=\"trait core::marker::Copy\">Copy</a> for <a class=\"enum\" href=\"diffy/enum.Line.html\" title=\"enum diffy::Line\">Line</a>&lt;'_, T&gt;",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[1460]}

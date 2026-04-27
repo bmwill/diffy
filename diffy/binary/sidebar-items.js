@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BinaryBlockKind","BinaryPatch"],"struct":["BinaryBlock","BinaryData","BinaryPatchParseError"]};

@@ -1,0 +1,103 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Apply a non-utf8 `Patch` to a base image"><title>apply_bytes in diffy - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="diffy" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0 (59807616e 2026-04-14)" data-channel="1.95.0" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-5013f961.js"></script><script defer src="../static.files/scrape-examples-2bbcccac.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">apply_bytes</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../diffy/index.html">diffy</a><span class="version">0.5.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">apply_<wbr>bytes</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#examples" title="Examples">Examples</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="index.html">In crate diffy</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="index.html">diffy</a></div><h1>Function <span class="fn">apply_<wbr>bytes</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/diffy/apply.rs.html#137-151">Source</a> </span></div><pre class="rust item-decl"><code>pub fn apply_bytes(
+    base_image: &amp;[<a class="primitive" href="https://doc.rust-lang.org/1.95.0/std/primitive.u8.html">u8</a>],
+    patch: &amp;<a class="struct" href="struct.Patch.html" title="struct diffy::Patch">Patch</a>&lt;'_, [<a class="primitive" href="https://doc.rust-lang.org/1.95.0/std/primitive.u8.html">u8</a>]&gt;,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.95.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.95.0/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.95.0/std/primitive.u8.html">u8</a>&gt;, <a class="struct" href="struct.ApplyError.html" title="struct diffy::ApplyError">ApplyError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Apply a non-utf8 <code>Patch</code> to a base image</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>diffy::Patch;
+<span class="kw">use </span>diffy::apply_bytes;
+
+<span class="kw">let </span>patch = Patch::from_bytes(
+    <span class="string">b"\
+--- a/ideals
++++ b/ideals
+@@ -1 +1,2 @@
+ First Ideal
++Second Ideal
+"</span>,
+)
+.unwrap();
+
+<span class="kw">let </span>applied = apply_bytes(<span class="string">b"First Ideal\n"</span>, <span class="kw-2">&amp;</span>patch).unwrap();
+
+<span class="macro">assert_eq!</span>(
+    applied,
+    <span class="string">b"\
+First Ideal
+Second Ideal
+"</span>,
+);</code></pre></div></div></details><div class="docblock scraped-example-list"><span></span><h5 id="scraped-examples"><a href="#scraped-examples">Examples found in repository</a><a class="scrape-help" href="../scrape-examples-help.html">?</a></h5><div class="scraped-example" data-locs="[[[21,21],&#34;../src/apply/apply.rs.html#63&#34;,&#34;line 63&#34;],[[40,40],&#34;../src/apply/apply.rs.html#82&#34;,&#34;line 82&#34;]]"><div class="scraped-example-title">examples/apply.rs (<a href="../src/apply/apply.rs.html#63">line 63</a>)</div><div class="example-wrap digits-3"><pre class="rust"><code><span data-nosnippet>42</span><span class="kw">fn </span>apply_patch_file(patch_file: <span class="kw-2">&amp;</span>Path, dst: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;(), Box&lt;<span class="kw">dyn </span>std::error::Error&gt;&gt; {
+<span data-nosnippet>43</span>    <span class="kw">let </span>content = fs::read(patch_file)<span class="question-mark">?</span>;
+<span data-nosnippet>44</span>
+<span data-nosnippet>45</span>    <span class="kw">let </span>patches = PatchSet::parse_bytes(<span class="kw-2">&amp;</span>content, ParseOptions::gitdiff());
+<span data-nosnippet>46</span>
+<span data-nosnippet>47</span>    <span class="kw">for </span>file_patch <span class="kw">in </span>patches {
+<span data-nosnippet>48</span>        <span class="kw">let </span>file_patch = file_patch<span class="question-mark">?</span>;
+<span data-nosnippet>49</span>        <span class="kw">let </span>operation = {
+<span data-nosnippet>50</span>            <span class="kw">let </span>op = file_patch.operation();
+<span data-nosnippet>51</span>            <span class="comment">// Rename/Copy paths come from git headers without a/b prefix.
+<span data-nosnippet>52</span>            </span><span class="kw">let </span>strip = <span class="kw">match </span>op {
+<span data-nosnippet>53</span>                FileOperation::Rename { .. } | FileOperation::Copy { .. } =&gt; <span class="number">0</span>,
+<span data-nosnippet>54</span>                <span class="kw">_ </span>=&gt; <span class="number">1</span>,
+<span data-nosnippet>55</span>            };
+<span data-nosnippet>56</span>            op.strip_prefix(strip)
+<span data-nosnippet>57</span>        };
+<span data-nosnippet>58</span>
+<span data-nosnippet>59</span>        <span class="kw">match </span>operation {
+<span data-nosnippet>60</span>            FileOperation::Create(path) =&gt; {
+<span data-nosnippet>61</span>                <span class="kw">let </span>target = dst.join(path_from_bytes(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>);
+<span data-nosnippet>62</span>                <span class="kw">let </span>patched = <span class="kw">match </span>file_patch.patch() {
+<span data-nosnippet>63</span>                    PatchKind::Text(patch) =&gt; <span class="highlight focus">apply_bytes</span>(<span class="kw-2">&amp;</span>[], patch)<span class="question-mark">?</span>,
+<span data-nosnippet>64</span>                    PatchKind::Binary(BinaryPatch::Marker) =&gt; <span class="kw">continue</span>,
+<span data-nosnippet>65</span>                    PatchKind::Binary(patch) =&gt; patch.apply(<span class="kw-2">&amp;</span>[])<span class="question-mark">?</span>,
+<span data-nosnippet>66</span>                };
+<span data-nosnippet>67</span>                create_parent_dirs(<span class="kw-2">&amp;</span>target)<span class="question-mark">?</span>;
+<span data-nosnippet>68</span>                fs::write(<span class="kw-2">&amp;</span>target, patched)<span class="question-mark">?</span>;
+<span data-nosnippet>69</span>                <span class="macro">eprintln!</span>(<span class="string">"create {}"</span>, target.display());
+<span data-nosnippet>70</span>            }
+<span data-nosnippet>71</span>            FileOperation::Delete(path) =&gt; {
+<span data-nosnippet>72</span>                <span class="kw">let </span>target = dst.join(path_from_bytes(<span class="kw-2">&amp;</span>path)<span class="question-mark">?</span>);
+<span data-nosnippet>73</span>                fs::remove_file(<span class="kw-2">&amp;</span>target)<span class="question-mark">?</span>;
+<span data-nosnippet>74</span>                <span class="macro">eprintln!</span>(<span class="string">"delete {}"</span>, target.display());
+<span data-nosnippet>75</span>            }
+<span data-nosnippet>76</span>            FileOperation::Modify { original, modified } =&gt; {
+<span data-nosnippet>77</span>                <span class="kw">let </span>src_path = dst.join(path_from_bytes(<span class="kw-2">&amp;</span>original)<span class="question-mark">?</span>);
+<span data-nosnippet>78</span>                <span class="kw">let </span>dst_path = dst.join(path_from_bytes(<span class="kw-2">&amp;</span>modified)<span class="question-mark">?</span>);
+<span data-nosnippet>79</span>                <span class="kw">let </span>patched = <span class="kw">match </span>file_patch.patch() {
+<span data-nosnippet>80</span>                    PatchKind::Text(patch) =&gt; {
+<span data-nosnippet>81</span>                        <span class="kw">let </span>base = fs::read(<span class="kw-2">&amp;</span>src_path)<span class="question-mark">?</span>;
+<span data-nosnippet>82</span>                        <span class="highlight">apply_bytes</span>(<span class="kw-2">&amp;</span>base, patch)<span class="question-mark">?
+<span data-nosnippet>83</span>                    </span>}
+<span data-nosnippet>84</span>                    PatchKind::Binary(BinaryPatch::Marker) =&gt; <span class="kw">continue</span>,
+<span data-nosnippet>85</span>                    PatchKind::Binary(patch) =&gt; {
+<span data-nosnippet>86</span>                        <span class="kw">let </span>base = fs::read(<span class="kw-2">&amp;</span>src_path)<span class="question-mark">?</span>;
+<span data-nosnippet>87</span>                        patch.apply(<span class="kw-2">&amp;</span>base)<span class="question-mark">?
+<span data-nosnippet>88</span>                    </span>}
+<span data-nosnippet>89</span>                };
+<span data-nosnippet>90</span>                create_parent_dirs(<span class="kw-2">&amp;</span>dst_path)<span class="question-mark">?</span>;
+<span data-nosnippet>91</span>                fs::write(<span class="kw-2">&amp;</span>dst_path, patched)<span class="question-mark">?</span>;
+<span data-nosnippet>92</span>                <span class="kw">if </span>src_path != dst_path {
+<span data-nosnippet>93</span>                    fs::remove_file(<span class="kw-2">&amp;</span>src_path)<span class="question-mark">?</span>;
+<span data-nosnippet>94</span>                    <span class="macro">eprintln!</span>(<span class="string">"rename {} -&gt; {}"</span>, src_path.display(), dst_path.display());
+<span data-nosnippet>95</span>                } <span class="kw">else </span>{
+<span data-nosnippet>96</span>                    <span class="macro">eprintln!</span>(<span class="string">"modify {}"</span>, dst_path.display());
+<span data-nosnippet>97</span>                }
+<span data-nosnippet>98</span>            }
+<span data-nosnippet>99</span>            FileOperation::Rename { from, to } =&gt; {
+<span data-nosnippet>100</span>                <span class="kw">let </span>src_path = dst.join(path_from_bytes(<span class="kw-2">&amp;</span>from)<span class="question-mark">?</span>);
+<span data-nosnippet>101</span>                <span class="kw">let </span>dst_path = dst.join(path_from_bytes(<span class="kw-2">&amp;</span>to)<span class="question-mark">?</span>);
+<span data-nosnippet>102</span>                create_parent_dirs(<span class="kw-2">&amp;</span>dst_path)<span class="question-mark">?</span>;
+<span data-nosnippet>103</span>                fs::rename(<span class="kw-2">&amp;</span>src_path, <span class="kw-2">&amp;</span>dst_path)<span class="question-mark">?</span>;
+<span data-nosnippet>104</span>                <span class="macro">eprintln!</span>(<span class="string">"rename {} -&gt; {}"</span>, src_path.display(), dst_path.display());
+<span data-nosnippet>105</span>            }
+<span data-nosnippet>106</span>            FileOperation::Copy { from, to } =&gt; {
+<span data-nosnippet>107</span>                <span class="kw">let </span>src_path = dst.join(path_from_bytes(<span class="kw-2">&amp;</span>from)<span class="question-mark">?</span>);
+<span data-nosnippet>108</span>                <span class="kw">let </span>dst_path = dst.join(path_from_bytes(<span class="kw-2">&amp;</span>to)<span class="question-mark">?</span>);
+<span data-nosnippet>109</span>                create_parent_dirs(<span class="kw-2">&amp;</span>dst_path)<span class="question-mark">?</span>;
+<span data-nosnippet>110</span>                fs::copy(<span class="kw-2">&amp;</span>src_path, <span class="kw-2">&amp;</span>dst_path)<span class="question-mark">?</span>;
+<span data-nosnippet>111</span>                <span class="macro">eprintln!</span>(<span class="string">"copy {} -&gt; {}"</span>, src_path.display(), dst_path.display());
+<span data-nosnippet>112</span>            }
+<span data-nosnippet>113</span>        }
+<span data-nosnippet>114</span>    }
+<span data-nosnippet>115</span>
+<span data-nosnippet>116</span>    <span class="prelude-val">Ok</span>(())
+<span data-nosnippet>117</span>}</code></pre></div></div></div></section></div></main></body></html>
