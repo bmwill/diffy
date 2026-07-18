@@ -604,6 +604,9 @@ fn add_conflict_marker(
     marker_len: usize,
     filename: Option<&str>,
 ) {
+    if !output.is_empty() && !output.ends_with('\n') {
+        output.push('\n');
+    }
     for _ in 0..marker_len {
         output.push(marker);
     }
@@ -684,6 +687,9 @@ fn add_conflict_marker_bytes(
     marker_len: usize,
     filename: Option<&[u8]>,
 ) {
+    if !output.is_empty() && output.last() != Some(&b'\n') {
+        output.push(b'\n');
+    }
     for _ in 0..marker_len {
         output.push(marker);
     }

@@ -404,3 +404,29 @@ fn delete_and_insert_conflict() {
         "MergeRange (Theirs::delete, Ours::insert) conflict"
     );
 }
+
+#[test]
+fn conflict_hunks_without_trailing_newline_keep_markers_on_own_lines() {
+    let base = "This is line 1.\nThis is line 2.";
+    let ours = "This is line 1.\nThis is line 2 changed.";
+    let theirs = "This is line 1.\nThis is line 2 also changed.";
+
+    let expected = "\
+This is line 1.
+<<<<<<< ours
+This is line 2 changed.
+||||||| original
+This is line 2.
+=======
+This is line 2 also changed.
+>>>>>>> theirs
+";
+
+    assert_merge!(
+        base,
+        ours,
+        theirs,
+        Err(expected),
+        "file-final hunks without trailing newline",
+    );
+}
