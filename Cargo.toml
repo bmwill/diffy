@@ -35,6 +35,11 @@ std = []
 binary = ["dep:zlib-rs"]
 color = ["dep:anstyle"]
 
+[lints.clippy]
+# Suppressed pending a decision on the clippy 1.97 question_mark expansion,
+# which flags `let...else` blocks that are clearer left as-is.
+question_mark = "allow"
+
 [dependencies]
 hashbrown = { version = "0.17.0", default-features = false, features = ["default-hasher"] }
 anstyle = { version = "1.0.13", default-features = false, optional = true }
