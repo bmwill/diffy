@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.1] - 2026-07-18
+
+### Fixed
+
+- [#85](https://github.com/bmwill/diffy/pull/85)
+  Merge conflict markers are now always placed on their own lines.
+  Previously, a conflicting hunk at the end of a file without a trailing
+  newline glued the next marker onto its last content line, producing
+  unparseable output. This matches `git merge-file --diff3` behavior.
+
 ## [0.5.0]- 2026-04-27
 
 This is a major release introducing multi-file patch support,
@@ -140,6 +150,7 @@ git binary diff handling, and `no_std` compatibility.
 ## [0.1.0] - 2020-06-30
 - Initial release.
 
+[0.5.1]: https://github.com/bmwill/diffy/releases/tag/0.5.1
 [0.5.0]: https://github.com/bmwill/diffy/releases/tag/0.5.0
 [0.4.2]: https://github.com/bmwill/diffy/releases/tag/0.4.2
 [0.4.1]: https://github.com/bmwill/diffy/releases/tag/0.4.1
