@@ -406,11 +406,38 @@ fn delete_and_insert_conflict() {
 }
 
 #[test]
-fn conflict_hunks_without_trailing_newline_keep_markers_on_own_lines() {
+fn conflict_hunks_without_trailing_newline_glue_markers_by_default() {
     let base = "This is line 1.\nThis is line 2.";
     let ours = "This is line 1.\nThis is line 2 changed.";
     let theirs = "This is line 1.\nThis is line 2 also changed.";
 
+    // The default IncompleteHunkStyle::Diff3 matches GNU `diff3 -m`, which
+    // appends the succeeding markers directly to incomplete lines.
+    let expected = "\
+This is line 1.
+<<<<<<< ours
+This is line 2 changed.||||||| original
+This is line 2.=======
+This is line 2 also changed.>>>>>>> theirs
+";
+
+    assert_merge!(
+        base,
+        ours,
+        theirs,
+        Err(expected),
+        "file-final hunks without trailing newline",
+    );
+}
+
+#[test]
+fn conflict_hunks_without_trailing_newline_git_style_keeps_markers_on_own_lines() {
+    let base = "This is line 1.\nThis is line 2.";
+    let ours = "This is line 1.\nThis is line 2 changed.";
+    let theirs = "This is line 1.\nThis is line 2 also changed.";
+
+    // IncompleteHunkStyle::Git matches `git merge-file --diff3`, which inserts
+    // a newline after an incomplete line so that every marker starts a line.
     let expected = "\
 This is line 1.
 <<<<<<< ours
@@ -422,11 +449,183 @@ This is line 2 also changed.
 >>>>>>> theirs
 ";
 
-    assert_merge!(
-        base,
-        ours,
-        theirs,
-        Err(expected),
-        "file-final hunks without trailing newline",
+    let mut options = MergeOptions::new();
+    options.set_incomplete_hunk_style(IncompleteHunkStyle::Git);
+
+    assert_eq!(
+        options.merge(base, ours, theirs),
+        Err(String::from(expected)),
+        "file-final hunks without trailing newline with the git style",
     );
+    assert_eq!(
+        options.merge_bytes(base.as_bytes(), ours.as_bytes(), theirs.as_bytes()),
+        Err(expected.as_bytes().to_vec()),
+        "file-final hunks without trailing newline with the git style (bytes)",
+    );
+}
+
+#[test]
+fn conflict_hunk_trailing_newline_permutations() {
+    const BASE: &str = "This is line 1.\nThis is line 2.";
+    const BASE_NL: &str = "This is line 1.\nThis is line 2.\n";
+    const OURS: &str = "This is line 1.\nThis is line 2 changed.";
+    const OURS_NL: &str = "This is line 1.\nThis is line 2 changed.\n";
+    const THEIRS: &str = "This is line 1.\nThis is line 2 also changed.";
+    const THEIRS_NL: &str = "This is line 1.\nThis is line 2 also changed.\n";
+
+    // Each case lists the inputs along with the expected output of the
+    // default IncompleteHunkStyle::Diff3. The expected outputs were verified
+    // against GNU diff3 3.12 (`diff3 -m`), which glues the marker succeeding
+    // each incomplete hunk onto the hunk's final line.
+    let cases = [
+        (
+            BASE,
+            OURS,
+            THEIRS,
+            "\
+This is line 1.
+<<<<<<< ours
+This is line 2 changed.||||||| original
+This is line 2.=======
+This is line 2 also changed.>>>>>>> theirs
+",
+        ),
+        (
+            BASE,
+            OURS,
+            THEIRS_NL,
+            "\
+This is line 1.
+<<<<<<< ours
+This is line 2 changed.||||||| original
+This is line 2.=======
+This is line 2 also changed.
+>>>>>>> theirs
+",
+        ),
+        (
+            BASE,
+            OURS_NL,
+            THEIRS,
+            "\
+This is line 1.
+<<<<<<< ours
+This is line 2 changed.
+||||||| original
+This is line 2.=======
+This is line 2 also changed.>>>>>>> theirs
+",
+        ),
+        (
+            BASE,
+            OURS_NL,
+            THEIRS_NL,
+            "\
+This is line 1.
+<<<<<<< ours
+This is line 2 changed.
+||||||| original
+This is line 2.=======
+This is line 2 also changed.
+>>>>>>> theirs
+",
+        ),
+        (
+            BASE_NL,
+            OURS,
+            THEIRS,
+            "\
+This is line 1.
+<<<<<<< ours
+This is line 2 changed.||||||| original
+This is line 2.
+=======
+This is line 2 also changed.>>>>>>> theirs
+",
+        ),
+        (
+            BASE_NL,
+            OURS,
+            THEIRS_NL,
+            "\
+This is line 1.
+<<<<<<< ours
+This is line 2 changed.||||||| original
+This is line 2.
+=======
+This is line 2 also changed.
+>>>>>>> theirs
+",
+        ),
+        (
+            BASE_NL,
+            OURS_NL,
+            THEIRS,
+            "\
+This is line 1.
+<<<<<<< ours
+This is line 2 changed.
+||||||| original
+This is line 2.
+=======
+This is line 2 also changed.>>>>>>> theirs
+",
+        ),
+        (
+            BASE_NL,
+            OURS_NL,
+            THEIRS_NL,
+            "\
+This is line 1.
+<<<<<<< ours
+This is line 2 changed.
+||||||| original
+This is line 2.
+=======
+This is line 2 also changed.
+>>>>>>> theirs
+",
+        ),
+    ];
+
+    // `git merge-file --diff3` (verified with git 2.55.0) appends a newline to
+    // every incomplete hunk, so all of the permutations render identically
+    // with IncompleteHunkStyle::Git.
+    let expected_git = "\
+This is line 1.
+<<<<<<< ours
+This is line 2 changed.
+||||||| original
+This is line 2.
+=======
+This is line 2 also changed.
+>>>>>>> theirs
+";
+
+    let diff3_options = MergeOptions::new();
+    let mut git_options = MergeOptions::new();
+    git_options.set_incomplete_hunk_style(IncompleteHunkStyle::Git);
+
+    for (base, ours, theirs, expected_diff3) in cases {
+        assert_eq!(
+            diff3_options.merge(base, ours, theirs),
+            Err(String::from(expected_diff3)),
+            "diff3 style: base={base:?} ours={ours:?} theirs={theirs:?}",
+        );
+        assert_eq!(
+            diff3_options.merge_bytes(base.as_bytes(), ours.as_bytes(), theirs.as_bytes()),
+            Err(expected_diff3.as_bytes().to_vec()),
+            "diff3 style (bytes): base={base:?} ours={ours:?} theirs={theirs:?}",
+        );
+        assert_eq!(
+            git_options.merge(base, ours, theirs),
+            Err(String::from(expected_git)),
+            "git style: base={base:?} ours={ours:?} theirs={theirs:?}",
+        );
+        assert_eq!(
+            git_options.merge_bytes(base.as_bytes(), ours.as_bytes(), theirs.as_bytes()),
+            Err(expected_git.as_bytes().to_vec()),
+            "git style (bytes): base={base:?} ours={ours:?} theirs={theirs:?}",
+        );
+    }
 }

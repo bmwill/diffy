@@ -330,6 +330,7 @@ pub use diff::DiffOptions;
 pub use diff::create_patch;
 pub use diff::create_patch_bytes;
 pub use merge::ConflictStyle;
+pub use merge::IncompleteHunkStyle;
 pub use merge::MergeOptions;
 pub use merge::merge;
 pub use merge::merge_bytes;
