@@ -638,6 +638,101 @@ fn non_utf8_escaped_filename_returns_error_on_str_parse() {
     );
 }
 
+// Patches produced on Windows terminate their header lines with CRLF.
+// The carriage return belongs to the line ending, not to the filename.
+#[test]
+fn crlf_patch_header() {
+    let s = "\
+--- original\r
++++ modified\r
+@@ -1,2 +1,3 @@\r
+ Allomancy\r
+ Feruchemy\r
++Hemalurgy\r
+";
+    let p = parse(s).unwrap();
+    assert_eq!(p.original(), Some("original"));
+    assert_eq!(p.modified(), Some("modified"));
+    assert_eq!(p.hunks().len(), 1);
+
+    let b = parse_bytes(s.as_ref()).unwrap();
+    assert_eq!(b.original(), Some(&b"original"[..]));
+    assert_eq!(b.modified(), Some(&b"modified"[..]));
+
+    // The same patch with LF line endings yields the same filenames.
+    let lf = "\
+--- original
++++ modified
+@@ -1,2 +1,3 @@
+ Allomancy
+ Feruchemy
++Hemalurgy
+";
+    let lf = parse(lf).unwrap();
+    assert_eq!(p.original(), lf.original());
+    assert_eq!(p.modified(), lf.modified());
+}
+
+// A timestamp is separated from the filename by a tab, so the carriage
+// return of a CRLF ending trails the timestamp rather than the filename.
+#[test]
+fn crlf_patch_header_with_timestamp() {
+    let s = "\
+--- original\t2022-10-18 22:41:24.000000000 +0000\r
++++ modified\t2022-10-18 22:41:24.000000000 +0000\r
+@@ -1,0 +1,1 @@\r
++Oathbringer\r
+";
+    let p = parse(s).unwrap();
+    assert_eq!(p.original(), Some("original"));
+    assert_eq!(p.modified(), Some("modified"));
+}
+
+// Quoted filenames escape a carriage return as `\r`, so the only raw
+// carriage return on the line is the one from the line ending.
+#[test]
+fn crlf_patch_header_quoted_filename() {
+    let s = "\
+--- \"ori\\rginal\"\r
++++ \"mo\\rdified\"\r
+@@ -1,0 +1,1 @@\r
++Oathbringer\r
+";
+    let p = parse(s).unwrap();
+    assert_eq!(p.original(), Some("ori\rginal"));
+    assert_eq!(p.modified(), Some("mo\rdified"));
+}
+
+// A carriage return that isn't part of the line ending still has to be
+// quoted, exactly as before.
+#[test]
+fn unquoted_carriage_return_in_filename_still_rejected() {
+    let s = "\
+--- ori\rginal
++++ modified
+@@ -1,0 +1,1 @@
++Oathbringer
+";
+    assert_eq!(
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::InvalidCharInUnquotedFilename,
+    );
+    parse_bytes(s.as_ref()).unwrap_err();
+
+    // Same, with CRLF line endings.
+    let s = "\
+--- ori\rginal\r
++++ modified\r
+@@ -1,0 +1,1 @@\r
++Oathbringer\r
+";
+    assert_eq!(
+        parse(s).unwrap_err().kind,
+        ParsePatchErrorKind::InvalidCharInUnquotedFilename,
+    );
+    parse_bytes(s.as_ref()).unwrap_err();
+}
+
 #[test]
 fn hunk_range_overflow() {
     let s = format!(
