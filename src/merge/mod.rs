@@ -115,6 +115,40 @@ pub enum ConflictStyle {
     Diff3,
 }
 
+/// Style used when rendering conflict markers after a hunk that ends in an
+/// incomplete line (one without a trailing newline).
+///
+/// An incomplete line can only appear as the final line of a file, so this
+/// only affects conflicts that include the end of the file.
+#[derive(Copy, Clone, Debug)]
+pub enum IncompleteHunkStyle {
+    /// Appends conflict markers directly to the incomplete line, matching the
+    /// behavior of GNU `diff3 -m`.
+    ///
+    /// ```console
+    /// <<<<<<< ours
+    /// ours line||||||| original
+    /// original line=======
+    /// theirs line>>>>>>> theirs
+    /// ```
+    Diff3,
+
+    /// Inserts a newline after the incomplete line so that every conflict
+    /// marker starts at the beginning of a line, matching the behavior of
+    /// `git merge-file`.
+    ///
+    /// ```console
+    /// <<<<<<< ours
+    /// ours line
+    /// ||||||| original
+    /// original line
+    /// =======
+    /// theirs line
+    /// >>>>>>> theirs
+    /// ```
+    Git,
+}
+
 /// A collection of options for modifying the way a merge is performed
 ///
 /// # Examples
@@ -145,6 +179,7 @@ pub enum ConflictStyle {
 pub struct MergeOptions {
     conflict_marker_length: usize,
     style: ConflictStyle,
+    incomplete_hunk_style: IncompleteHunkStyle,
 }
 
 impl MergeOptions {
@@ -153,10 +188,12 @@ impl MergeOptions {
     /// ## Defaults
     /// * conflict_marker_length = 7
     /// * style = ConflictStyle::Diff3
+    /// * incomplete_hunk_style = IncompleteHunkStyle::Diff3
     pub fn new() -> Self {
         Self {
             conflict_marker_length: DEFAULT_CONFLICT_MARKER_LENGTH,
             style: ConflictStyle::Diff3,
+            incomplete_hunk_style: IncompleteHunkStyle::Diff3,
         }
     }
 
@@ -169,6 +206,13 @@ impl MergeOptions {
     /// Set the conflict style used when displaying a merge conflict
     pub fn set_conflict_style(&mut self, style: ConflictStyle) -> &mut Self {
         self.style = style;
+        self
+    }
+
+    /// Set the style used when rendering conflict markers after a hunk that
+    /// ends in an incomplete line
+    pub fn set_incomplete_hunk_style(&mut self, style: IncompleteHunkStyle) -> &mut Self {
+        self.incomplete_hunk_style = style;
         self
     }
 
@@ -200,6 +244,7 @@ impl MergeOptions {
             &merge,
             self.conflict_marker_length,
             self.style,
+            self.incomplete_hunk_style,
         )
     }
 
@@ -231,6 +276,7 @@ impl MergeOptions {
             &merge,
             self.conflict_marker_length,
             self.style,
+            self.incomplete_hunk_style,
         )
     }
 }
@@ -556,6 +602,7 @@ fn output_result<'a, T: ?Sized>(
     merge: &[MergeRange<T>],
     marker_len: usize,
     style: ConflictStyle,
+    incomplete_hunk_style: IncompleteHunkStyle,
 ) -> Result<String, String> {
     let mut conflicts = 0;
     let mut output = String::new();
@@ -566,17 +613,35 @@ fn output_result<'a, T: ?Sized>(
                 output.extend(ancestor[range.range()].iter().copied());
             }
             MergeRange::Conflict(ancestor_range, ours_range, theirs_range) => {
-                add_conflict_marker(&mut output, '<', marker_len, Some("ours"));
+                add_conflict_marker(
+                    &mut output,
+                    '<',
+                    marker_len,
+                    Some("ours"),
+                    incomplete_hunk_style,
+                );
                 output.extend(ours[ours_range.range()].iter().copied());
 
                 if let ConflictStyle::Diff3 = style {
-                    add_conflict_marker(&mut output, '|', marker_len, Some("original"));
+                    add_conflict_marker(
+                        &mut output,
+                        '|',
+                        marker_len,
+                        Some("original"),
+                        incomplete_hunk_style,
+                    );
                     output.extend(ancestor[ancestor_range.range()].iter().copied());
                 }
 
-                add_conflict_marker(&mut output, '=', marker_len, None);
+                add_conflict_marker(&mut output, '=', marker_len, None, incomplete_hunk_style);
                 output.extend(theirs[theirs_range.range()].iter().copied());
-                add_conflict_marker(&mut output, '>', marker_len, Some("theirs"));
+                add_conflict_marker(
+                    &mut output,
+                    '>',
+                    marker_len,
+                    Some("theirs"),
+                    incomplete_hunk_style,
+                );
                 conflicts += 1;
             }
             MergeRange::Ours(range) => {
@@ -603,8 +668,12 @@ fn add_conflict_marker(
     marker: char,
     marker_len: usize,
     filename: Option<&str>,
+    incomplete_hunk_style: IncompleteHunkStyle,
 ) {
-    if !output.is_empty() && !output.ends_with('\n') {
+    if matches!(incomplete_hunk_style, IncompleteHunkStyle::Git)
+        && !output.is_empty()
+        && !output.ends_with('\n')
+    {
         output.push('\n');
     }
     for _ in 0..marker_len {
@@ -625,6 +694,7 @@ fn output_result_bytes<'a, T: ?Sized>(
     merge: &[MergeRange<T>],
     marker_len: usize,
     style: ConflictStyle,
+    incomplete_hunk_style: IncompleteHunkStyle,
 ) -> Result<Vec<u8>, Vec<u8>> {
     let mut conflicts = 0;
     let mut output: Vec<u8> = Vec::new();
@@ -637,23 +707,47 @@ fn output_result_bytes<'a, T: ?Sized>(
                     .for_each(|line| output.extend_from_slice(line));
             }
             MergeRange::Conflict(ancestor_range, ours_range, theirs_range) => {
-                add_conflict_marker_bytes(&mut output, b'<', marker_len, Some(b"ours"));
+                add_conflict_marker_bytes(
+                    &mut output,
+                    b'<',
+                    marker_len,
+                    Some(b"ours"),
+                    incomplete_hunk_style,
+                );
                 ours[ours_range.range()]
                     .iter()
                     .for_each(|line| output.extend_from_slice(line));
 
                 if let ConflictStyle::Diff3 = style {
-                    add_conflict_marker_bytes(&mut output, b'|', marker_len, Some(b"original"));
+                    add_conflict_marker_bytes(
+                        &mut output,
+                        b'|',
+                        marker_len,
+                        Some(b"original"),
+                        incomplete_hunk_style,
+                    );
                     ancestor[ancestor_range.range()]
                         .iter()
                         .for_each(|line| output.extend_from_slice(line));
                 }
 
-                add_conflict_marker_bytes(&mut output, b'=', marker_len, None);
+                add_conflict_marker_bytes(
+                    &mut output,
+                    b'=',
+                    marker_len,
+                    None,
+                    incomplete_hunk_style,
+                );
                 theirs[theirs_range.range()]
                     .iter()
                     .for_each(|line| output.extend_from_slice(line));
-                add_conflict_marker_bytes(&mut output, b'>', marker_len, Some(b"theirs"));
+                add_conflict_marker_bytes(
+                    &mut output,
+                    b'>',
+                    marker_len,
+                    Some(b"theirs"),
+                    incomplete_hunk_style,
+                );
                 conflicts += 1;
             }
             MergeRange::Ours(range) => {
@@ -686,8 +780,12 @@ fn add_conflict_marker_bytes(
     marker: u8,
     marker_len: usize,
     filename: Option<&[u8]>,
+    incomplete_hunk_style: IncompleteHunkStyle,
 ) {
-    if !output.is_empty() && output.last() != Some(&b'\n') {
+    if matches!(incomplete_hunk_style, IncompleteHunkStyle::Git)
+        && !output.is_empty()
+        && output.last() != Some(&b'\n')
+    {
         output.push(b'\n');
     }
     for _ in 0..marker_len {
