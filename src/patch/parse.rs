@@ -181,7 +181,11 @@ fn parse_filename<'a, T: Text + ?Sized>(prefix: &str, line: &'a T) -> Result<Cow
     let filename = if let Some((filename, _)) = line.split_at_exclusive("\t") {
         filename
     } else if let Some((filename, _)) = line.split_at_exclusive("\n") {
-        filename
+        // Accept CRLF line endings, as produced by tools on Windows.
+        // A carriage return is never part of the filename itself: it has
+        // to be quoted when unquoted filenames are used, and is written
+        // as the `\r` escape inside a quoted one. See `byte_needs_quoting`.
+        filename.strip_suffix("\r").unwrap_or(filename)
     } else {
         return Err(ParsePatchErrorKind::FilenameUnterminated.into());
     };
