@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.5.2] - 2026-08-31
+
+### Added
+
+- [#88](https://github.com/bmwill/diffy/pull/88)
+  New `IncompleteHunkStyle` option on `MergeOptions` selecting how
+  conflict markers are rendered when a conflicting hunk ends in a line
+  without a trailing newline. `Diff3` (the default) appends the
+  succeeding markers directly to the incomplete line, matching GNU
+  `diff3 -m` and restoring the pre-0.5.1 output. `Git` places every
+  marker on its own line, matching `git merge-file`, which was the
+  (unconditional) behavior introduced in 0.5.1 by
+  [#85](https://github.com/bmwill/diffy/pull/85).
+
+### Fixed
+
+- [#87](https://github.com/bmwill/diffy/pull/87)
+  Accept CRLF line endings in the `---`/`+++` headers when parsing a
+  patch. Previously the carriage return was treated as part of the
+  filename and rejected, so every patch generated on Windows failed to
+  parse.
+
 ## [0.5.1] - 2026-07-18
 
 ### Fixed
@@ -150,6 +172,7 @@ git binary diff handling, and `no_std` compatibility.
 ## [0.1.0] - 2020-06-30
 - Initial release.
 
+[0.5.2]: https://github.com/bmwill/diffy/releases/tag/0.5.2
 [0.5.1]: https://github.com/bmwill/diffy/releases/tag/0.5.1
 [0.5.0]: https://github.com/bmwill/diffy/releases/tag/0.5.0
 [0.4.2]: https://github.com/bmwill/diffy/releases/tag/0.4.2
