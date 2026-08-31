@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FileMode","FileOperation","PatchKind"],"struct":["FilePatch","ParseOptions","PatchSet","PatchSetParseError"]};
