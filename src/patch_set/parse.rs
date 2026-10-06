@@ -821,12 +821,17 @@ fn extract_file_op_unidiff<'a, T: Text + ?Sized>(
     }
 }
 
-/// Strips the trailing `\n` from a line yielded by [`Text::lines`].
+/// Strips the trailing line ending from a line yielded by [`Text::lines`].
 ///
 /// [`Text::lines`] includes line endings; strip for matching.
 fn strip_line_ending<T: Text + ?Sized>(line: &T) -> &T {
-    // TODO: GNU patch strips trailing CRs from CRLF patches automatically.
-    // We should consider adding compat tests for GNU patch.
-    // And `git apply` seems to reject. Worth adding tests as well.
-    line.strip_suffix("\n").unwrap_or(line)
+    // GNU patch strips trailing CRs from CRLF patches automatically.
+    // Mirror that for header lines so a patch file saved with CRLF line
+    // endings (e.g. on Windows) parses the same as its LF equivalent:
+    // without this, extracted values such as the file mode keep their
+    // trailing `\r` and fail to parse (`invalid file mode: 100644\r`).
+    // Note `git apply` seems to reject CRLF patches. Worth adding tests
+    // for both behaviors as well.
+    let line = line.strip_suffix("\n").unwrap_or(line);
+    line.strip_suffix("\r").unwrap_or(line)
 }

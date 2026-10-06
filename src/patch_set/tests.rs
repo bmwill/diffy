@@ -759,6 +759,54 @@ index 0000000..abc1234
         );
     }
 
+    /// New file with content, with CRLF line endings throughout (e.g. a
+    /// patch file saved on Windows). The extended header values must not
+    /// keep the trailing `\r`: `new file mode 100644\r` previously failed
+    /// with `invalid file mode: 100644\r`.
+    #[test]
+    fn crlf_new_file_with_content() {
+        let input = "\
+diff --git a/new.rs b/new.rs
+new file mode 100644
+index 0000000..abc1234
+--- /dev/null
++++ b/new.rs
+@@ -0,0 +1 @@
++hello
+"
+        .replace('\n', "\r\n");
+        let patches = parse_gitdiff(&input);
+        assert_eq!(patches.len(), 1);
+        assert!(patches[0].operation().is_create());
+        assert_eq!(
+            patches[0].new_mode(),
+            Some(&super::super::FileMode::Regular),
+        );
+    }
+
+    /// Mode-only change with CRLF line endings: both `old mode` and
+    /// `new mode` values must parse despite the trailing `\r`.
+    #[test]
+    fn crlf_mode_only_change() {
+        let input = "\
+diff --git a/script.sh b/script.sh
+old mode 100644
+new mode 100755
+"
+        .replace('\n', "\r\n");
+        let patches = parse_gitdiff(&input);
+        assert_eq!(patches.len(), 1);
+        assert!(patches[0].operation().is_modify());
+        assert_eq!(
+            patches[0].old_mode(),
+            Some(&super::super::FileMode::Regular),
+        );
+        assert_eq!(
+            patches[0].new_mode(),
+            Some(&super::super::FileMode::Executable),
+        );
+    }
+
     /// `diff --git` line with no-prefix paths (`git diff --no-prefix`).
     /// Fallback path parsing works when ---/+++ are absent.
     #[test]
