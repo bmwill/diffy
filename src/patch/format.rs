@@ -237,14 +237,20 @@ impl<T: AsRef<[u8]> + ?Sized> HunkDisplay<'_, T> {
             if self.f.with_color {
                 write!(w, "{}", style::FUNCTION_CONTEXT)?;
             }
-            write!(w, " ")?;
             w.write_all(ctx.as_ref())?;
             #[cfg(feature = "color")]
             if self.f.with_color {
                 write!(w, "{:#}", style::FUNCTION_CONTEXT)?;
             }
         }
-        writeln!(w)?;
+        // The function context keeps the line ending it was parsed with.
+        let has_line_ending = self
+            .hunk
+            .function_context
+            .is_some_and(|ctx| ctx.as_ref().ends_with(b"\n"));
+        if !has_line_ending {
+            writeln!(w)?;
+        }
 
         for line in &self.hunk.lines {
             self.f.write_line_into(line, &mut w)?;
@@ -272,13 +278,20 @@ impl Display for HunkDisplay<'_, str> {
             if self.f.with_color {
                 write!(f, "{}", style::FUNCTION_CONTEXT)?;
             }
-            write!(f, " {ctx}")?;
+            write!(f, "{ctx}")?;
             #[cfg(feature = "color")]
             if self.f.with_color {
                 write!(f, "{:#}", style::FUNCTION_CONTEXT)?;
             }
         }
-        writeln!(f)?;
+        // The function context keeps the line ending it was parsed with.
+        let has_line_ending = self
+            .hunk
+            .function_context
+            .is_some_and(|ctx| ctx.ends_with('\n'));
+        if !has_line_ending {
+            writeln!(f)?;
+        }
 
         for line in &self.hunk.lines {
             write!(f, "{}", self.f.fmt_line(line))?;
