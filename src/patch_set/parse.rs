@@ -24,12 +24,19 @@ const MODIFIED_PREFIX: &str = "+++ ";
 /// Path used to indicate file creation or deletion.
 const DEV_NULL: &str = "/dev/null";
 
-/// Separator between commit message and patch in git format-patch output.
-const EMAIL_PREAMBLE_SEPARATOR: &str = "\n---\n";
+/// Line separating the commit message from the patch in git format-patch
+/// output.
+const EMAIL_PREAMBLE_SEPARATOR: &str = "---";
 
 /// Streaming iterator for parsing patches one at a time.
 ///
 /// Created by [`PatchSet::parse`] or [`PatchSet::parse_bytes`].
+///
+/// # Line endings
+///
+/// Lines of patch syntax, such as headers and separators, may end in either
+/// `\n` or `\r\n`. Hunk lines keep their line endings as content; see
+/// [`Line`](crate::Line).
 ///
 /// # Example
 ///
@@ -194,13 +201,16 @@ fn find_patch_start<T: Text + ?Sized>(input: &T) -> Option<usize> {
 
 /// Strips email preamble (headers and commit message) from `git format-patch` output.
 ///
-/// Returns the content after the first `\n---\n` separator.
+/// Returns the content after the first `---` separator line.
 ///
 /// ## Observed git behavior
 ///
 /// `git mailinfo` (used by `git am`) uses the first `---` line
 /// as the separator between commit message and patch content.
 /// It does not check if `diff --git` follows or there are more `---` lines.
+///
+/// `git mailsplit` (also used by `git am`) strips the `\r` from lines ending
+/// in `\r\n` unless `--keep-cr` is given, so a `---\r\n` line separates too.
 ///
 /// From [`git format-patch`] manpage:
 ///
@@ -213,13 +223,18 @@ fn strip_email_preamble<T: Text + ?Sized>(input: &T) -> &T {
         return input;
     }
 
-    match input.find(EMAIL_PREAMBLE_SEPARATOR) {
-        Some(pos) => {
-            let (_, rest) = input.split_at(pos + EMAIL_PREAMBLE_SEPARATOR.len());
-            rest
+    let mut offset = 0;
+    for line in input.lines() {
+        offset += line.len();
+        let is_separator = line
+            .strip_line_ending()
+            .is_some_and(|line| line.as_bytes() == EMAIL_PREAMBLE_SEPARATOR.as_bytes());
+        if is_separator {
+            let (_, rest) = input.split_at(offset);
+            return rest;
         }
-        None => input,
     }
+    input
 }
 
 fn next_gitdiff_patch<'a, T: Text + ?Sized>(
@@ -423,7 +438,7 @@ impl<'a, T: Text + ?Sized> GitHeader<'a, T> {
         let mut consumed = 0;
 
         for line in input.lines() {
-            let trimmed = strip_line_ending(line);
+            let trimmed = line.strip_line_ending().unwrap_or(line);
 
             if let Some(rest) = trimmed.strip_prefix("diff --git ") {
                 // Only accept the first `diff --git` line.
@@ -819,14 +834,4 @@ fn extract_file_op_unidiff<'a, T: Text + ?Sized>(
             (None, None) => Err(PatchSetParseErrorKind::NoFilePath.into()),
         }
     }
-}
-
-/// Strips the trailing `\n` from a line yielded by [`Text::lines`].
-///
-/// [`Text::lines`] includes line endings; strip for matching.
-fn strip_line_ending<T: Text + ?Sized>(line: &T) -> &T {
-    // TODO: GNU patch strips trailing CRs from CRLF patches automatically.
-    // We should consider adding compat tests for GNU patch.
-    // And `git apply` seems to reject. Worth adding tests as well.
-    line.strip_suffix("\n").unwrap_or(line)
 }
