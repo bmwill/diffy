@@ -6,8 +6,85 @@ use alloc::vec::Vec;
 
 use super::FileOperation;
 use super::ParseOptions;
+use super::PatchKind;
 use super::PatchSet;
 use super::error::PatchSetParseErrorKind;
+use crate::Patch;
+use crate::binary::BinaryBlockKind;
+use crate::binary::BinaryPatch;
+use crate::patch::HunkRange;
+use crate::patch::Line;
+
+/// Asserts that `lf` parses to the same patches after every `\n` in it is
+/// replaced by `\r\n`.
+///
+/// Hunk lines are compared without their line endings, because CRLF hunk
+/// lines keep their `\r` as content (see `crlf::hunk_lines_keep_cr`).
+fn assert_crlf_equivalent(lf: &str, opts: ParseOptions) {
+    let crlf = lf.replace('\n', "\r\n");
+    let lf_patches = PatchSet::parse(lf, opts.clone())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let crlf_patches = PatchSet::parse(&crlf, opts)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_else(|e| panic!("the CRLF form of the input failed to parse: {e}"));
+
+    assert_eq!(lf_patches.len(), crlf_patches.len(), "patch counts differ");
+    for (lf, crlf) in lf_patches.iter().zip(&crlf_patches) {
+        assert_eq!(lf.operation(), crlf.operation());
+        assert_eq!(lf.old_mode(), crlf.old_mode());
+        assert_eq!(lf.new_mode(), crlf.new_mode());
+        match (lf.patch(), crlf.patch()) {
+            (PatchKind::Text(lf), PatchKind::Text(crlf)) => {
+                assert_eq!(lf.original(), crlf.original());
+                assert_eq!(lf.modified(), crlf.modified());
+                assert_eq!(
+                    hunks_without_line_endings(lf),
+                    hunks_without_line_endings(crlf)
+                );
+            }
+            // Binary payloads are slices of the input that keep their line
+            // endings, so compare what the headers declare.
+            (PatchKind::Binary(lf), PatchKind::Binary(crlf)) => {
+                assert_eq!(binary_blocks(lf), binary_blocks(crlf));
+            }
+            (lf, crlf) => panic!("patch kinds differ: {lf:?} vs {crlf:?}"),
+        }
+    }
+}
+
+type HunkWithoutLineEndings<'a> = (HunkRange, HunkRange, Option<&'a str>, Vec<Line<'a, str>>);
+
+fn hunks_without_line_endings<'a>(patch: &'a Patch<'_, str>) -> Vec<HunkWithoutLineEndings<'a>> {
+    let trim = |s: &'a str| s.trim_end_matches(['\r', '\n']);
+    patch
+        .hunks()
+        .iter()
+        .map(|hunk| {
+            let lines = hunk
+                .lines()
+                .iter()
+                .map(|line| match *line {
+                    Line::Context(s) => Line::Context(trim(s)),
+                    Line::Delete(s) => Line::Delete(trim(s)),
+                    Line::Insert(s) => Line::Insert(trim(s)),
+                })
+                .collect();
+            let function_context = hunk.function_context().map(trim);
+            (hunk.old_range(), hunk.new_range(), function_context, lines)
+        })
+        .collect()
+}
+
+fn binary_blocks(patch: &BinaryPatch<'_>) -> Option<[(BinaryBlockKind, u64); 2]> {
+    match patch {
+        BinaryPatch::Full { forward, reverse } => Some([
+            (forward.kind, forward.data.size),
+            (reverse.kind, reverse.data.size),
+        ]),
+        BinaryPatch::Marker => None,
+    }
+}
 
 mod file_operation {
     use super::*;
@@ -473,7 +550,10 @@ In a hole in the ground there lived a hobbit
 
 mod patchset_gitdiff {
     use super::*;
+
+    /// Parses `input`, and also checks that its CRLF form parses the same.
     fn parse_gitdiff(input: &str) -> Vec<super::super::FilePatch<'_, str>> {
+        assert_crlf_equivalent(input, ParseOptions::gitdiff());
         PatchSet::parse(input, ParseOptions::gitdiff())
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
@@ -796,7 +876,6 @@ diff --git a/foo b/foo
 
 mod patchset_unidiff_bytes {
     use super::*;
-    use crate::patch::Line;
 
     #[test]
     fn single_file_bytes() {
@@ -893,6 +972,134 @@ mod patchset_unidiff_bytes {
         assert_eq!(
             patches[0].operation(),
             &FileOperation::Delete(b"a/old.rs".to_vec().into())
+        );
+    }
+}
+
+/// Patches with CRLF line endings, as written by Windows tools or by a git
+/// checkout with `core.autocrlf` enabled.
+mod crlf {
+    use super::*;
+    use crate::patch_set::FileMode;
+
+    /// A `git format-patch` email whose commit message has a line starting
+    /// with `diff --git`. Only the `---` line ends the commit message.
+    const FORMAT_PATCH: &str = "\
+From 1234567890abcdef1234567890abcdef12345678 Mon Sep 17 00:00:00 2001
+From: Gandalf <gandalf@the.grey>
+Date: Mon, 25 Mar 3019 00:00:00 +0000
+Subject: [PATCH] fix the diff header parser
+
+This message line is not a patch header:
+diff --git a/phantom.rs b/phantom.rs
+---
+ src/frodo.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/frodo.rs b/src/frodo.rs
+index 1111111..2222222 100644
+--- a/src/frodo.rs
++++ b/src/frodo.rs
+@@ -1 +1 @@
+-finger
++peace
+-- 
+2.40.0
+";
+
+    #[test]
+    fn format_patch_gitdiff() {
+        let input = FORMAT_PATCH.replace('\n', "\r\n");
+        let patches = PatchSet::parse(&input, ParseOptions::gitdiff())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(patches.len(), 1);
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Modify {
+                original: "a/src/frodo.rs".into(),
+                modified: "b/src/frodo.rs".into(),
+            }
+        );
+        assert_crlf_equivalent(FORMAT_PATCH, ParseOptions::gitdiff());
+    }
+
+    #[test]
+    fn format_patch_unidiff() {
+        assert_crlf_equivalent(FORMAT_PATCH, ParseOptions::unidiff());
+    }
+
+    /// Hunk lines keep their `\r` as content, matching `git apply`. The
+    /// `\ No newline at end of file` marker removes only the `\n`, so the `\r`
+    /// before it stays too: `git apply` matches such a line against a file
+    /// ending in `old\r`.
+    #[test]
+    fn hunk_lines_keep_cr() {
+        let input = "\
+--- a/f
++++ b/f
+@@ -1,2 +1,2 @@
+ keep
+-old
+\\ No newline at end of file
++new
+\\ No newline at end of file
+"
+        .replace('\n', "\r\n");
+        let patches = PatchSet::parse(&input, ParseOptions::unidiff())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let patch = patches[0].patch().as_text().unwrap();
+        assert_eq!(
+            patch.hunks()[0].lines(),
+            [
+                Line::Context("keep\r\n"),
+                Line::Delete("old\r"),
+                Line::Insert("new\r"),
+            ]
+        );
+    }
+
+    #[test]
+    fn rename_with_mode_change_bytes() {
+        let input = b"\
+diff --git a/old.sh b/new.sh\r
+old mode 100644\r
+new mode 100755\r
+similarity index 100%\r
+rename from old.sh\r
+rename to new.sh\r
+";
+        let patches = PatchSet::parse_bytes(input, ParseOptions::gitdiff())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(patches.len(), 1);
+        assert_eq!(
+            patches[0].operation(),
+            &FileOperation::Rename {
+                from: b"old.sh".as_slice().into(),
+                to: b"new.sh".as_slice().into(),
+            }
+        );
+        assert_eq!(patches[0].old_mode(), Some(&FileMode::Regular));
+        assert_eq!(patches[0].new_mode(), Some(&FileMode::Executable));
+    }
+
+    /// A `\r` that no `\n` follows is not a line ending, so it stays part of
+    /// the header value.
+    #[test]
+    fn lone_cr_is_not_a_line_ending() {
+        let input = "\
+diff --git a/x b/x
+old mode 100644
+new mode 100755\r";
+        let err = PatchSet::parse(input, ParseOptions::gitdiff())
+            .next()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(
+            err.kind,
+            PatchSetParseErrorKind::InvalidFileMode("100755\r".to_owned())
         );
     }
 }

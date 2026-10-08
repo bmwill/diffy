@@ -150,6 +150,24 @@ pub trait Text: Eq + Hash + ToOwned {
     fn as_bytes(&self) -> &[u8];
     fn lines(&self) -> LineIter<'_, Self>;
 
+    /// Strips the line ending from a line yielded by [`LineIter`].
+    ///
+    /// Both `\n` and `\r\n` are line endings, so patch syntax written with
+    /// Windows line endings parses the same as with Unix ones. A `\r` is only
+    /// part of the line ending when `\n` follows it. Stripping it never
+    /// truncates a header value: git quotes any path containing a `\r` (see
+    /// [`byte_needs_quoting`]), and no other header value can contain one.
+    ///
+    /// Use this for patch syntax only. Hunk lines keep their line endings as
+    /// content, matching `git apply`.
+    ///
+    /// Returns `None` if the line has no line ending, which happens only for
+    /// the final line of input that doesn't end with a newline.
+    fn strip_line_ending(&self) -> Option<&Self> {
+        let line = self.strip_suffix("\n")?;
+        Some(line.strip_suffix("\r").unwrap_or(line))
+    }
+
     /// Converts raw bytes into `Self::Owned`.
     ///
     /// Returns `None` if the bytes are not valid for this type

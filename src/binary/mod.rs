@@ -15,6 +15,9 @@ use alloc::vec::Vec;
 use core::fmt;
 use core::ops::Range;
 
+use crate::utils::LineIter;
+use crate::utils::Text;
+
 /// Cap preallocation when the size comes from untrusted input.
 ///
 /// This prevents instant OOM from a bogus header.
@@ -394,16 +397,9 @@ impl<'a> BinaryParser<'a> {
     }
 
     fn next_line(&mut self) -> Option<&'a [u8]> {
-        let rest = &self.input[self.offset..];
-        if rest.is_empty() {
-            return None;
-        }
-        let (line, skip) = match rest.iter().position(|&b| b == b'\n') {
-            Some(pos) => (&rest[..pos], pos + 1),
-            None => (rest, rest.len()),
-        };
-        self.offset += skip;
-        Some(line.strip_suffix(b"\r").unwrap_or(line))
+        let line = LineIter::new(&self.input[self.offset..]).next()?;
+        self.offset += line.len();
+        Some(line.strip_line_ending().unwrap_or(line))
     }
 }
 
@@ -474,10 +470,7 @@ fn parse_binary_block<'a>(parser: &mut BinaryParser<'a>) -> Option<BinaryBlock<'
 
     // Slice the data lines, stripping the final line ending.
     let data = &parser.input[data_start..data_end];
-    let data = data
-        .strip_suffix(b"\r\n".as_slice())
-        .or_else(|| data.strip_suffix(b"\n".as_slice()))
-        .unwrap_or(data);
+    let data = data.strip_line_ending().unwrap_or(data);
 
     Some(BinaryBlock {
         kind,
@@ -503,8 +496,8 @@ fn decode_base85_lines(data: &[u8]) -> Result<Vec<u8>, BinaryPatchParseError> {
     // A rough estimate: In Base85, 5 chars -> 4 bytes
     let mut result = Vec::with_capacity(data.len() * 4 / 5);
 
-    for line in data.split(|&b| b == b'\n') {
-        let line = line.strip_suffix(b"\r".as_slice()).unwrap_or(line);
+    for line in LineIter::new(data) {
+        let line = line.strip_line_ending().unwrap_or(line);
         if line.is_empty() {
             continue;
         }

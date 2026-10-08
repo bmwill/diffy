@@ -390,6 +390,12 @@ impl fmt::Display for HunkRange {
 ///
 /// A `Line` contains the terminating newline character `\n` unless it is the final
 /// line in the file and the file does not end with a newline character.
+///
+/// Line endings are kept exactly as they appear in the patch: a line parsed
+/// from a patch with CRLF line endings ends in `\r\n`, so applying the patch
+/// only matches lines that also end in `\r\n`. This matches `git apply`,
+/// which treats the `\r` as part of the line's content. (GNU patch instead
+/// strips the `\r` from every line of a patch with CRLF line endings.)
 #[derive(Debug, PartialEq, Eq)]
 pub enum Line<'a, T: ?Sized> {
     /// A line providing context in the diff which is present in both the old and new file
