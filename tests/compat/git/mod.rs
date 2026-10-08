@@ -334,3 +334,49 @@ error: file.bin: patch does not apply
 fn junk_between_files() {
     Case::git("junk_between_files").strip(1).run();
 }
+
+// Patches with CRLF line endings, as written by Windows tools or by a git
+// checkout with `core.autocrlf` enabled.
+//
+// `git apply` treats the `\r` in hunk lines as content, and so does diffy:
+// the patched files keep their CRLF line endings.
+
+// Observed: `git apply` creates the file with CRLF line endings (and warns
+// about trailing whitespace).
+#[test]
+fn crlf_create_file() {
+    Case::git("crlf_create_file")
+        .strip(1)
+        .exact_line_endings()
+        .run();
+}
+
+#[test]
+fn crlf_modify() {
+    Case::git("crlf_modify").strip(1).exact_line_endings().run();
+}
+
+// The `\r` is not part of the `rename from`/`rename to` paths or the modes.
+#[test]
+fn crlf_rename_with_mode_change() {
+    Case::git("crlf_rename_with_mode_change")
+        .strip(1)
+        .exact_line_endings()
+        .run();
+}
+
+// With no `---`/`+++` lines, the paths come from the `diff --git` line.
+// diffy strips the `\r` from it, like GNU patch; `git apply` keeps it, so
+// the two paths differ and it rejects the patch.
+#[test]
+fn crlf_mode_only() {
+    Case::git("crlf_mode_only")
+        .strip(1)
+        .exact_line_endings()
+        .expect_compat(false)
+        .expect_external_error(snapbox::str![[r#"
+error: git diff header lacks filename information when removing 1 leading pathname component at <stdin>:4
+
+"#]])
+        .run();
+}
