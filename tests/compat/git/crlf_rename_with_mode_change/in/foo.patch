@@ -1,0 +1,13 @@
+diff --git a/old.sh b/new.sh
+old mode 100644
+new mode 100755
+similarity index 80%
+rename from old.sh
+rename to new.sh
+index 1111111..2222222
+--- a/old.sh
++++ b/new.sh
+@@ -1,2 +1,2 @@
+ #!/bin/sh
+-echo old
++echo new

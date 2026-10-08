@@ -1,0 +1,2 @@
+# The CRLF compat fixtures must keep their line endings byte for byte.
+tests/compat/*/crlf_*/** -text

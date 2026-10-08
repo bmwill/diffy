@@ -39,6 +39,11 @@ pub struct Case<'a> {
     expect_diffy_error: Option<snapbox::Data>,
     /// Inline snapshot for external tool's stderr on failure.
     expect_external_error: Option<snapbox::Data>,
+    /// Whether output files must match byte for byte (default: false).
+    ///
+    /// snapbox treats `\r\n` and `\n` as equal when comparing text files,
+    /// which hides whether a line kept its `\r`.
+    exact_line_endings: bool,
 }
 
 impl<'a> Case<'a> {
@@ -52,6 +57,7 @@ impl<'a> Case<'a> {
             expect_compat: true,
             expect_diffy_error: None,
             expect_external_error: None,
+            exact_line_endings: false,
         }
     }
 
@@ -65,6 +71,7 @@ impl<'a> Case<'a> {
             expect_compat: true,
             expect_diffy_error: None,
             expect_external_error: None,
+            exact_line_endings: false,
         }
     }
 
@@ -106,6 +113,15 @@ impl<'a> Case<'a> {
     /// Use with [`snapbox::str!`].
     pub fn expect_external_error(mut self, expected: impl Into<snapbox::Data>) -> Self {
         self.expect_external_error = Some(expected.into());
+        self
+    }
+
+    /// Compare output files byte for byte, including their line endings.
+    ///
+    /// Write the `out/` files by hand: `SNAPSHOTS=overwrite` normalizes their
+    /// line endings.
+    pub fn exact_line_endings(mut self) -> Self {
+        self.exact_line_endings = true;
         self
     }
 
@@ -175,6 +191,9 @@ impl<'a> Case<'a> {
             // verify outputs match
             if diffy_result.is_ok() && external_result.is_ok() && self.expect_compat {
                 snapbox::assert_subset_eq(&external_output, &diffy_output);
+                if self.exact_line_endings {
+                    assert_subset_bytes_eq(&external_output, &diffy_output);
+                }
             }
 
             // Verify agreement/disagreement based on expectation
@@ -197,7 +216,34 @@ impl<'a> Case<'a> {
         // Compare against expected snapshot (only for success cases)
         if self.expect_success {
             snapbox::assert_subset_eq(case_dir.join("out"), &diffy_output);
+            if self.exact_line_endings {
+                assert_subset_bytes_eq(&case_dir.join("out"), &diffy_output);
+            }
         }
+    }
+}
+
+/// Asserts that every file under `expected_root` exists under `actual_root`
+/// with the same bytes.
+fn assert_subset_bytes_eq(expected_root: &Path, actual_root: &Path) {
+    for entry in fs::read_dir(expected_root).unwrap() {
+        let expected_path = entry.unwrap().path();
+        let actual_path = actual_root.join(expected_path.file_name().unwrap());
+        if expected_path.is_dir() {
+            assert_subset_bytes_eq(&expected_path, &actual_path);
+            continue;
+        }
+        let expected = fs::read(&expected_path)
+            .unwrap_or_else(|e| panic!("failed to read {}: {e}", expected_path.display()));
+        let actual = fs::read(&actual_path)
+            .unwrap_or_else(|e| panic!("failed to read {}: {e}", actual_path.display()));
+        assert_eq!(
+            expected.escape_ascii().to_string(),
+            actual.escape_ascii().to_string(),
+            "bytes differ: {} vs {}",
+            expected_path.display(),
+            actual_path.display(),
+        );
     }
 }
 

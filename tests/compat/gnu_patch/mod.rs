@@ -231,3 +231,31 @@ fn fail_both_devnull() {
         .expect_external_error(snapbox::str!["GNU patch failed with status exit status: 1: "])
         .run();
 }
+
+// Patches with CRLF line endings, as written by Windows tools or by a git
+// checkout with `core.autocrlf` enabled.
+//
+// GNU patch strips the `\r` from every line of a patch whose header lines
+// end in CRLF, so it patches LF files and rejects CRLF ones. diffy keeps the
+// `\r` in hunk lines as content, like `git apply`, so the results are the
+// opposite. (`--binary` turns off GNU patch's stripping.)
+
+#[test]
+fn crlf_patch_lf_file() {
+    Case::gnu_patch("crlf_patch_lf_file")
+        .expect_success(false)
+        .expect_compat(false)
+        .expect_diffy_error(snapbox::str!["apply error: error applying hunk #1"])
+        .run();
+}
+
+#[test]
+fn crlf_patch_crlf_file() {
+    Case::gnu_patch("crlf_patch_crlf_file")
+        .exact_line_endings()
+        .expect_compat(false)
+        .expect_external_error(snapbox::str![
+            "GNU patch failed with status exit status: 1: "
+        ])
+        .run();
+}
