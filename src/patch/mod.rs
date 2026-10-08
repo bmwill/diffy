@@ -302,7 +302,13 @@ impl<'a, T: ?Sized> Hunk<'a, T> {
         self.new_range
     }
 
-    /// Returns the function context (if any) for the hunk
+    /// Returns the function context (if any) for the hunk.
+    ///
+    /// This is the text after the closing `@@` of the hunk header, such as
+    /// the enclosing function's signature added by `diff -p` or `git diff`.
+    /// It excludes the space before it but keeps the hunk header's line
+    /// ending (`\n` or `\r\n`), if there is one, so formatting the hunk
+    /// writes the header back unchanged.
     pub fn function_context(&self) -> Option<&T> {
         self.function_context
     }

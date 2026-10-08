@@ -804,3 +804,110 @@ mod error_display {
         assert_eq!(err.kind, ParsePatchErrorKind::InvalidHunkHeader);
     }
 }
+
+/// A patch written by `diff -u -p` (GNU diffutils 3.12). `git diff` writes the
+/// same hunk header: one space after the closing `@@`, then the enclosing
+/// function.
+const FUNCTION_CONTEXT_PATCH: &str = "\
+--- a/short.c
++++ b/short.c
+@@ -4,6 +4,6 @@ int main(void)
+     line3;
+     line4;
+     line5;
+-    line6;
++    CHANGED;
+     line7;
+     line8;
+";
+
+// The function context excludes the space before it but keeps the line
+// ending, so formatting writes the hunk header back unchanged.
+#[test]
+fn function_context_roundtrip() {
+    let s = FUNCTION_CONTEXT_PATCH;
+    let p = parse(s).unwrap();
+    assert_eq!(p.hunks()[0].function_context(), Some("int main(void)\n"));
+    assert_eq!(p.to_string(), s);
+
+    let b = parse_bytes(s.as_ref()).unwrap();
+    assert_eq!(
+        b.hunks()[0].function_context(),
+        Some(&b"int main(void)\n"[..])
+    );
+    assert_eq!(b.to_bytes(), s.as_bytes());
+}
+
+// A CRLF hunk header keeps its `\r\n` through a round trip. The formatter
+// writes its own `---`/`+++` lines, which end in `\n`.
+#[test]
+fn function_context_crlf() {
+    let s = "\
+--- a/f\r
++++ b/f\r
+@@ -1 +1 @@ fn foo()\r
+-old\r
++new\r
+";
+    let p = parse(s).unwrap();
+    assert_eq!(p.hunks()[0].function_context(), Some("fn foo()\r\n"));
+    assert_eq!(
+        p.to_string(),
+        "--- a/f\n+++ b/f\n@@ -1 +1 @@ fn foo()\r\n-old\r\n+new\r\n"
+    );
+}
+
+// With nothing after the closing `@@` there is no function context. With only
+// a space after it, the function context is just the line ending, and
+// formatting keeps the space.
+#[test]
+fn function_context_absent_or_empty() {
+    let absent = "--- a/f\n+++ b/f\n@@ -1 +1 @@\n-old\n+new\n";
+    let p = parse(absent).unwrap();
+    assert_eq!(p.hunks()[0].function_context(), None);
+    assert_eq!(p.to_string(), absent);
+
+    let empty = "--- a/f\n+++ b/f\n@@ -1 +1 @@ \n-old\n+new\n";
+    let p = parse(empty).unwrap();
+    assert_eq!(p.hunks()[0].function_context(), Some("\n"));
+    assert_eq!(p.to_string(), empty);
+}
+
+// A hunk header at the end of the input has no line ending, so formatting
+// adds one.
+#[test]
+fn function_context_without_line_ending() {
+    let s = "--- a/f\n+++ b/f\n@@ -0,0 +0,0 @@ fn foo()";
+    let p = parse(s).unwrap();
+    assert_eq!(p.hunks()[0].function_context(), Some("fn foo()"));
+    assert_eq!(p.to_string(), format!("{s}\n"));
+}
+
+// Color only wraps parts of the output in escape sequences.
+#[cfg(feature = "color")]
+#[test]
+fn function_context_with_color() {
+    use super::PatchFormatter;
+
+    fn strip_escapes(s: &str) -> alloc::string::String {
+        let mut out = alloc::string::String::new();
+        let mut rest = s;
+        while let Some(start) = rest.find("\x1b[") {
+            out.push_str(&rest[..start]);
+            let len = rest[start..].find('m').expect("unterminated escape");
+            rest = &rest[start + len + 1..];
+        }
+        out.push_str(rest);
+        out
+    }
+
+    let s = FUNCTION_CONTEXT_PATCH;
+    let f = PatchFormatter::new().with_color();
+    let p = parse(s).unwrap();
+    assert_eq!(strip_escapes(&f.fmt_patch(&p).to_string()), s);
+
+    let b = parse_bytes(s.as_ref()).unwrap();
+    let mut bytes = alloc::vec::Vec::new();
+    f.write_patch_into(&b, &mut bytes).unwrap();
+    assert_eq!(strip_escapes(core::str::from_utf8(&bytes).unwrap()), s);
+}
